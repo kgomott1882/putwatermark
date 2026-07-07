@@ -2,6 +2,7 @@
 
 import { motion, type Variants } from "framer-motion";
 import { Smartphone, Video, Zap, type LucideIcon } from "lucide-react";
+import { pageContainerClass } from "./pageContainer";
 
 type Capability = {
   title: string;
@@ -53,8 +54,8 @@ const itemVariants: Variants = {
 
 export function Capabilities() {
   return (
-    <section className="w-full bg-platinum px-6 py-24 text-ink sm:px-12 lg:px-20">
-      <div className="w-full">
+    <section className="w-full bg-platinum py-24 text-ink">
+      <div className={pageContainerClass}>
         <div className="w-full text-center">
           <h2 className="text-4xl font-bold tracking-[-0.04em] text-ink md:text-6xl">
             Works everywhere

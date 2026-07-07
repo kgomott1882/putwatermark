@@ -2,12 +2,13 @@
 
 import { motion } from "framer-motion";
 import { Button } from "./Button";
+import { pageContainerClass } from "./pageContainer";
 
 export function FinalCTA() {
   return (
-    <section className="w-full bg-charcoal px-6 py-24 text-white sm:px-12 lg:px-20">
+    <section className="w-full bg-charcoal py-24 text-white">
       <motion.div
-        className="flex w-full flex-col items-center text-center"
+        className={`${pageContainerClass} flex flex-col items-center text-center`}
         initial={{ opacity: 0, y: 30 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, amount: 0.4 }}

@@ -1,3 +1,5 @@
+import { pageContainerClass } from "./pageContainer";
+
 type FooterGroup = {
   title: string;
   links: {
@@ -45,8 +47,8 @@ const footerGroups: FooterGroup[] = [
 
 export function Footer() {
   return (
-    <footer className="w-full bg-charcoal px-6 py-16 text-white sm:px-12 lg:px-20">
-      <div className="w-full">
+    <footer className="w-full bg-charcoal py-16 text-white">
+      <div className={pageContainerClass}>
         <div className="grid gap-10 md:grid-cols-4 lg:gap-16">
           {footerGroups.map(({ title, links }) => (
             <div key={title}>

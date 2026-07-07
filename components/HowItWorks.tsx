@@ -4,6 +4,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Download, Droplet, Upload, type LucideIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { pageContainerClass } from "./pageContainer";
 
 type Step = {
   number: string;
@@ -70,14 +71,11 @@ export function HowItWorks() {
   return (
     <section
       ref={sectionRef}
-      className="w-full bg-platinum px-6 py-24 text-ink sm:px-12 lg:px-20"
+      className="w-full bg-platinum py-24 text-ink"
     >
-      <div className="w-full">
+      <div className={pageContainerClass}>
         <div className="w-full text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-battleship">
-            No download. No installation.
-          </p>
-          <h2 className="mt-4 text-4xl font-bold tracking-[-0.04em] text-ink md:text-6xl">
+          <h2 className="text-4xl font-bold tracking-[-0.04em] text-ink md:text-6xl">
             How it works
           </h2>
         </div>

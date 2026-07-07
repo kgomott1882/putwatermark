@@ -2,12 +2,12 @@
 
 import { motion, type Variants } from "framer-motion";
 import { Button } from "./Button";
+import { pageContainerClass } from "./pageContainer";
 
 const introItems = [
-  "Watermark your photos and videos, instantly.",
+  "Watermark any photo, PDF, or video in seconds.",
   "Upload, add your watermark, and download. No software, no signup, no subscription.",
   "Upload Now",
-  "No install · No account needed · Pay only when you're ready",
 ] as const;
 
 const containerVariants: Variants = {
@@ -36,8 +36,10 @@ const itemVariants: Variants = {
 
 export function Hero() {
   return (
-    <section className="min-h-screen w-full overflow-hidden bg-paper px-6 py-10 text-ink sm:px-12 lg:px-20">
-      <div className="flex min-h-[calc(100vh-5rem)] w-full flex-col items-center justify-center gap-14 text-center">
+    <section className="min-h-screen w-full overflow-hidden bg-paper py-10 text-ink">
+      <div
+        className={`${pageContainerClass} flex min-h-[calc(100vh-5rem)] flex-col items-center justify-center gap-14 text-center`}
+      >
         <motion.div
           className="flex w-full flex-col items-center"
           variants={containerVariants}
@@ -45,19 +47,16 @@ export function Hero() {
           animate="visible"
         >
           <motion.div className="max-w-5xl" variants={itemVariants}>
-            <h1 className="text-6xl font-bold tracking-[-0.06em] text-ink md:text-7xl lg:text-8xl">
+            <h1 className="text-6xl font-bold tracking-[-0.06em] text-charcoal md:text-7xl lg:text-8xl">
               {introItems[0]}
             </h1>
-            <p className="mt-5 text-xl font-medium leading-8 text-battleship md:text-2xl">
+            <p className="mt-5 text-sm text-battleship">
               {introItems[1]}
             </p>
           </motion.div>
           <motion.div className="mt-8" variants={itemVariants}>
             <Button href="/watermark">{introItems[2]}</Button>
           </motion.div>
-          <motion.p className="mt-5 text-sm text-battleship" variants={itemVariants}>
-            {introItems[3]}
-          </motion.p>
         </motion.div>
 
         <DemoCard />

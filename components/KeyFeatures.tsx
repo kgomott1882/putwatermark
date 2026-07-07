@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { type ReactNode } from "react";
+import { pageContainerClass } from "./pageContainer";
 
 type Feature = {
   title: string;
@@ -31,8 +32,8 @@ const features: Feature[] = [
 
 export function KeyFeatures() {
   return (
-    <section className="w-full bg-paper px-6 py-24 text-ink sm:px-12 lg:px-20">
-      <div className="w-full">
+    <section className="w-full bg-paper py-24 text-ink">
+      <div className={pageContainerClass}>
         <div className="w-full text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.22em] text-battleship">
             No bloat. Just the tools that matter.

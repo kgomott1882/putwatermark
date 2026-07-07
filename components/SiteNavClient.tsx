@@ -4,6 +4,7 @@ import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { pageContainerClass } from "./pageContainer";
 
 type SiteNavClientProps = {
   isLoggedIn: boolean;
@@ -14,9 +15,12 @@ const navLinks = [
   { href: "/pricing", label: "Pricing" },
 ] as const;
 
+const siteLogoSrc = "/pw-logo.png";
+
 export function SiteNavClient({ isLoggedIn }: SiteNavClientProps) {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
 
   useEffect(() => {
     setIsMenuOpen(false);
@@ -34,16 +38,31 @@ export function SiteNavClient({ isLoggedIn }: SiteNavClientProps) {
     <header className="sticky top-0 z-50 border-b border-platinum bg-paper/95 backdrop-blur-sm">
       <nav
         aria-label="Main navigation"
-        className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-10"
+        className={`${pageContainerClass} flex h-16 items-center justify-between gap-6`}
       >
         <Link
-          className="text-lg font-bold tracking-[-0.04em] text-ink transition hover:text-signal"
+          className="inline-flex shrink-0 items-center transition hover:opacity-80"
           href="/"
         >
-          PutWatermark
+          {logoFailed ? (
+            <span className="text-lg font-bold tracking-[-0.04em] text-ink">
+              PutWatermark
+            </span>
+          ) : (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              alt="PutWatermark"
+              className="block h-10 w-auto max-h-10 object-contain object-left"
+              decoding="async"
+              height={40}
+              onError={() => setLogoFailed(true)}
+              src={siteLogoSrc}
+              width={218}
+            />
+          )}
         </Link>
 
-        <div className="hidden items-center gap-8 md:flex">
+        <div className="hidden items-center gap-10 md:flex">
           {navLinks.map(({ href, label }) => (
             <Link
               className="text-sm font-medium text-battleship transition hover:text-ink"
@@ -54,7 +73,7 @@ export function SiteNavClient({ isLoggedIn }: SiteNavClientProps) {
             </Link>
           ))}
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-5">
             {isLoggedIn ? (
               <Link
                 className="text-sm font-medium text-battleship transition hover:text-ink"
@@ -95,7 +114,7 @@ export function SiteNavClient({ isLoggedIn }: SiteNavClientProps) {
 
       {isMenuOpen ? (
         <div
-          className="border-t border-platinum bg-paper px-4 py-4 md:hidden"
+          className={`${pageContainerClass} border-t border-platinum bg-paper py-4 md:hidden`}
           id="mobile-nav-menu"
         >
           <div className="flex flex-col gap-1">

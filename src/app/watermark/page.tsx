@@ -23,7 +23,19 @@ import {
   storedSettingsFromSnapshot,
   writeStoredWatermarkSettings,
 } from "../../lib/watermarkSettingsStorage";
+import {
+  exportWatermarkedPdf,
+  getPdfExportFileName,
+  getPdfWatermarkExportScale,
+} from "../../lib/pdfExport";
+import {
+  buildPdfPageThumbnails,
+  loadPdfDocument,
+  renderPdfPagePreview,
+  type PdfPageThumbnail,
+} from "../../lib/pdfPreview";
 import JSZip from "jszip";
+import type { PDFDocumentProxy } from "pdfjs-dist";
 import { motion } from "framer-motion";
 import { BookmarkPlus, Redo2, Undo2, X } from "lucide-react";
 import {
@@ -37,11 +49,11 @@ import {
 const acceptedImageTypes = ["image/jpeg", "image/png", "image/webp"];
 const acceptedVideoTypes = ["video/mp4", "video/quicktime", "video/webm"];
 const acceptedMediaInputTypes =
-  "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.mov";
+  "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.mov,application/pdf,.pdf";
 
 type WatermarkType = "text" | "logo";
 
-type MediaKind = "image" | "video";
+type MediaKind = "image" | "video" | "pdf";
 
 type WatermarkPosition =
   | "top-left"
@@ -318,6 +330,8 @@ export default function WatermarkPage() {
   );
   const videoExportCancelRef = useRef(false);
   const videoExportAbortControllerRef = useRef<AbortController | null>(null);
+  const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
+  const pdfBytesRef = useRef<Uint8Array | null>(null);
   const cropDragRef = useRef<{
     mode: CropDragMode;
     origin: { x: number; y: number };
@@ -329,6 +343,14 @@ export default function WatermarkPage() {
     null,
   );
   const [mediaKind, setMediaKind] = useState<MediaKind | null>(null);
+  const [pdfPageCount, setPdfPageCount] = useState(0);
+  const [pdfPages, setPdfPages] = useState<PdfPageThumbnail[]>([]);
+  const [activePdfPageId, setActivePdfPageId] = useState<string | null>(null);
+  const [isPdfLoading, setIsPdfLoading] = useState(false);
+  const [pdfExportProgress, setPdfExportProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
   const [fileName, setFileName] = useState("");
   const [batchExportProgress, setBatchExportProgress] = useState<{
     current: number;
@@ -480,14 +502,13 @@ export default function WatermarkPage() {
 
   useEffect(() => {
     return () => {
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
+      if (pdfDocRef.current) {
+        void pdfDocRef.current.cleanup();
+        pdfDocRef.current = null;
       }
 
-      for (const entry of imageBatch) {
-        if (entry.objectUrl !== objectUrlRef.current) {
-          URL.revokeObjectURL(entry.objectUrl);
-        }
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
       }
 
       if (logoObjectUrlRef.current) {
@@ -496,6 +517,16 @@ export default function WatermarkPage() {
 
       if (manualSettingsGuardTimerRef.current) {
         clearTimeout(manualSettingsGuardTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      for (const entry of imageBatch) {
+        if (entry.objectUrl !== objectUrlRef.current) {
+          URL.revokeObjectURL(entry.objectUrl);
+        }
       }
     };
   }, [imageBatch]);
@@ -864,10 +895,22 @@ export default function WatermarkPage() {
     setIsWatermarkHovering(false);
   }
 
+  function clearPdfState() {
+    if (pdfDocRef.current) {
+      void pdfDocRef.current.cleanup();
+      pdfDocRef.current = null;
+    }
+
+    pdfBytesRef.current = null;
+    setPdfPages([]);
+    setPdfPageCount(0);
+    setActivePdfPageId(null);
+  }
+
   function clearImageBatch() {
     revokeBatchObjectUrls(imageBatch);
-    setImageBatch([]);
-    setActiveBatchImageId(null);
+    setImageBatch((previousBatch) => (previousBatch.length === 0 ? previousBatch : []));
+    setActiveBatchImageId((previousId) => (previousId === null ? previousId : null));
   }
 
   function selectBatchImage(id: string) {
@@ -925,6 +968,109 @@ export default function WatermarkPage() {
     if (id === activeBatchImageId) {
       applyActiveBatchEntry(remainingBatch[0]);
       return;
+    }
+  }
+
+  async function selectPdfPage(id: string) {
+    if (id === activePdfPageId || !pdfDocRef.current) {
+      return;
+    }
+
+    const entry = pdfPages.find((page) => page.id === id);
+
+    if (!entry) {
+      return;
+    }
+
+    setActivePdfPageId(id);
+
+    try {
+      const rendered = await renderPdfPagePreview(
+        pdfDocRef.current,
+        entry.pageNumber,
+      );
+
+      setImage(rendered.image);
+      setUploadedImageSize({
+        height: rendered.height,
+        width: rendered.width,
+      });
+      setResizeWidth(rendered.width);
+      setResizeHeight(rendered.height);
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "We could not render that PDF page.",
+      );
+    }
+  }
+
+  async function loadPdfFile(file: File) {
+    if (!isPdfFile(file)) {
+      setUploadError("Please choose a PDF file.");
+      return;
+    }
+
+    setUploadError("");
+    setIsPdfLoading(true);
+
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+
+    clearImageBatch();
+    clearPdfState();
+    setImage(null);
+    setVideoUrl("");
+    setVideoDuration(0);
+    setVideoSize(null);
+    setVideoFileSize(0);
+    setMediaKind(null);
+    setFileName("");
+
+    try {
+      const pdfBytes = new Uint8Array(await file.arrayBuffer());
+      const pdfDocument = await loadPdfDocument(file);
+      const pages = await buildPdfPageThumbnails(pdfDocument);
+
+      pdfBytesRef.current = pdfBytes;
+      pdfDocRef.current = pdfDocument;
+      setMediaKind("pdf");
+      setFileName(file.name);
+      setPdfPageCount(pdfDocument.numPages);
+      setPdfPages(pages);
+      setActivePdfPageId(pages[0]?.id ?? null);
+
+      const firstPage = await renderPdfPagePreview(pdfDocument, 1);
+
+      setImage(firstPage.image);
+      setUploadedImageSize({
+        height: firstPage.height,
+        width: firstPage.width,
+      });
+      setResizeWidth(firstPage.width);
+      setResizeHeight(firstPage.height);
+      setRotationAngle(0);
+      setResizeWarning("");
+      setActiveImageTool(null);
+      setCropRect(null);
+      setIsWatermarkHovering(false);
+      applyStoredWatermarkSettingsOnMediaLoad();
+    } catch (error) {
+      clearPdfState();
+      setMediaKind(null);
+      setFileName("");
+      setImage(null);
+      setUploadedImageSize(null);
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "We could not load that PDF. Please try another file.",
+      );
+    } finally {
+      setIsPdfLoading(false);
     }
   }
 
@@ -1303,6 +1449,11 @@ export default function WatermarkPage() {
       return;
     }
 
+    if (mediaKind === "pdf") {
+      void handlePdfExport();
+      return;
+    }
+
     if (!image) {
       return;
     }
@@ -1336,6 +1487,84 @@ export default function WatermarkPage() {
       .finally(() => {
         setIsExporting(false);
       });
+  }
+
+  async function handlePdfExport() {
+    if (!pdfBytesRef.current || pdfPageCount === 0) {
+      setExportError("Reload the PDF before exporting.");
+      return;
+    }
+
+    if (
+      watermarkType === "text" &&
+      !watermarkText.trim() &&
+      watermarkMode === "single"
+    ) {
+      setExportError("Add watermark text before exporting.");
+      return;
+    }
+
+    if (watermarkType === "logo" && !logoImage) {
+      setExportError("Upload a logo before exporting.");
+      return;
+    }
+
+    setUploadError("");
+    setExportError("");
+    setIsExporting(true);
+    setPdfExportProgress({ current: 0, total: pdfPageCount });
+
+    const watermarkInput = {
+      customPosition,
+      fontFamily,
+      fontSizeScale,
+      logoImage,
+      tileAngle,
+      tileDensity,
+      tileGap,
+      watermarkMode,
+      watermarkOpacity,
+      watermarkPosition,
+      watermarkText,
+      watermarkType,
+    };
+
+    try {
+      const exportedBytes = await exportWatermarkedPdf(
+        pdfBytesRef.current,
+        async (_pageIndex, pageWidth, pageHeight) => {
+          const overlayCanvas = renderWatermarkOverlayForPdfPage({
+            canvasSize,
+            pageHeight,
+            pageWidth,
+            ...watermarkInput,
+          });
+
+          return canvasToPngBytes(overlayCanvas);
+        },
+        (current, total) => {
+          setPdfExportProgress({ current, total });
+        },
+      );
+
+      const blob = new Blob([new Uint8Array(exportedBytes)], {
+        type: "application/pdf",
+      });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = objectUrl;
+      link.download = getPdfExportFileName(fileName);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setExportError("We could not export that PDF. Please try again.");
+    } finally {
+      setIsExporting(false);
+      setPdfExportProgress(null);
+    }
   }
 
   function handleCancelExport() {
@@ -1498,11 +1727,26 @@ export default function WatermarkPage() {
 
     const imageFiles = files.filter(isImageFile);
     const videoFiles = files.filter(isVideoFile);
+    const pdfFiles = files.filter(isPdfFile);
 
-    if (imageFiles.length && videoFiles.length) {
+    if (
+      (imageFiles.length && videoFiles.length) ||
+      (imageFiles.length && pdfFiles.length) ||
+      (videoFiles.length && pdfFiles.length)
+    ) {
       setUploadError(
-        "Upload images together or a single video, not both at once.",
+        "Upload one PDF, images together, or a single video at a time.",
       );
+      return;
+    }
+
+    if (pdfFiles.length) {
+      if (pdfFiles.length > 1) {
+        setUploadError("Please upload one PDF at a time.");
+        return;
+      }
+
+      void loadPdfFile(pdfFiles[0]);
       return;
     }
 
@@ -1526,7 +1770,9 @@ export default function WatermarkPage() {
       return;
     }
 
-    setUploadError("Please choose a JPG, PNG, WebP, MP4, MOV, or WebM file.");
+    setUploadError(
+      "Please choose a JPG, PNG, WebP, PDF, MP4, MOV, or WebM file.",
+    );
   }
 
   function loadMediaFile(file: File) {
@@ -1908,6 +2154,7 @@ export default function WatermarkPage() {
     }
 
     clearImageBatch();
+    clearPdfState();
 
     try {
       const loadedEntries = await Promise.all(
@@ -1951,6 +2198,7 @@ export default function WatermarkPage() {
     }
 
     clearImageBatch();
+    clearPdfState();
 
     const objectUrl = URL.createObjectURL(file);
     const nextImage = new Image();
@@ -2001,6 +2249,7 @@ export default function WatermarkPage() {
     }
 
     clearImageBatch();
+    clearPdfState();
 
     const objectUrl = URL.createObjectURL(file);
     const nextVideo = document.createElement("video");
@@ -2139,12 +2388,19 @@ export default function WatermarkPage() {
   const lastPresetLabel =
     watermarkPositions.find((position) => position.value === watermarkPosition)
       ?.label ?? "Bottom right";
-  const hasMedia = Boolean(image || videoUrl);
+  const hasMedia = Boolean(
+    image ||
+      videoUrl ||
+      isPdfLoading ||
+      (mediaKind === "pdf" && pdfPageCount > 0),
+  );
   const isBatchImageMode = mediaKind === "image" && imageBatch.length >= 2;
   const loadedMediaDetails =
     mediaKind === "video" && videoSize
       ? `${formatDuration(videoDuration)} · ${videoSize.width}x${videoSize.height}`
-      : null;
+      : mediaKind === "pdf" && pdfPageCount > 0
+        ? `· ${pdfPageCount} ${pdfPageCount === 1 ? "page" : "pages"}`
+        : null;
   const canUndoSettings = settingsHistoryIndex > 0;
   const canRedoSettings = settingsHistoryIndex < settingsHistoryLength - 1;
   const canExportVideo =
@@ -2169,6 +2425,7 @@ export default function WatermarkPage() {
         ? getVideoExportRejectionMessage()
         : "Reload the video before exporting."
       : undefined;
+  const exportDisabledReason = videoExportDisabledReason;
   const videoExportStageLabel =
     exportServerStage === "preparing"
       ? "Preparing server export..."
@@ -2184,16 +2441,25 @@ export default function WatermarkPage() {
       ? isExporting
         ? "Exporting..."
         : "Export MP4"
-      : isBatchImageMode
+      : mediaKind === "pdf"
         ? isExporting
           ? "Exporting..."
-          : "Export all"
-        : isExporting
-          ? "Exporting..."
-          : "Export PNG";
+          : "Export PDF"
+        : isBatchImageMode
+          ? isExporting
+            ? "Exporting..."
+            : "Export all"
+          : isExporting
+            ? "Exporting..."
+            : "Export PNG";
   const isExportDisabled =
     isExporting ||
-    (mediaKind === "video" ? !canExportVideo : !image);
+    isPdfLoading ||
+    (mediaKind === "video"
+      ? !canExportVideo
+      : mediaKind === "pdf"
+        ? pdfPageCount === 0
+        : !image);
   const canvasCursor =
     activeImageTool === "crop"
       ? "crosshair"
@@ -2274,7 +2540,9 @@ export default function WatermarkPage() {
           ) : (
             <div className="mt-2 space-y-2">
               <div className="rounded-lg border border-platinum bg-platinum/50 px-2.5 py-1 text-xs text-ink">
-                {isBatchImageMode ? (
+                {isPdfLoading ? (
+                  <>Loading PDF...</>
+                ) : isBatchImageMode ? (
                   <>
                     Batch:{" "}
                     <span className="font-semibold">
@@ -2297,6 +2565,16 @@ export default function WatermarkPage() {
                   entries={imageBatch}
                   onRemove={removeBatchImage}
                   onSelect={selectBatchImage}
+                />
+              ) : null}
+
+              {mediaKind === "pdf" && pdfPages.length > 0 ? (
+                <PdfPageStrip
+                  activeId={activePdfPageId}
+                  onSelect={(id) => {
+                    void selectPdfPage(id);
+                  }}
+                  pages={pdfPages}
                 />
               ) : null}
 
@@ -2327,7 +2605,7 @@ export default function WatermarkPage() {
                 className="w-full justify-center px-4 py-2 text-sm"
                 disabled={isExportDisabled}
                 onClick={handleExport}
-                title={videoExportDisabledReason}
+                title={exportDisabledReason}
                 type="button"
               >
                 {exportButtonLabel}
@@ -2346,6 +2624,27 @@ export default function WatermarkPage() {
                         width: `${
                           (batchExportProgress.current /
                             batchExportProgress.total) *
+                          100
+                        }%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              {isExporting && mediaKind === "pdf" && pdfExportProgress ? (
+                <div className="rounded-lg border border-platinum bg-paper px-2.5 py-2">
+                  <p className="text-xs font-medium text-battleship">
+                    Processing page {pdfExportProgress.current} of{" "}
+                    {pdfExportProgress.total}...
+                  </p>
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-platinum">
+                    <div
+                      className="h-full rounded-full bg-signal transition-[width] duration-200"
+                      style={{
+                        width: `${
+                          (pdfExportProgress.current /
+                            pdfExportProgress.total) *
                           100
                         }%`,
                       }}
@@ -2517,6 +2816,10 @@ export default function WatermarkPage() {
                 {mediaKind === "video" ? (
                   <div className="mt-1 rounded-lg border border-platinum bg-platinum/40 px-2.5 py-2 text-xs text-battleship">
                     Crop, resize, and rotate are not available for video yet.
+                  </div>
+                ) : mediaKind === "pdf" ? (
+                  <div className="mt-1 rounded-lg border border-platinum bg-platinum/40 px-2.5 py-2 text-xs text-battleship">
+                    Crop, resize, and rotate are not available for PDF.
                   </div>
                 ) : (
                   <div className="mt-1 grid grid-cols-3 gap-1.5">
@@ -3154,7 +3457,7 @@ export default function WatermarkPage() {
                 </div>
               ) : null}
 
-              {mediaKind === "image" ? (
+              {mediaKind === "image" || mediaKind === "pdf" ? (
                 <button
                   className="text-xs font-medium text-battleship transition hover:text-ink"
                   onClick={
@@ -3162,9 +3465,11 @@ export default function WatermarkPage() {
                   }
                   type="button"
                 >
-                  {isBatchImageMode
-                    ? "Add more images"
-                    : "Choose a different image"}
+                  {mediaKind === "pdf"
+                    ? "Choose a different PDF"
+                    : isBatchImageMode
+                      ? "Add more images"
+                      : "Choose a different image"}
                 </button>
               ) : null}
 
@@ -3191,7 +3496,16 @@ export default function WatermarkPage() {
           className="flex min-h-[320px] items-center justify-center overflow-hidden rounded-[1.5rem] border border-platinum bg-platinum/50 p-2 shadow-2xl shadow-platinum/60 md:min-h-0"
           ref={previewPanelRef}
         >
-          {mediaKind === "image" && image ? (
+          {isPdfLoading ? (
+            <div className="flex h-full min-h-[420px] w-full items-center justify-center rounded-[1.5rem] border border-dashed border-battleship/50 bg-paper text-center">
+              <div>
+                <p className="text-lg font-semibold text-ink">Loading PDF...</p>
+                <p className="mt-2 text-sm text-battleship">
+                  Rendering pages in your browser.
+                </p>
+              </div>
+            </div>
+          ) : (mediaKind === "image" || mediaKind === "pdf") && image ? (
             <canvas
               className="h-full max-h-full w-full touch-none rounded-[1.5rem] bg-platinum object-contain"
               onPointerCancel={handleCanvasPointerCancel}
@@ -3231,7 +3545,7 @@ export default function WatermarkPage() {
                   Your preview will appear here
                 </p>
                 <p className="mt-2 text-sm text-battleship">
-                  Upload a JPG, PNG, WebP, MP4, MOV, or WebM to start.
+                  Upload a JPG, PNG, WebP, PDF, MP4, MOV, or WebM to start.
                 </p>
               </div>
             </div>
@@ -3311,6 +3625,51 @@ function ImageBatchStrip({
   );
 }
 
+type PdfPageStripProps = {
+  activeId: string | null;
+  onSelect: (id: string) => void;
+  pages: PdfPageThumbnail[];
+};
+
+function PdfPageStrip({ activeId, onSelect, pages }: PdfPageStripProps) {
+  return (
+    <div className="rounded-lg border border-platinum bg-paper p-2">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-battleship">
+        PDF pages
+      </p>
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        {pages.map((page) => {
+          const isActive = page.id === activeId;
+
+          return (
+            <button
+              className={`block w-full overflow-hidden rounded-lg border transition ${
+                isActive
+                  ? "border-signal ring-2 ring-signal/20"
+                  : "border-platinum hover:border-signal/60"
+              }`}
+              key={page.id}
+              onClick={() => onSelect(page.id)}
+              title={`Page ${page.pageNumber}`}
+              type="button"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                alt={`Page ${page.pageNumber}`}
+                className="aspect-[3/4] w-full bg-platinum object-contain"
+                src={page.thumbnailUrl}
+              />
+              <span className="block truncate px-1 py-1 text-[10px] text-battleship">
+                Page {page.pageNumber}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function UploadZone({ onClick, onDragOver, onDrop }: UploadZoneProps) {
   return (
     <div
@@ -3322,13 +3681,13 @@ function UploadZone({ onClick, onDragOver, onDrop }: UploadZoneProps) {
       tabIndex={0}
     >
       <p className="text-lg font-semibold text-ink">
-        Drop your images or video here
+        Drop your images, PDF, or video here
       </p>
       <p className="mt-2 text-sm text-battleship">
-        Select multiple images for batch watermarking, or one video
+        Select multiple images for batch watermarking, one PDF, or one video
       </p>
       <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-battleship">
-        JPG, PNG, WebP, MP4, MOV, WebM
+        JPG, PNG, WebP, PDF, MP4, MOV, WebM
       </p>
     </div>
   );
@@ -3466,6 +3825,12 @@ function isVideoFile(file: File) {
     fileName.endsWith(".mp4") ||
     fileName.endsWith(".webm")
   );
+}
+
+function isPdfFile(file: File) {
+  const fileName = file.name.toLowerCase();
+
+  return file.type === "application/pdf" || fileName.endsWith(".pdf");
 }
 
 function formatDuration(duration: number) {
@@ -3871,6 +4236,124 @@ function renderExportCanvas({
         fontSize: drawable.height,
         imageHeight: canvas.height,
         imageWidth: canvas.width,
+        imageX: 0,
+        imageY: 0,
+        padding,
+        position: watermarkPosition,
+      });
+
+  drawWatermarkDrawable({
+    alpha,
+    context,
+    drawable,
+    textAlign,
+    textBaseline,
+    x,
+    y,
+  });
+
+  return canvas;
+}
+
+type PdfPageWatermarkOverlayInput = Omit<
+  WatermarkOverlayCanvasInput,
+  "height" | "width"
+> & {
+  canvasSize: CanvasSize;
+  pageHeight: number;
+  pageWidth: number;
+};
+
+function renderWatermarkOverlayForPdfPage({
+  canvasSize,
+  customPosition,
+  fontFamily,
+  fontSizeScale,
+  logoImage,
+  pageHeight,
+  pageWidth,
+  tileAngle,
+  tileDensity,
+  tileGap,
+  watermarkMode,
+  watermarkOpacity,
+  watermarkPosition,
+  watermarkText,
+  watermarkType,
+}: PdfPageWatermarkOverlayInput) {
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  const pageW = Math.max(1, Math.floor(pageWidth));
+  const pageH = Math.max(1, Math.floor(pageHeight));
+  const exportScale = getPdfWatermarkExportScale(pageW, pageH);
+
+  canvas.width = pageW * exportScale;
+  canvas.height = pageH * exportScale;
+
+  if (!context) {
+    throw new Error("Could not create watermark overlay canvas.");
+  }
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.scale(exportScale, exportScale);
+
+  const imageScale = Math.min(
+    canvasSize.width / pageW,
+    canvasSize.height / pageH,
+  );
+  const imageWidth = pageW * imageScale;
+  const imageHeight = pageH * imageScale;
+  const imageX = (canvasSize.width - imageWidth) / 2;
+  const imageY = (canvasSize.height - imageHeight) / 2;
+
+  const drawable = getDrawableWatermark({
+    context,
+    fontFamily,
+    fontSizeScale,
+    imageWidth: pageW,
+    logoImage,
+    watermarkText,
+    watermarkType,
+  });
+
+  if (!drawable) {
+    return canvas;
+  }
+
+  const alpha = watermarkOpacity / 100;
+
+  if (watermarkMode === "tile") {
+    drawTiledWatermark({
+      alpha,
+      angle: tileAngle,
+      context,
+      density: tileDensity,
+      drawable,
+      gap: tileGap,
+      imageHeight: pageH,
+      imageWidth: pageW,
+      imageX: 0,
+      imageY: 0,
+    });
+    return canvas;
+  }
+
+  const padding = Math.max(24, drawable.height * 0.9);
+  const { x, y, textAlign, textBaseline } = customPosition
+    ? {
+        x: ((customPosition.xPercent * canvasSize.width - imageX) / imageWidth) * pageW,
+        y:
+          ((customPosition.yPercent * canvasSize.height - imageY) / imageHeight) *
+          pageH,
+        textAlign: "center" as CanvasTextAlign,
+        textBaseline: "middle" as CanvasTextBaseline,
+      }
+    : getWatermarkCoordinates({
+        fontSize: drawable.height,
+        imageHeight: pageH,
+        imageWidth: pageW,
         imageX: 0,
         imageY: 0,
         padding,

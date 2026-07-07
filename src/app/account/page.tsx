@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "../../../utils/supabase/server";
+import { DeleteAccountSection } from "./DeleteAccountSection";
 import { LogoutButton } from "./LogoutButton";
 
 export default async function AccountPage() {
@@ -12,11 +13,20 @@ export default async function AccountPage() {
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("name, surname")
-    .eq("id", user.id)
-    .single();
+  const [{ data: profile }, { data: pendingDeletionRequest }] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("name, surname")
+        .eq("id", user.id)
+        .single(),
+      supabase
+        .from("deletion_requests")
+        .select("id, requested_at, sla_due_at, status")
+        .eq("user_id", user.id)
+        .eq("status", "pending")
+        .maybeSingle(),
+    ]);
 
   const name = profile?.name ?? user.email ?? "there";
 
@@ -36,6 +46,11 @@ export default async function AccountPage() {
         <div className="mt-8 flex justify-center">
           <LogoutButton />
         </div>
+
+        <DeleteAccountSection
+          initialRequest={pendingDeletionRequest}
+          userId={user.id}
+        />
       </section>
     </main>
   );
