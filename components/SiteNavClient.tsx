@@ -19,6 +19,8 @@ const siteLogoSrc = "/pw-logo.png";
 
 export function SiteNavClient({ isLoggedIn }: SiteNavClientProps) {
   const pathname = usePathname();
+  const isEditorMode =
+    pathname === "/watermark" || pathname.startsWith("/watermark/");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
 
@@ -33,6 +35,10 @@ export function SiteNavClient({ isLoggedIn }: SiteNavClientProps) {
       document.body.style.overflow = "";
     };
   }, [isMenuOpen]);
+
+  if (isEditorMode) {
+    return null;
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-platinum bg-paper/95 backdrop-blur-sm">

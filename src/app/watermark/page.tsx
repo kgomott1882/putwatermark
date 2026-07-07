@@ -1,6 +1,5 @@
 "use client";
 
-import { Button } from "../../../components/Button";
 import {
   VideoExportCancelledError,
   VideoExportFailedError,
@@ -29,6 +28,13 @@ import {
   getPdfWatermarkExportScale,
 } from "../../lib/pdfExport";
 import {
+  drawBaseImageWithEffect,
+  type EffectBorderColor,
+  type EffectBorderWidth,
+  type ImageEffectId,
+  type ImageEffectSettings,
+} from "../../lib/imageEffects";
+import {
   buildPdfPageThumbnails,
   loadPdfDocument,
   renderPdfPagePreview,
@@ -36,8 +42,35 @@ import {
 } from "../../lib/pdfPreview";
 import JSZip from "jszip";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import { motion } from "framer-motion";
-import { BookmarkPlus, Redo2, Undo2, X } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  BookmarkPlus,
+  Crop,
+  Droplets,
+  Images,
+  Maximize2,
+  RefreshCw,
+  RotateCw,
+  Sparkles,
+  Star,
+  X,
+} from "lucide-react";
+import { EditorBottomBar } from "../../../components/watermark/EditorBottomBar";
+import { ImageEffectsPanel } from "../../../components/watermark/ImageEffectsPanel";
+import {
+  EditorApplyButton,
+  EditorCard,
+  EditorGridChoice,
+  EditorPanelSection,
+  EditorPill,
+  EditorSegment,
+  EditorToggleRow,
+  EditorToolPanel,
+} from "../../../components/watermark/EditorToolPanel";
+import {
+  type EditorPanelId,
+  ToolIconRail,
+} from "../../../components/watermark/ToolIconRail";
 import {
   type DragEvent,
   type PointerEvent,
@@ -311,6 +344,8 @@ export default function WatermarkPage() {
   const videoOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const videoPreviewRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const appendImagesInputRef = useRef<HTMLInputElement>(null);
+  const filePickerIntentRef = useRef<"append" | "replace">("replace");
   const logoInputRef = useRef<HTMLInputElement>(null);
   const previewPanelRef = useRef<HTMLDivElement>(null);
   const objectUrlRef = useRef<string | null>(null);
@@ -374,6 +409,13 @@ export default function WatermarkPage() {
   const [isAspectRatioLocked, setIsAspectRatioLocked] = useState(true);
   const [resizeWarning, setResizeWarning] = useState("");
   const [rotationAngle, setRotationAngle] = useState(0);
+  const [activeImageEffect, setActiveImageEffect] =
+    useState<ImageEffectId>("none");
+  const [effectBorderWidth, setEffectBorderWidth] =
+    useState<EffectBorderWidth>("medium");
+  const [effectBorderColor, setEffectBorderColor] =
+    useState<EffectBorderColor>("ink");
+  const [effectExposure, setEffectExposure] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState<number | null>(null);
   const [exportError, setExportError] = useState("");
@@ -420,6 +462,8 @@ export default function WatermarkPage() {
     width: 900,
     height: 600,
   });
+  const [activeEditorPanel, setActiveEditorPanel] =
+    useState<EditorPanelId | null>("watermark");
 
   function commitSettingsHistorySnapshot(snapshot: WatermarkSettingsSnapshot) {
     const history = settingsHistoryRef.current;
@@ -657,12 +701,14 @@ export default function WatermarkPage() {
     context.save();
     context.translate(imageX + imageWidth / 2, imageY + imageHeight / 2);
     context.rotate((rotationAngle * Math.PI) / 180);
-    context.drawImage(
+    drawBaseImageWithEffect(
+      context,
       image,
       -sourceImageWidth / 2,
       -sourceImageHeight / 2,
       sourceImageWidth,
       sourceImageHeight,
+      getImageEffectSettings(),
     );
     context.restore();
 
@@ -798,12 +844,31 @@ export default function WatermarkPage() {
     });
   });
 
+  function getImageEffectSettings(): ImageEffectSettings {
+    return {
+      activeEffect: activeImageEffect,
+      borderColor: effectBorderColor,
+      borderWidth: effectBorderWidth,
+      exposure: effectExposure,
+    };
+  }
+
   function openFilePicker() {
+    filePickerIntentRef.current = "replace";
     fileInputRef.current?.click();
   }
 
   function openBatchImagePicker() {
+    filePickerIntentRef.current = "append";
     fileInputRef.current?.click();
+  }
+
+  function openReplaceMediaPicker() {
+    openFilePicker();
+  }
+
+  function openAddMoreImagesPicker() {
+    appendImagesInputRef.current?.click();
   }
 
   function createBatchImageId() {
@@ -1095,10 +1160,31 @@ export default function WatermarkPage() {
           );
         }),
       );
-      const nextBatch = [
-        ...persistActiveBatchEntry(imageBatch, activeBatchImageId),
-        ...loadedEntries,
-      ];
+      let baseBatch = persistActiveBatchEntry(imageBatch, activeBatchImageId);
+
+      if (
+        baseBatch.length === 0 &&
+        mediaKind === "image" &&
+        image &&
+        objectUrlRef.current &&
+        uploadedImageSize
+      ) {
+        const currentEntry: BatchImageEntry = {
+          fileName,
+          id: createBatchImageId(),
+          image,
+          objectUrl: objectUrlRef.current,
+          resizeHeight,
+          resizeWidth,
+          rotationAngle,
+          uploadedImageSize,
+        };
+
+        baseBatch = [currentEntry];
+        setActiveBatchImageId(currentEntry.id);
+      }
+
+      const nextBatch = [...baseBatch, ...loadedEntries];
 
       setMediaKind("image");
       setVideoUrl("");
@@ -1127,6 +1213,7 @@ export default function WatermarkPage() {
       fontFamily,
       fontSizeScale,
       image: imageElement,
+      imageEffectSettings: getImageEffectSettings(),
       logoImage,
       resizeHeight: entryResizeHeight,
       resizeWidth: entryResizeWidth,
@@ -2004,6 +2091,69 @@ export default function WatermarkPage() {
     }
   }
 
+  async function openImageToolPanel(tool: ImageTool) {
+    if (mediaKind !== "image") {
+      return;
+    }
+
+    if (tool !== "rotate") {
+      await materializeRotationIfNeeded();
+    }
+
+    setActiveEditorPanel(tool);
+    setActiveImageTool(tool);
+    setIsWatermarkHovering(false);
+
+    if (tool !== "crop") {
+      setCropRect(null);
+      cropDragRef.current = null;
+    }
+  }
+
+  function handleEditorPanelSelect(panel: EditorPanelId) {
+    if (panel === "watermark" || panel === "templates" || panel === "effects") {
+      setActiveEditorPanel(panel);
+      setActiveImageTool(null);
+      setCropRect(null);
+      cropDragRef.current = null;
+      return;
+    }
+
+    void openImageToolPanel(panel);
+  }
+
+  function clearAllMedia() {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+
+    clearImageBatch();
+    clearPdfState();
+    setImage(null);
+    setVideoUrl("");
+    setVideoDuration(0);
+    setVideoSize(null);
+    setVideoFileSize(0);
+    setMediaKind(null);
+    setFileName("");
+    setUploadedImageSize(null);
+    setResizeWidth(0);
+    setResizeHeight(0);
+    setRotationAngle(0);
+    setResizeWarning("");
+    setActiveImageTool(null);
+    setCropRect(null);
+    setActiveImageEffect("none");
+    setEffectBorderWidth("medium");
+    setEffectBorderColor("ink");
+    setEffectExposure(0);
+    setUploadError("");
+    setExportError("");
+    setExportNotice("");
+    setActiveEditorPanel("watermark");
+  }
+
   async function materializeRotationIfNeeded() {
     if (!image || rotationAngle === 0) {
       return;
@@ -2471,32 +2621,52 @@ export default function WatermarkPage() {
           : "auto"
       : "auto";
 
-  return (
-    <main className="min-h-screen w-full bg-paper px-4 py-4 text-ink sm:px-6 md:h-[calc(100svh-4rem)] md:overflow-hidden lg:px-10">
-      <motion.div
-        className="grid h-full min-h-0 gap-4 md:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]"
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-      >
-        <aside className="max-h-full overflow-y-auto rounded-[1.25rem] border border-platinum bg-paper p-3 shadow-2xl shadow-platinum/60">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-battleship">
-            Watermark tool
-          </p>
-          <h1
-            className={`font-bold tracking-[-0.04em] text-ink ${
-              hasMedia ? "mt-0.5 text-xl" : "mt-4 text-4xl"
-            }`}
-          >
-            Design your watermark
-          </h1>
-          {!hasMedia ? (
-            <p className="mt-4 text-sm leading-6 text-battleship">
-              Upload an image and preview your own text or logo watermark
-              locally in your browser.
-            </p>
-          ) : null}
+  const imageToolsEnabled = mediaKind === "image";
+  const showEditorPanel = activeEditorPanel !== null;
+  const editorPanelTitle =
+    activeEditorPanel === "templates"
+      ? "Templates"
+      : activeEditorPanel === "watermark"
+        ? "Watermark"
+        : activeEditorPanel === "crop"
+          ? "Crop"
+          : activeEditorPanel === "resize"
+            ? "Resize"
+            : activeEditorPanel === "rotate"
+              ? "Rotate"
+              : activeEditorPanel === "effects"
+                ? "Effects"
+                : "";
+  const editorPanelIcon =
+    activeEditorPanel === "templates" ? (
+      <Star className="h-4 w-4" strokeWidth={2} />
+    ) : activeEditorPanel === "watermark" ? (
+      <Droplets className="h-4 w-4" strokeWidth={2} />
+    ) : activeEditorPanel === "crop" ? (
+      <Crop className="h-4 w-4" strokeWidth={2} />
+    ) : activeEditorPanel === "resize" ? (
+      <Maximize2 className="h-4 w-4" strokeWidth={2} />
+    ) : activeEditorPanel === "rotate" ? (
+      <RotateCw className="h-4 w-4" strokeWidth={2} />
+    ) : activeEditorPanel === "effects" ? (
+      <Sparkles className="h-4 w-4" strokeWidth={2} />
+    ) : null;
+  const canvasMetaLabel =
+    fileName && uploadedImageSize
+      ? `${fileName} · ${uploadedImageSize.width}x${uploadedImageSize.height}`
+      : fileName
+        ? `${fileName}${loadedMediaDetails ?? ""}`
+        : null;
 
+  return (
+    <main className="flex h-[100svh] w-full flex-col overflow-hidden bg-editor-panel text-ink">
+      <motion.div
+        className="grid min-h-0 flex-1 md:grid-cols-[auto_minmax(0,1fr)]"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: "easeOut" }}
+      >
+        <div className="relative flex min-h-0 max-h-full overflow-hidden">
           <input
             accept={acceptedMediaInputTypes}
             className="hidden"
@@ -2505,16 +2675,36 @@ export default function WatermarkPage() {
               const files = Array.from(event.target.files ?? []);
 
               if (files.length) {
-                if (isBatchImageMode && files.every(isImageFile)) {
+                if (
+                  filePickerIntentRef.current === "append" ||
+                  (isBatchImageMode && files.every(isImageFile))
+                ) {
                   void appendImageBatchFiles(files);
                 } else {
                   loadMediaFiles(files);
                 }
               }
 
+              filePickerIntentRef.current = "replace";
               event.target.value = "";
             }}
             ref={fileInputRef}
+            type="file"
+          />
+          <input
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            multiple
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+
+              if (files.length) {
+                void appendImageBatchFiles(files);
+              }
+
+              event.target.value = "";
+            }}
+            ref={appendImagesInputRef}
             type="file"
           />
           <input
@@ -2531,33 +2721,81 @@ export default function WatermarkPage() {
             type="file"
           />
 
-          {!hasMedia ? (
-            <UploadZone
-              onClick={openFilePicker}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-            />
-          ) : (
-            <div className="mt-2 space-y-2">
-              <div className="rounded-lg border border-platinum bg-platinum/50 px-2.5 py-1 text-xs text-ink">
-                {isPdfLoading ? (
-                  <>Loading PDF...</>
-                ) : isBatchImageMode ? (
-                  <>
-                    Batch:{" "}
-                    <span className="font-semibold">
-                      {imageBatch.length} images
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    Loaded: <span className="font-semibold">{fileName}</span>
-                  </>
-                )}
-                {loadedMediaDetails ? (
-                  <span className="ml-1 text-battleship">{loadedMediaDetails}</span>
-                ) : null}
-              </div>
+          <ToolIconRail
+            activePanel={activeEditorPanel}
+            imageToolsEnabled={imageToolsEnabled}
+            onSelectPanel={handleEditorPanelSelect}
+          />
+
+          {showEditorPanel ? (
+            <EditorToolPanel
+              icon={editorPanelIcon}
+              onClose={() => setActiveEditorPanel(null)}
+              title={editorPanelTitle}
+            >
+          {activeEditorPanel === "watermark" ? (
+            <div className="space-y-3">
+              {hasMedia ? (
+                <EditorCard>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-editor-muted">
+                        {isPdfLoading
+                          ? "Loading PDF..."
+                          : isBatchImageMode
+                            ? "Batch"
+                            : "Loaded"}
+                      </p>
+                      <p className="mt-1 truncate text-sm font-semibold text-editor-ink">
+                        {isBatchImageMode ? `${imageBatch.length} images` : fileName}
+                        {loadedMediaDetails ? (
+                          <span className="ml-1 font-normal text-editor-muted">
+                            {loadedMediaDetails}
+                          </span>
+                        ) : null}
+                      </p>
+                    </div>
+
+                    {!isPdfLoading ? (
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          aria-label={
+                            mediaKind === "pdf"
+                              ? "Choose a different PDF"
+                              : mediaKind === "video"
+                                ? "Choose a different video"
+                                : "Choose a different image"
+                          }
+                          className="flex h-9 w-9 items-center justify-center rounded-xl border border-editor-panel-border bg-white text-editor-muted transition hover:border-editor-accent hover:text-editor-accent"
+                          onClick={openReplaceMediaPicker}
+                          title={
+                            mediaKind === "pdf"
+                              ? "Change PDF"
+                              : mediaKind === "video"
+                                ? "Change video"
+                                : "Change image"
+                          }
+                          type="button"
+                        >
+                          <RefreshCw className="h-4 w-4" strokeWidth={2} />
+                        </button>
+
+                        {mediaKind === "image" ? (
+                          <button
+                            aria-label="Add more images"
+                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-editor-panel-border bg-white text-editor-muted transition hover:border-editor-accent hover:text-editor-accent"
+                            onClick={openAddMoreImagesPicker}
+                            title="Upload more images"
+                            type="button"
+                          >
+                            <Images className="h-4 w-4" strokeWidth={2} />
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                </EditorCard>
+              ) : null}
 
               {isBatchImageMode ? (
                 <ImageBatchStrip
@@ -2599,17 +2837,6 @@ export default function WatermarkPage() {
                   </div>
                 </div>
               ) : null}
-
-              <Button
-                as="button"
-                className="w-full justify-center px-4 py-2 text-sm"
-                disabled={isExportDisabled}
-                onClick={handleExport}
-                title={exportDisabledReason}
-                type="button"
-              >
-                {exportButtonLabel}
-              </Button>
 
               {isExporting && isBatchImageMode && batchExportProgress ? (
                 <div className="rounded-lg border border-platinum bg-paper px-2.5 py-2">
@@ -2732,390 +2959,78 @@ export default function WatermarkPage() {
                 </div>
               ) : null}
 
-              <div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  <button
-                    aria-label="Undo watermark settings"
-                    className="flex items-center justify-center rounded-full border border-platinum bg-paper px-2 py-1.5 text-battleship transition hover:border-signal hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-platinum disabled:hover:text-battleship"
-                    disabled={!canUndoSettings}
-                    onClick={undoWatermarkSettings}
-                    type="button"
-                  >
-                    <Undo2 size={15} />
-                  </button>
-                  <button
-                    aria-label="Redo watermark settings"
-                    className="flex items-center justify-center rounded-full border border-platinum bg-paper px-2 py-1.5 text-battleship transition hover:border-signal hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-platinum disabled:hover:text-battleship"
-                    disabled={!canRedoSettings}
-                    onClick={redoWatermarkSettings}
-                    type="button"
-                  >
-                    <Redo2 size={15} />
-                  </button>
-                  <button
-                    aria-label="Save watermark preset"
-                    className={`flex items-center justify-center rounded-full border px-2 py-1.5 transition ${
-                      isSavingPreset
-                        ? "border-signal bg-signal text-white"
-                        : "border-platinum bg-paper text-battleship hover:border-signal hover:text-ink"
-                    }`}
-                    onClick={() => setIsSavingPreset((value) => !value)}
-                    type="button"
-                  >
-                    <BookmarkPlus size={15} />
-                  </button>
-                </div>
-
-                {isSavingPreset ? (
-                  <div className="mt-1.5 rounded-lg border border-platinum bg-paper p-2">
-                    <label
-                      className="text-xs font-medium text-battleship"
-                      htmlFor="preset-name"
-                    >
-                      Name this preset
-                    </label>
-                    <input
-                      className="mt-1 w-full rounded-lg border border-platinum bg-paper px-2 py-1 text-xs text-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
-                      id="preset-name"
-                      onChange={(event) => setPresetName(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          saveCurrentPreset();
-                        }
+              <EditorPanelSection title="Type">
+                <div className="grid grid-cols-2 gap-2 rounded-xl bg-white/50 p-1">
+                  {watermarkTypes.map(({ label, value }) => (
+                    <EditorSegment
+                      active={watermarkType === value}
+                      groupId="watermark-type"
+                      key={value}
+                      onClick={() => {
+                        clearActiveTemplate();
+                        setWatermarkType(value);
+                        setIsWatermarkHovering(false);
                       }}
-                      placeholder="e.g. My brand mark"
-                      type="text"
-                      value={presetName}
-                    />
-                    <div className="mt-1.5 grid grid-cols-2 gap-1.5">
-                      <button
-                        className="rounded-full border border-signal bg-signal px-2.5 py-1 text-xs font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={!presetName.trim()}
-                        onClick={saveCurrentPreset}
-                        type="button"
-                      >
-                        Save
-                      </button>
-                      <button
-                        className="rounded-full border border-platinum px-2.5 py-1 text-xs font-semibold text-battleship transition hover:border-signal hover:text-ink"
-                        onClick={() => {
-                          setPresetName("");
-                          setIsSavingPreset(false);
-                        }}
-                        type="button"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
-              <div>
-                <p className="text-xs font-medium text-battleship">Image tools</p>
-                {mediaKind === "video" ? (
-                  <div className="mt-1 rounded-lg border border-platinum bg-platinum/40 px-2.5 py-2 text-xs text-battleship">
-                    Crop, resize, and rotate are not available for video yet.
-                  </div>
-                ) : mediaKind === "pdf" ? (
-                  <div className="mt-1 rounded-lg border border-platinum bg-platinum/40 px-2.5 py-2 text-xs text-battleship">
-                    Crop, resize, and rotate are not available for PDF.
-                  </div>
-                ) : (
-                  <div className="mt-1 grid grid-cols-3 gap-1.5">
-                    {(["crop", "resize", "rotate"] as const).map((tool) => {
-                      const isSelected = activeImageTool === tool;
-
-                      return (
-                        <button
-                          className={`rounded-full border px-2 py-1 text-xs font-semibold capitalize transition ${
-                            isSelected
-                              ? "border-signal bg-signal text-white"
-                              : "border-platinum bg-paper text-battleship hover:border-signal hover:text-ink"
-                          }`}
-                          key={tool}
-                          onClick={() => handleImageToolSelect(tool)}
-                          type="button"
-                        >
-                          {tool}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {mediaKind === "image" && activeImageTool === "rotate" ? (
-                  <div className="mt-1.5 rounded-lg border border-platinum bg-paper p-2">
-                    <p className="text-xs leading-4 text-battleship">
-                      Rotate the base image. Watermark settings stay unchanged.
-                    </p>
-                    <div className="mt-1.5 grid grid-cols-2 gap-1.5">
-                      <button
-                        className="rounded-full border border-platinum px-2.5 py-1 text-xs font-semibold text-battleship transition hover:border-signal hover:text-ink"
-                        onClick={() => rotateBaseImage("left")}
-                        type="button"
-                      >
-                        90° left
-                      </button>
-                      <button
-                        className="rounded-full border border-platinum px-2.5 py-1 text-xs font-semibold text-battleship transition hover:border-signal hover:text-ink"
-                        onClick={() => rotateBaseImage("right")}
-                        type="button"
-                      >
-                        90° right
-                      </button>
-                    </div>
-                    <div className="mt-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <label
-                          className="text-xs font-medium text-battleship"
-                          htmlFor="base-rotation"
-                        >
-                          Manual angle
-                        </label>
-                        <input
-                          className="w-16 rounded-lg border border-platinum bg-paper px-2 py-1 text-right text-xs text-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
-                          id="base-rotation-value"
-                          max={360}
-                          min={0}
-                          onChange={(event) =>
-                            setRotationAngle(
-                              normalizeDegrees(Number(event.target.value)),
-                            )
-                          }
-                          type="number"
-                          value={rotationAngle}
-                        />
-                      </div>
-                      <input
-                        className="mt-1.5 h-2 w-full cursor-pointer appearance-none rounded-full bg-platinum accent-signal"
-                        id="base-rotation"
-                        max={360}
-                        min={0}
-                        onChange={(event) =>
-                          setRotationAngle(Number(event.target.value))
-                        }
-                        step={1}
-                        type="range"
-                        value={rotationAngle}
-                      />
-                    </div>
-                  </div>
-                ) : null}
-
-                {mediaKind === "image" && activeImageTool === "crop" ? (
-                  <div className="mt-1.5 rounded-lg border border-platinum bg-paper p-2">
-                    <p className="text-xs leading-4 text-battleship">
-                      Drag on the canvas to select a crop. Move the box or drag
-                      a corner handle to resize it.
-                    </p>
-                    <div className="mt-1.5 grid grid-cols-2 gap-1.5">
-                      <button
-                        className="rounded-full border border-signal bg-signal px-2.5 py-1 text-xs font-semibold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={!cropRect || cropRect.width < 4 || cropRect.height < 4}
-                        onClick={applyCrop}
-                        type="button"
-                      >
-                        Apply crop
-                      </button>
-                      <button
-                        className="rounded-full border border-platinum px-2.5 py-1 text-xs font-semibold text-battleship transition hover:border-signal hover:text-ink"
-                        onClick={cancelCrop}
-                        type="button"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-
-                {mediaKind === "image" && activeImageTool === "resize" ? (
-                  <div className="mt-1.5 rounded-lg border border-platinum bg-paper p-2">
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <label className="text-xs font-medium text-battleship">
-                        Width
-                        <input
-                          className="mt-1 w-full rounded-lg border border-platinum bg-paper px-2 py-1 text-xs text-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
-                          min={1}
-                          onChange={(event) =>
-                            handleResizeWidthChange(Number(event.target.value))
-                          }
-                          type="number"
-                          value={resizeWidth}
-                        />
-                      </label>
-                      <label className="text-xs font-medium text-battleship">
-                        Height
-                        <input
-                          className="mt-1 w-full rounded-lg border border-platinum bg-paper px-2 py-1 text-xs text-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
-                          min={1}
-                          onChange={(event) =>
-                            handleResizeHeightChange(Number(event.target.value))
-                          }
-                          type="number"
-                          value={resizeHeight}
-                        />
-                      </label>
-                    </div>
-                    <div className="mt-1.5 flex items-center justify-between gap-1.5">
-                      <button
-                        className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
-                          isAspectRatioLocked
-                            ? "border-signal bg-signal text-white"
-                            : "border-platinum text-battleship hover:border-signal hover:text-ink"
-                        }`}
-                        onClick={() => setIsAspectRatioLocked((value) => !value)}
-                        type="button"
-                      >
-                        {isAspectRatioLocked ? "Aspect locked" : "Aspect free"}
-                      </button>
-                      <button
-                        className="rounded-full border border-signal bg-signal px-2.5 py-1 text-xs font-semibold text-white transition hover:brightness-95"
-                        onClick={applyResize}
-                        type="button"
-                      >
-                        Apply resize
-                      </button>
-                    </div>
-                    {resizeWarning ? (
-                      <p className="mt-2 text-xs leading-4 text-signal">
-                        {resizeWarning}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-
-              <div>
-                <p className="text-xs font-medium text-battleship">Templates</p>
-                <div className="mt-1 grid grid-cols-3 gap-1">
-                  {watermarkTemplates.map((template) => {
-                    const isSelected = activeTemplate === template.id;
-
-                    return (
-                      <button
-                        aria-pressed={isSelected}
-                        className={`rounded-lg border px-1.5 py-1.5 text-left transition ${
-                          isSelected
-                            ? "border-signal bg-signal/10 text-ink"
-                            : "border-platinum bg-paper text-battleship hover:border-signal hover:text-ink"
-                        }`}
-                        key={template.id}
-                        onPointerDown={(event) => event.preventDefault()}
-                        onClick={() => applyTemplate(template)}
-                        type="button"
-                      >
-                        <TemplateIcon
-                          isSelected={isSelected}
-                          variant={template.icon}
-                        />
-                        <span className="mt-0.5 block truncate text-[10px] font-semibold leading-tight">
-                          {template.label}
-                        </span>
-                      </button>
-                    );
-                  })}
+                    >
+                      {label}
+                    </EditorSegment>
+                  ))}
                 </div>
-                {savedPresets.length ? (
-                  <div className="mt-1.5 space-y-1">
-                    <p className="text-xs font-medium text-battleship">
-                      Saved presets
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {savedPresets.map((preset) => (
-                        <button
-                          className="rounded-full border border-platinum bg-paper px-2 py-1 text-[11px] font-semibold text-battleship transition hover:border-signal hover:text-ink"
-                          key={preset.id}
-                          onClick={() =>
-                            applyWatermarkSettingsSnapshot(preset.snapshot)
-                          }
-                          type="button"
-                        >
-                          {preset.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
+              </EditorPanelSection>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <p className="text-xs font-medium text-battleship">Mode</p>
-                  <div className="mt-1 grid grid-cols-2 gap-1 rounded-full bg-platinum/50 p-0.5">
-                    {watermarkModes.map(({ label, value }) => {
-                      const isSelected = watermarkMode === value;
-
-                      return (
-                        <button
-                          className={`rounded-full px-2 py-1 text-xs font-semibold transition ${
-                            isSelected
-                              ? "bg-signal text-white"
-                              : "text-battleship hover:text-ink"
-                          }`}
-                          key={value}
-                          onClick={() => {
-                            clearActiveTemplate();
-                            setWatermarkMode(value);
-                            setIsWatermarkHovering(false);
-                          }}
-                          type="button"
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
+              <EditorPanelSection title="Mode">
+                <div className="grid grid-cols-2 gap-2 rounded-xl bg-white/50 p-1">
+                  {watermarkModes.map(({ label, value }) => (
+                    <EditorSegment
+                      active={watermarkMode === value}
+                      groupId="watermark-mode"
+                      key={value}
+                      onClick={() => {
+                        clearActiveTemplate();
+                        setWatermarkMode(value);
+                        setIsWatermarkHovering(false);
+                      }}
+                    >
+                      {label}
+                    </EditorSegment>
+                  ))}
                 </div>
+              </EditorPanelSection>
 
-                <div>
-                  <p className="text-xs font-medium text-battleship">Type</p>
-                  <div className="mt-1 grid grid-cols-2 gap-1 rounded-full bg-platinum/50 p-0.5">
-                    {watermarkTypes.map(({ label, value }) => {
-                      const isSelected = watermarkType === value;
-
-                      return (
-                        <button
-                          className={`rounded-full px-2 py-1 text-xs font-semibold transition ${
-                            isSelected
-                              ? "bg-signal text-white"
-                              : "text-battleship hover:text-ink"
-                          }`}
-                          key={value}
-                          onClick={() => {
-                            clearActiveTemplate();
-                            setWatermarkType(value);
-                            setIsWatermarkHovering(false);
-                          }}
-                          type="button"
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {watermarkType === "text" ? (
-                <div>
-                  <label
-                    className="block text-sm font-medium text-battleship"
-                    htmlFor="watermark-text"
+              <AnimatePresence mode="wait">
+                {watermarkType === "text" ? (
+                  <motion.div
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    initial={{ opacity: 0, y: 10 }}
+                    key="watermark-text-input"
+                    transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
                   >
-                    Watermark text
-                  </label>
-                  <input
-                    className="mt-1 w-full rounded-lg border border-platinum bg-paper px-2.5 py-1.5 text-sm text-ink outline-none transition placeholder:text-battleship/60 focus:border-signal focus:ring-2 focus:ring-signal/20"
-                    id="watermark-text"
-                    onChange={(event) => setWatermarkText(event.target.value)}
-                    placeholder="Your watermark"
-                    type="text"
-                    value={watermarkText}
-                  />
-                </div>
-              ) : (
-                <div>
+                    <EditorCard>
+                      <label
+                        className="block text-[10px] font-bold uppercase tracking-[0.12em] text-editor-muted"
+                        htmlFor="watermark-text"
+                      >
+                        Watermark text
+                      </label>
+                      <input
+                        className="mt-2 w-full rounded-xl border border-editor-panel-border bg-white px-3 py-2.5 text-sm text-editor-ink outline-none transition placeholder:text-editor-muted/70 focus:border-signal focus:ring-2 focus:ring-signal/20"
+                        id="watermark-text"
+                        onChange={(event) => setWatermarkText(event.target.value)}
+                        placeholder="Add text here"
+                        type="text"
+                        value={watermarkText}
+                      />
+                    </EditorCard>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    initial={{ opacity: 0, y: 10 }}
+                    key="watermark-logo-input"
+                    transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                  >
                   <p className="text-xs font-medium text-battleship">Logo image</p>
                   {logoImage ? (
                     <div className="mt-1 space-y-1">
@@ -3218,167 +3133,155 @@ export default function WatermarkPage() {
                       {logoError}
                     </div>
                   ) : null}
-                </div>
-              )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-              {watermarkMode === "single" ? (
-                <div>
-                  <p className="text-xs font-medium text-battleship">Position</p>
-                  <div className="mt-1 grid w-28 grid-cols-3 gap-1">
-                    {watermarkPositions.map(({ label, value }) => {
-                      const isSelected =
-                        !customPosition && watermarkPosition === value;
-
-                      return (
-                        <button
-                          aria-label={label}
-                          className={`h-7 rounded-md border text-xs transition ${
-                            isSelected
-                              ? "border-signal bg-signal text-white"
-                              : "border-platinum bg-paper text-battleship hover:border-signal hover:text-ink"
-                          }`}
-                          key={value}
-                          onClick={() => {
-                            clearActiveTemplate();
-                            setWatermarkPosition(value);
-                            setCustomPosition(null);
-                          }}
-                          type="button"
-                        >
-                          <span className="sr-only">{label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {customPosition ? (
-                    <div className="mt-1 flex items-center justify-between gap-2 text-xs">
-                      <span className="font-medium text-signal">
-                        Custom position
-                      </span>
-                      <button
-                        className="font-medium text-battleship transition hover:text-ink"
-                        onClick={() => {
-                          clearActiveTemplate();
-                          setCustomPosition(null);
-                        }}
-                        type="button"
-                      >
-                        Reset to {lastPresetLabel.toLowerCase()}
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div>
-                    <p className="text-xs font-medium text-battleship">Density</p>
-                    <div className="mt-1 grid grid-cols-3 gap-1">
-                      {tileDensities.map(({ label, value }) => {
-                        const isSelected = tileDensity === value;
-
-                        return (
-                          <button
-                            className={`rounded-full border px-2 py-1 text-xs font-medium transition ${
-                              isSelected
-                                ? "border-signal bg-signal text-white"
-                                : "border-platinum bg-paper text-battleship hover:border-signal hover:text-ink"
-                            }`}
-                            key={value}
-                            onClick={() => {
-                              if (shouldIgnoreManualSettingsChange()) {
-                                return;
-                              }
-
-                              clearActiveTemplate();
-                              setTileDensity(value);
-                            }}
-                            type="button"
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-battleship">Angle</p>
-                    <div className="mt-1 grid grid-cols-4 gap-1">
-                      {tileAngles.map(({ label, value }) => {
-                        const isSelected = tileAngle === value;
-
-                        return (
-                          <button
-                            className={`rounded-full border px-2 py-1 text-xs font-medium transition ${
-                              isSelected
-                                ? "border-signal bg-signal text-white"
-                                : "border-platinum bg-paper text-battleship hover:border-signal hover:text-ink"
-                            }`}
-                            key={value}
-                            onClick={() => {
-                              if (shouldIgnoreManualSettingsChange()) {
-                                return;
-                              }
-
-                              clearActiveTemplate();
-                              setTileAngle(value);
-                            }}
-                            type="button"
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between gap-4">
-                      <label
-                        className="text-xs font-medium text-battleship"
-                        htmlFor="tile-gap"
-                      >
-                        Gap
-                      </label>
-                      <span className="text-xs font-semibold text-ink">
-                        {tileGap}%
-                      </span>
-                    </div>
-                    <input
-                      className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-platinum accent-signal"
-                      id="tile-gap"
-                      max={300}
-                      min={50}
-                      onChange={(event) => {
-                        if (shouldIgnoreManualSettingsChange()) {
-                          return;
-                        }
-
-                        clearActiveTemplate();
-                        setTileGap(Number(event.target.value));
-                      }}
-                      step={10}
-                      type="range"
-                      value={tileGap}
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <div className="flex items-center justify-between gap-4">
-                  <label
-                    className="text-xs font-medium text-battleship"
-                    htmlFor="watermark-opacity"
+              <AnimatePresence mode="wait">
+                {watermarkMode === "single" ? (
+                  <motion.div
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    initial={{ opacity: 0, y: 10 }}
+                    key="watermark-single-mode"
+                    transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
                   >
-                    Opacity
-                  </label>
+                    <EditorPanelSection title="Position">
+                      <div className="grid w-28 grid-cols-3 gap-1">
+                        {watermarkPositions.map(({ label, value }) => {
+                          const isSelected =
+                            !customPosition && watermarkPosition === value;
+
+                          return (
+                            <EditorGridChoice
+                              active={isSelected}
+                              ariaLabel={label}
+                              groupId="watermark-position"
+                              key={value}
+                              onClick={() => {
+                                clearActiveTemplate();
+                                setWatermarkPosition(value);
+                                setCustomPosition(null);
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                      {customPosition ? (
+                        <div className="mt-1 flex items-center justify-between gap-2 text-xs">
+                          <span className="font-medium text-signal">
+                            Custom position
+                          </span>
+                          <button
+                            className="font-medium text-battleship transition hover:text-ink"
+                            onClick={() => {
+                              clearActiveTemplate();
+                              setCustomPosition(null);
+                            }}
+                            type="button"
+                          >
+                            Reset to {lastPresetLabel.toLowerCase()}
+                          </button>
+                        </div>
+                      ) : null}
+                    </EditorPanelSection>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    initial={{ opacity: 0, y: 10 }}
+                    key="watermark-tile-mode"
+                    transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    <div className="space-y-2">
+                      <EditorPanelSection title="Density">
+                        <div className="grid grid-cols-3 gap-1">
+                          {tileDensities.map(({ label, value }) => (
+                            <EditorPill
+                              active={tileDensity === value}
+                              groupId="tile-density"
+                              key={value}
+                              onClick={() => {
+                                if (shouldIgnoreManualSettingsChange()) {
+                                  return;
+                                }
+
+                                clearActiveTemplate();
+                                setTileDensity(value);
+                              }}
+                            >
+                              {label}
+                            </EditorPill>
+                          ))}
+                        </div>
+                      </EditorPanelSection>
+
+                      <EditorPanelSection title="Angle">
+                        <div className="grid grid-cols-4 gap-1">
+                          {tileAngles.map(({ label, value }) => (
+                            <EditorPill
+                              active={tileAngle === value}
+                              groupId="tile-angle"
+                              key={value}
+                              onClick={() => {
+                                if (shouldIgnoreManualSettingsChange()) {
+                                  return;
+                                }
+
+                                clearActiveTemplate();
+                                setTileAngle(value);
+                              }}
+                            >
+                              {label}
+                            </EditorPill>
+                          ))}
+                        </div>
+                      </EditorPanelSection>
+
+                      <EditorPanelSection title="Gap">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-xs font-semibold text-ink">
+                            {tileGap}%
+                          </span>
+                        </div>
+                        <input
+                          className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-signal"
+                          id="tile-gap"
+                          max={300}
+                          min={50}
+                          onChange={(event) => {
+                            if (shouldIgnoreManualSettingsChange()) {
+                              return;
+                            }
+
+                            clearActiveTemplate();
+                            setTileGap(Number(event.target.value));
+                          }}
+                          step={10}
+                          type="range"
+                          value={tileGap}
+                        />
+                      </EditorPanelSection>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <motion.div
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-2"
+                initial={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              >
+              <EditorPanelSection title="Opacity">
+                <div className="flex items-center justify-between gap-4">
                   <span className="text-xs font-semibold text-ink">
                     {watermarkOpacity}%
                   </span>
                 </div>
                 <input
-                  className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-platinum accent-signal"
+                  className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-signal"
                   id="watermark-opacity"
                   max={100}
                   min={10}
@@ -3394,22 +3297,18 @@ export default function WatermarkPage() {
                   type="range"
                   value={watermarkOpacity}
                 />
-              </div>
+              </EditorPanelSection>
 
-              <div>
+              <EditorPanelSection
+                title={watermarkType === "logo" ? "Logo size" : "Font size"}
+              >
                 <div className="flex items-center justify-between gap-4">
-                  <label
-                    className="text-xs font-medium text-battleship"
-                    htmlFor="font-size"
-                  >
-                    {watermarkType === "logo" ? "Logo size" : "Font size"}
-                  </label>
                   <span className="text-xs font-semibold text-ink">
                     {fontSizeScale}%
                   </span>
                 </div>
                 <input
-                  className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-platinum accent-signal"
+                  className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-signal"
                   id="font-size"
                   max={135}
                   min={15}
@@ -3425,18 +3324,12 @@ export default function WatermarkPage() {
                   type="range"
                   value={fontSizeScale}
                 />
-              </div>
+              </EditorPanelSection>
 
               {watermarkType === "text" ? (
-                <div>
-                  <label
-                    className="block text-xs font-medium text-battleship"
-                    htmlFor="font-family"
-                  >
-                    Font family
-                  </label>
+                <EditorPanelSection title="Font family">
                   <select
-                    className="mt-1 w-full rounded-lg border border-platinum bg-paper px-2.5 py-1.5 text-sm text-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
+                    className="w-full rounded-xl border border-editor-panel-border bg-white px-2.5 py-2 text-sm text-editor-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
                     id="font-family"
                     onChange={(event) => {
                       if (shouldIgnoreManualSettingsChange()) {
@@ -3454,104 +3347,439 @@ export default function WatermarkPage() {
                       </option>
                     ))}
                   </select>
-                </div>
+                </EditorPanelSection>
               ) : null}
-
-              {mediaKind === "image" || mediaKind === "pdf" ? (
-                <button
-                  className="text-xs font-medium text-battleship transition hover:text-ink"
-                  onClick={
-                    isBatchImageMode ? openBatchImagePicker : openFilePicker
-                  }
-                  type="button"
-                >
-                  {mediaKind === "pdf"
-                    ? "Choose a different PDF"
-                    : isBatchImageMode
-                      ? "Add more images"
-                      : "Choose a different image"}
-                </button>
-              ) : null}
+              </motion.div>
 
               {!showRestoredSettingsNotice ? (
                 <button
-                  className="block text-xs font-medium text-battleship transition hover:text-ink"
+                  className="block text-xs font-medium text-editor-muted transition hover:text-editor-ink"
                   onClick={resetWatermarkSettingsToDefaults}
                   type="button"
                 >
                   Reset to defaults
                 </button>
               ) : null}
+
+              {!hasMedia ? (
+                <EditorCard>
+                  <p className="text-sm leading-6 text-editor-muted">
+                    Upload an image, PDF, or video to start watermarking.
+                  </p>
+                  <button
+                    className="mt-3 w-full rounded-xl border border-dashed border-editor-panel-border bg-white/70 px-4 py-3 text-sm font-semibold text-editor-ink transition hover:border-editor-accent hover:bg-white"
+                    onClick={openFilePicker}
+                    type="button"
+                  >
+                    Choose file
+                  </button>
+                </EditorCard>
+              ) : null}
             </div>
-          )}
+          ) : null}
+
+          {activeEditorPanel === "templates" ? (
+            <div className="space-y-3">
+              <EditorPanelSection title="Quick templates">
+                <div className="grid grid-cols-3 gap-2">
+                  {watermarkTemplates.map((template) => {
+                    const isSelected = activeTemplate === template.id;
+
+                    return (
+                      <motion.button
+                        aria-pressed={isSelected}
+                        className={`relative rounded-xl border px-1.5 py-2 text-left transition-colors ${
+                          isSelected
+                            ? "border-signal text-white"
+                            : "border-white/70 bg-white/85 text-editor-muted hover:border-signal hover:text-editor-ink"
+                        }`}
+                        key={template.id}
+                        onPointerDown={(event) => event.preventDefault()}
+                        onClick={() => applyTemplate(template)}
+                        type="button"
+                        whileTap={{ scale: 0.96 }}
+                        transition={{ type: "spring", stiffness: 420, damping: 28 }}
+                      >
+                        {isSelected ? (
+                          <motion.span
+                            className="absolute inset-0 rounded-xl border border-signal bg-signal shadow-md"
+                            layoutId="template-selection"
+                            transition={{
+                              type: "spring",
+                              stiffness: 380,
+                              damping: 32,
+                            }}
+                          />
+                        ) : null}
+                        <span className="relative z-10">
+                          <TemplateIcon
+                            isSelected={isSelected}
+                            variant={template.icon}
+                          />
+                          <span className="mt-1 block truncate text-[10px] font-semibold leading-tight">
+                            {template.label}
+                          </span>
+                        </span>
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </EditorPanelSection>
+
+              {savedPresets.length ? (
+                <EditorPanelSection title="Saved presets">
+                  <div className="flex flex-wrap gap-1.5">
+                    {savedPresets.map((preset) => (
+                      <button
+                        className="rounded-full border border-white/70 bg-white/85 px-2.5 py-1 text-[11px] font-semibold text-editor-muted transition hover:border-editor-accent hover:text-editor-ink"
+                        key={preset.id}
+                        onClick={() =>
+                          applyWatermarkSettingsSnapshot(preset.snapshot)
+                        }
+                        type="button"
+                      >
+                        {preset.name}
+                      </button>
+                    ))}
+                  </div>
+                </EditorPanelSection>
+              ) : null}
+
+              <EditorPanelSection title="Save preset">
+                <button
+                  aria-label="Save watermark preset"
+                  className={`flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] transition ${
+                    isSavingPreset
+                      ? "border-signal bg-signal text-white"
+                      : "border-white/70 bg-white/85 text-editor-muted hover:border-signal hover:text-editor-ink"
+                  }`}
+                  onClick={() => setIsSavingPreset((value) => !value)}
+                  type="button"
+                >
+                  <BookmarkPlus size={15} />
+                  Save current settings
+                </button>
+
+                {isSavingPreset ? (
+                  <EditorCard className="mt-2">
+                    <label
+                      className="text-xs font-medium text-editor-muted"
+                      htmlFor="preset-name"
+                    >
+                      Name this preset
+                    </label>
+                    <input
+                      className="mt-1 w-full rounded-lg border border-editor-panel-border bg-white px-2 py-1.5 text-xs text-editor-ink outline-none transition focus:border-editor-accent focus:ring-2 focus:ring-editor-accent/20"
+                      id="preset-name"
+                      onChange={(event) => setPresetName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          saveCurrentPreset();
+                        }
+                      }}
+                      placeholder="e.g. My brand mark"
+                      type="text"
+                      value={presetName}
+                    />
+                    <div className="mt-2 grid grid-cols-2 gap-1.5">
+                      <button
+                        className="rounded-lg bg-editor-accent px-2.5 py-1.5 text-xs font-semibold text-white transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={!presetName.trim()}
+                        onClick={saveCurrentPreset}
+                        type="button"
+                      >
+                        Save
+                      </button>
+                      <button
+                        className="rounded-lg border border-editor-panel-border px-2.5 py-1.5 text-xs font-semibold text-editor-muted transition hover:text-editor-ink"
+                        onClick={() => {
+                          setPresetName("");
+                          setIsSavingPreset(false);
+                        }}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </EditorCard>
+                ) : null}
+              </EditorPanelSection>
+            </div>
+          ) : null}
+
+          {activeEditorPanel === "crop" ? (
+            <div className="space-y-3">
+              {mediaKind !== "image" ? (
+                <EditorCard>
+                  <p className="text-sm text-editor-muted">
+                    Crop is not available for video or PDF yet.
+                  </p>
+                </EditorCard>
+              ) : (
+                <>
+                  <EditorCard>
+                    <p className="text-sm leading-6 text-editor-muted">
+                      Drag on the canvas to select a crop. Move the box or drag
+                      a corner handle to resize it.
+                    </p>
+                  </EditorCard>
+                  <EditorApplyButton
+                    disabled={!cropRect || cropRect.width < 4 || cropRect.height < 4}
+                    onClick={applyCrop}
+                  >
+                    Apply crop
+                  </EditorApplyButton>
+                  <button
+                    className="w-full rounded-xl border border-editor-panel-border bg-white/70 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-editor-muted transition hover:text-editor-ink"
+                    onClick={cancelCrop}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
+            </div>
+          ) : null}
+
+          {activeEditorPanel === "resize" ? (
+            <div className="space-y-3">
+              {mediaKind !== "image" ? (
+                <EditorCard>
+                  <p className="text-sm text-editor-muted">
+                    Resize is not available for video or PDF yet.
+                  </p>
+                </EditorCard>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <EditorCard>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-editor-muted">
+                        Width
+                      </p>
+                      <input
+                        className="mt-1 w-full bg-transparent text-lg font-semibold text-editor-ink outline-none"
+                        min={1}
+                        onChange={(event) =>
+                          handleResizeWidthChange(Number(event.target.value))
+                        }
+                        type="number"
+                        value={resizeWidth}
+                      />
+                      <span className="text-xs text-editor-muted">px</span>
+                    </EditorCard>
+                    <EditorCard>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-editor-muted">
+                        Height
+                      </p>
+                      <input
+                        className="mt-1 w-full bg-transparent text-lg font-semibold text-editor-ink outline-none"
+                        min={1}
+                        onChange={(event) =>
+                          handleResizeHeightChange(Number(event.target.value))
+                        }
+                        type="number"
+                        value={resizeHeight}
+                      />
+                      <span className="text-xs text-editor-muted">px</span>
+                    </EditorCard>
+                  </div>
+                  <EditorToggleRow
+                    checked={isAspectRatioLocked}
+                    label="Aspect ratio"
+                    onChange={() => setIsAspectRatioLocked((value) => !value)}
+                  />
+                  {resizeWarning ? (
+                    <p className="text-xs leading-4 text-signal">{resizeWarning}</p>
+                  ) : null}
+                  <EditorApplyButton onClick={applyResize}>Apply resize</EditorApplyButton>
+                </>
+              )}
+            </div>
+          ) : null}
+
+          {activeEditorPanel === "rotate" ? (
+            <div className="space-y-3">
+              {mediaKind !== "image" ? (
+                <EditorCard>
+                  <p className="text-sm text-editor-muted">
+                    Rotate is not available for video or PDF yet.
+                  </p>
+                </EditorCard>
+              ) : (
+                <>
+                  <EditorCard>
+                    <p className="text-sm leading-6 text-editor-muted">
+                      Rotate the base image. Watermark settings stay unchanged.
+                    </p>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <button
+                        className="rounded-xl border border-editor-panel-border bg-white px-3 py-2 text-xs font-semibold text-editor-ink transition hover:border-editor-accent"
+                        onClick={() => rotateBaseImage("left")}
+                        type="button"
+                      >
+                        90° left
+                      </button>
+                      <button
+                        className="rounded-xl border border-editor-panel-border bg-white px-3 py-2 text-xs font-semibold text-editor-ink transition hover:border-editor-accent"
+                        onClick={() => rotateBaseImage("right")}
+                        type="button"
+                      >
+                        90° right
+                      </button>
+                    </div>
+                    <div className="mt-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <label
+                          className="text-xs font-medium text-editor-muted"
+                          htmlFor="base-rotation"
+                        >
+                          Manual angle
+                        </label>
+                        <input
+                          className="w-16 rounded-lg border border-editor-panel-border bg-white px-2 py-1 text-right text-xs text-editor-ink outline-none"
+                          id="base-rotation-value"
+                          max={360}
+                          min={0}
+                          onChange={(event) =>
+                            setRotationAngle(
+                              normalizeDegrees(Number(event.target.value)),
+                            )
+                          }
+                          type="number"
+                          value={rotationAngle}
+                        />
+                      </div>
+                      <input
+                        className="mt-2 h-2 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-editor-accent"
+                        id="base-rotation"
+                        max={360}
+                        min={0}
+                        onChange={(event) =>
+                          setRotationAngle(Number(event.target.value))
+                        }
+                        step={1}
+                        type="range"
+                        value={rotationAngle}
+                      />
+                    </div>
+                  </EditorCard>
+                  <EditorApplyButton onClick={() => void materializeRotationIfNeeded()}>
+                    Apply rotation
+                  </EditorApplyButton>
+                </>
+              )}
+            </div>
+          ) : null}
+
+          {activeEditorPanel === "effects" ? (
+            <div className="space-y-3">
+              {mediaKind !== "image" ? (
+                <EditorCard>
+                  <p className="text-sm text-editor-muted">
+                    Effects are not available for video or PDF yet.
+                  </p>
+                </EditorCard>
+              ) : (
+                <ImageEffectsPanel
+                  activeEffect={activeImageEffect}
+                  borderColor={effectBorderColor}
+                  borderWidth={effectBorderWidth}
+                  exposure={effectExposure}
+                  image={image}
+                  onBorderColorChange={setEffectBorderColor}
+                  onBorderWidthChange={setEffectBorderWidth}
+                  onEffectChange={setActiveImageEffect}
+                  onExposureChange={setEffectExposure}
+                />
+              )}
+            </div>
+          ) : null}
+
+            </EditorToolPanel>
+          ) : null}
 
           {uploadError ? (
-            <div className="mt-6 rounded-2xl border border-signal/30 bg-signal/10 px-4 py-3 text-sm text-ink">
+            <div className="absolute bottom-20 left-[4.5rem] z-10 max-w-xs rounded-xl border border-signal/30 bg-signal/10 px-4 py-3 text-sm text-ink">
               {uploadError}
             </div>
           ) : null}
-        </aside>
+        </div>
 
         <section
-          className="flex min-h-[320px] items-center justify-center overflow-hidden rounded-[1.5rem] border border-platinum bg-platinum/50 p-2 shadow-2xl shadow-platinum/60 md:min-h-0"
+          className="relative flex min-h-[320px] min-w-0 flex-col overflow-hidden md:min-h-0"
           ref={previewPanelRef}
         >
-          {isPdfLoading ? (
-            <div className="flex h-full min-h-[420px] w-full items-center justify-center rounded-[1.5rem] border border-dashed border-battleship/50 bg-paper text-center">
-              <div>
-                <p className="text-lg font-semibold text-ink">Loading PDF...</p>
-                <p className="mt-2 text-sm text-battleship">
+          <div className="editor-checkerboard flex min-h-0 flex-1 items-center justify-center p-4 md:p-6">
+            {isPdfLoading ? (
+              <div className="text-center">
+                <p className="text-lg font-semibold text-editor-ink">Loading PDF...</p>
+                <p className="mt-2 text-sm text-editor-muted">
                   Rendering pages in your browser.
                 </p>
               </div>
-            </div>
-          ) : (mediaKind === "image" || mediaKind === "pdf") && image ? (
-            <canvas
-              className="h-full max-h-full w-full touch-none rounded-[1.5rem] bg-platinum object-contain"
-              onPointerCancel={handleCanvasPointerCancel}
-              onPointerDown={handleCanvasPointerDown}
-              onPointerLeave={handleCanvasPointerLeave}
-              onPointerMove={handleCanvasPointerMove}
-              onPointerUp={handleCanvasPointerUp}
-              ref={canvasRef}
-              style={{ cursor: canvasCursor }}
-            />
-          ) : mediaKind === "video" && videoUrl ? (
-            <div
-              className="relative max-h-full max-w-full overflow-hidden rounded-[1.5rem] bg-black"
-              ref={videoPreviewRef}
-            >
-              <video
-                className="block max-h-[calc(100vh-3rem)] max-w-full"
-                controls
-                playsInline
-                src={videoUrl}
-              />
+            ) : (mediaKind === "image" || mediaKind === "pdf") && image ? (
               <canvas
-                className="absolute inset-0 h-full w-full touch-none"
+                className="max-h-full max-w-full touch-none shadow-lg"
                 onPointerCancel={handleCanvasPointerCancel}
                 onPointerDown={handleCanvasPointerDown}
                 onPointerLeave={handleCanvasPointerLeave}
                 onPointerMove={handleCanvasPointerMove}
                 onPointerUp={handleCanvasPointerUp}
-                ref={videoOverlayCanvasRef}
+                ref={canvasRef}
                 style={{ cursor: canvasCursor }}
               />
-            </div>
-          ) : (
-            <div className="flex h-full min-h-[420px] w-full items-center justify-center rounded-[1.5rem] border border-dashed border-battleship/50 bg-paper text-center">
-              <div>
-                <p className="text-lg font-semibold text-ink">
-                  Your preview will appear here
-                </p>
-                <p className="mt-2 text-sm text-battleship">
-                  Upload a JPG, PNG, WebP, PDF, MP4, MOV, or WebM to start.
-                </p>
+            ) : mediaKind === "video" && videoUrl ? (
+              <div
+                className="relative max-h-full max-w-full overflow-hidden shadow-lg"
+                ref={videoPreviewRef}
+              >
+                <video
+                  className="block max-h-full max-w-full"
+                  controls
+                  playsInline
+                  src={videoUrl}
+                />
+                <canvas
+                  className="absolute inset-0 h-full w-full touch-none"
+                  onPointerCancel={handleCanvasPointerCancel}
+                  onPointerDown={handleCanvasPointerDown}
+                  onPointerLeave={handleCanvasPointerLeave}
+                  onPointerMove={handleCanvasPointerMove}
+                  onPointerUp={handleCanvasPointerUp}
+                  ref={videoOverlayCanvasRef}
+                  style={{ cursor: canvasCursor }}
+                />
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="w-full max-w-xl">
+                <UploadZone
+                  onClick={openFilePicker}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop}
+                />
+              </div>
+            )}
+          </div>
+
+          {canvasMetaLabel ? (
+            <p className="border-t border-editor-panel-border bg-white/50 py-2 text-center text-xs text-editor-muted">
+              {canvasMetaLabel}
+            </p>
+          ) : null}
         </section>
       </motion.div>
+
+      <EditorBottomBar
+        canRedo={canRedoSettings}
+        canUndo={canUndoSettings}
+        exportDisabled={isExportDisabled}
+        exportLabel={exportButtonLabel}
+        exportTitle={exportDisabledReason}
+        onExit={clearAllMedia}
+        onExport={handleExport}
+        onRedo={redoWatermarkSettings}
+        onUndo={undoWatermarkSettings}
+      />
     </main>
   );
 }
@@ -3673,20 +3901,20 @@ function PdfPageStrip({ activeId, onSelect, pages }: PdfPageStripProps) {
 function UploadZone({ onClick, onDragOver, onDrop }: UploadZoneProps) {
   return (
     <div
-      className="mt-8 cursor-pointer rounded-[1.5rem] border border-dashed border-battleship/50 bg-platinum/40 px-6 py-12 text-center transition hover:border-signal hover:bg-platinum/70"
+      className="cursor-pointer rounded-2xl border border-dashed border-editor-panel-border bg-white/80 px-6 py-12 text-center shadow-sm transition hover:border-editor-accent hover:bg-white"
       onClick={onClick}
       onDragOver={onDragOver}
       onDrop={onDrop}
       role="button"
       tabIndex={0}
     >
-      <p className="text-lg font-semibold text-ink">
+      <p className="text-lg font-semibold text-editor-ink">
         Drop your images, PDF, or video here
       </p>
-      <p className="mt-2 text-sm text-battleship">
+      <p className="mt-2 text-sm text-editor-muted">
         Select multiple images for batch watermarking, one PDF, or one video
       </p>
-      <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-battleship">
+      <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-editor-muted">
         JPG, PNG, WebP, PDF, MP4, MOV, WebM
       </p>
     </div>
@@ -3960,6 +4188,7 @@ type ExportRenderInput = {
   fontFamily: string;
   fontSizeScale: number;
   image: HTMLImageElement;
+  imageEffectSettings: ImageEffectSettings;
   logoImage: HTMLImageElement | null;
   resizeHeight: number;
   resizeWidth: number;
@@ -4148,6 +4377,7 @@ function renderExportCanvas({
   fontFamily,
   fontSizeScale,
   image,
+  imageEffectSettings,
   logoImage,
   resizeHeight,
   resizeWidth,
@@ -4182,12 +4412,14 @@ function renderExportCanvas({
   context.save();
   context.translate(canvas.width / 2, canvas.height / 2);
   context.rotate((rotationAngle * Math.PI) / 180);
-  context.drawImage(
+  drawBaseImageWithEffect(
+    context,
     image,
     -sourceWidth / 2,
     -sourceHeight / 2,
     sourceWidth,
     sourceHeight,
+    imageEffectSettings,
   );
   context.restore();
 
