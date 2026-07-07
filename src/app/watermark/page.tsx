@@ -23,8 +23,9 @@ import {
   storedSettingsFromSnapshot,
   writeStoredWatermarkSettings,
 } from "../../lib/watermarkSettingsStorage";
+import JSZip from "jszip";
 import { motion } from "framer-motion";
-import { BookmarkPlus, Redo2, Undo2 } from "lucide-react";
+import { BookmarkPlus, Redo2, Undo2, X } from "lucide-react";
 import {
   type DragEvent,
   type PointerEvent,
@@ -107,6 +108,17 @@ type TextBounds = {
   left: number;
   right: number;
   top: number;
+};
+
+type BatchImageEntry = {
+  fileName: string;
+  id: string;
+  image: HTMLImageElement;
+  objectUrl: string;
+  resizeHeight: number;
+  resizeWidth: number;
+  rotationAngle: number;
+  uploadedImageSize: CanvasSize;
 };
 
 type RgbaColor = {
@@ -312,8 +324,16 @@ export default function WatermarkPage() {
     rect: CropRect;
   } | null>(null);
   const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const [imageBatch, setImageBatch] = useState<BatchImageEntry[]>([]);
+  const [activeBatchImageId, setActiveBatchImageId] = useState<string | null>(
+    null,
+  );
   const [mediaKind, setMediaKind] = useState<MediaKind | null>(null);
   const [fileName, setFileName] = useState("");
+  const [batchExportProgress, setBatchExportProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
   const [videoUrl, setVideoUrl] = useState("");
   const [videoDuration, setVideoDuration] = useState(0);
   const [videoSize, setVideoSize] = useState<CanvasSize | null>(null);
@@ -464,6 +484,12 @@ export default function WatermarkPage() {
         URL.revokeObjectURL(objectUrlRef.current);
       }
 
+      for (const entry of imageBatch) {
+        if (entry.objectUrl !== objectUrlRef.current) {
+          URL.revokeObjectURL(entry.objectUrl);
+        }
+      }
+
       if (logoObjectUrlRef.current) {
         URL.revokeObjectURL(logoObjectUrlRef.current);
       }
@@ -472,7 +498,7 @@ export default function WatermarkPage() {
         clearTimeout(manualSettingsGuardTimerRef.current);
       }
     };
-  }, []);
+  }, [imageBatch]);
 
   useEffect(() => {
     const snapshot: WatermarkSettingsSnapshot = {
@@ -745,6 +771,324 @@ export default function WatermarkPage() {
     fileInputRef.current?.click();
   }
 
+  function openBatchImagePicker() {
+    fileInputRef.current?.click();
+  }
+
+  function createBatchImageId() {
+    return crypto.randomUUID();
+  }
+
+  function revokeBatchObjectUrls(entries: BatchImageEntry[]) {
+    for (const entry of entries) {
+      if (entry.objectUrl !== objectUrlRef.current) {
+        URL.revokeObjectURL(entry.objectUrl);
+      }
+    }
+  }
+
+  function createBatchImageEntry(
+    file: File,
+    imageElement: HTMLImageElement,
+    objectUrl: string,
+  ): BatchImageEntry {
+    return {
+      fileName: file.name,
+      id: createBatchImageId(),
+      image: imageElement,
+      objectUrl,
+      resizeHeight: imageElement.naturalHeight,
+      resizeWidth: imageElement.naturalWidth,
+      rotationAngle: 0,
+      uploadedImageSize: {
+        height: imageElement.naturalHeight,
+        width: imageElement.naturalWidth,
+      },
+    };
+  }
+
+  function loadImageElementFromFile(file: File) {
+    return new Promise<{
+      file: File;
+      image: HTMLImageElement;
+      objectUrl: string;
+    }>((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(file);
+      const nextImage = new Image();
+
+      nextImage.onload = () => {
+        resolve({ file, image: nextImage, objectUrl });
+      };
+      nextImage.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("We could not load that image. Please try another file."));
+      };
+      nextImage.src = objectUrl;
+    });
+  }
+
+  function persistActiveBatchEntry(
+    batch: BatchImageEntry[],
+    activeId: string | null,
+  ) {
+    if (!activeId || !image || !uploadedImageSize || mediaKind !== "image") {
+      return batch;
+    }
+
+    return batch.map((entry) =>
+      entry.id === activeId
+        ? {
+            ...entry,
+            image,
+            resizeHeight,
+            resizeWidth,
+            rotationAngle,
+            uploadedImageSize,
+          }
+        : entry,
+    );
+  }
+
+  function applyActiveBatchEntry(entry: BatchImageEntry) {
+    objectUrlRef.current = entry.objectUrl;
+    setActiveBatchImageId(entry.id);
+    setImage(entry.image);
+    setFileName(entry.fileName);
+    setUploadedImageSize(entry.uploadedImageSize);
+    setResizeWidth(entry.resizeWidth);
+    setResizeHeight(entry.resizeHeight);
+    setRotationAngle(entry.rotationAngle);
+    setResizeWarning("");
+    setActiveImageTool(null);
+    setCropRect(null);
+    setIsWatermarkHovering(false);
+  }
+
+  function clearImageBatch() {
+    revokeBatchObjectUrls(imageBatch);
+    setImageBatch([]);
+    setActiveBatchImageId(null);
+  }
+
+  function selectBatchImage(id: string) {
+    if (id === activeBatchImageId) {
+      return;
+    }
+
+    const nextBatch = persistActiveBatchEntry(imageBatch, activeBatchImageId);
+    const nextEntry = nextBatch.find((entry) => entry.id === id);
+
+    if (!nextEntry) {
+      return;
+    }
+
+    setImageBatch(nextBatch);
+    applyActiveBatchEntry(nextEntry);
+  }
+
+  function removeBatchImage(id: string) {
+    const nextBatch = persistActiveBatchEntry(imageBatch, activeBatchImageId);
+    const removedEntry = nextBatch.find((entry) => entry.id === id);
+
+    if (!removedEntry) {
+      return;
+    }
+
+    if (removedEntry.objectUrl !== objectUrlRef.current) {
+      URL.revokeObjectURL(removedEntry.objectUrl);
+    }
+
+    const remainingBatch = nextBatch.filter((entry) => entry.id !== id);
+
+    if (remainingBatch.length === 0) {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
+
+      setImage(null);
+      setImageBatch([]);
+      setActiveBatchImageId(null);
+      setMediaKind(null);
+      setFileName("");
+      setUploadedImageSize(null);
+      setResizeWidth(0);
+      setResizeHeight(0);
+      setRotationAngle(0);
+      setCropRect(null);
+      setActiveImageTool(null);
+      return;
+    }
+
+    setImageBatch(remainingBatch);
+
+    if (id === activeBatchImageId) {
+      applyActiveBatchEntry(remainingBatch[0]);
+      return;
+    }
+  }
+
+  async function appendImageBatchFiles(files: File[]) {
+    const imageFiles = files.filter(isImageFile);
+
+    if (!imageFiles.length) {
+      setUploadError("Please choose JPG, PNG, or WebP images.");
+      return;
+    }
+
+    setUploadError("");
+
+    try {
+      const loadedEntries = await Promise.all(
+        imageFiles.map(async (file) => {
+          const loaded = await loadImageElementFromFile(file);
+          return createBatchImageEntry(
+            loaded.file,
+            loaded.image,
+            loaded.objectUrl,
+          );
+        }),
+      );
+      const nextBatch = [
+        ...persistActiveBatchEntry(imageBatch, activeBatchImageId),
+        ...loadedEntries,
+      ];
+
+      setMediaKind("image");
+      setVideoUrl("");
+      setVideoDuration(0);
+      setVideoSize(null);
+      setVideoFileSize(0);
+      setImageBatch(nextBatch);
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "We could not load those images. Please try again.",
+      );
+    }
+  }
+
+  function getWatermarkExportInput(
+    imageElement: HTMLImageElement,
+    entryResizeWidth: number,
+    entryResizeHeight: number,
+    entryRotationAngle: number,
+    useResizePreview: boolean,
+  ): ExportRenderInput {
+    return {
+      customPosition,
+      fontFamily,
+      fontSizeScale,
+      image: imageElement,
+      logoImage,
+      resizeHeight: entryResizeHeight,
+      resizeWidth: entryResizeWidth,
+      rotationAngle: entryRotationAngle,
+      tileAngle,
+      tileDensity,
+      tileGap,
+      useResizePreview,
+      watermarkMode,
+      watermarkOpacity,
+      watermarkPosition,
+      watermarkText,
+      watermarkType,
+    };
+  }
+
+  function exportImageToBlob(input: ExportRenderInput) {
+    return new Promise<Blob>((resolve, reject) => {
+      try {
+        const exportCanvas = renderExportCanvas(input);
+
+        exportCanvas.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error("We could not export that image. Please try again."));
+            return;
+          }
+
+          resolve(blob);
+        }, "image/png");
+      } catch {
+        reject(new Error("We could not export that image. Please try again."));
+      }
+    });
+  }
+
+  function getUniqueZipEntryName(fileName: string, usedNames: Set<string>) {
+    const exportName = getExportFileName(fileName);
+    let candidate = exportName;
+    let duplicateIndex = 2;
+
+    while (usedNames.has(candidate)) {
+      const extensionIndex = exportName.lastIndexOf(".");
+      const baseName =
+        extensionIndex >= 0 ? exportName.slice(0, extensionIndex) : exportName;
+      const extension =
+        extensionIndex >= 0 ? exportName.slice(extensionIndex) : "";
+      candidate = `${baseName}-${duplicateIndex}${extension}`;
+      duplicateIndex += 1;
+    }
+
+    usedNames.add(candidate);
+    return candidate;
+  }
+
+  async function handleExportAll() {
+    if (isExporting || imageBatch.length < 2) {
+      return;
+    }
+
+    setUploadError("");
+    setExportError("");
+    setIsExporting(true);
+    setBatchExportProgress({ current: 0, total: imageBatch.length });
+
+    try {
+      const nextBatch = persistActiveBatchEntry(imageBatch, activeBatchImageId);
+      setImageBatch(nextBatch);
+
+      const zip = new JSZip();
+      const usedNames = new Set<string>();
+
+      for (const [index, entry] of nextBatch.entries()) {
+        setBatchExportProgress({
+          current: index + 1,
+          total: nextBatch.length,
+        });
+
+        const blob = await exportImageToBlob(
+          getWatermarkExportInput(
+            entry.image,
+            entry.resizeWidth,
+            entry.resizeHeight,
+            entry.rotationAngle,
+            false,
+          ),
+        );
+
+        zip.file(getUniqueZipEntryName(entry.fileName, usedNames), blob);
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const objectUrl = URL.createObjectURL(zipBlob);
+      const link = document.createElement("a");
+
+      link.href = objectUrl;
+      link.download = "watermarked-images.zip";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setUploadError("We could not export those images. Please try again.");
+    } finally {
+      setIsExporting(false);
+      setBatchExportProgress(null);
+    }
+  }
+
   function openLogoPicker() {
     logoInputRef.current?.click();
   }
@@ -946,6 +1290,11 @@ export default function WatermarkPage() {
       return;
     }
 
+    if (mediaKind === "image" && imageBatch.length >= 2) {
+      void handleExportAll();
+      return;
+    }
+
     setUploadError("");
     setExportError("");
 
@@ -961,35 +1310,16 @@ export default function WatermarkPage() {
     setIsExporting(true);
     setExportProgress(null);
 
-    try {
-      const exportCanvas = renderExportCanvas({
-        customPosition,
-        fontFamily,
-        fontSizeScale,
+    void exportImageToBlob(
+      getWatermarkExportInput(
         image,
-        logoImage,
-        resizeHeight,
         resizeWidth,
+        resizeHeight,
         rotationAngle,
-        tileAngle,
-        tileDensity,
-        tileGap,
-        watermarkMode,
-        watermarkOpacity,
-        watermarkPosition,
-        watermarkText,
-        watermarkType,
-        useResizePreview: activeImageTool === "resize",
-      });
-
-      exportCanvas.toBlob((blob) => {
-        setIsExporting(false);
-
-        if (!blob) {
-          setUploadError("We could not export that image. Please try again.");
-          return;
-        }
-
+        activeImageTool === "resize",
+      ),
+    )
+      .then((blob) => {
         const objectUrl = URL.createObjectURL(blob);
         const link = document.createElement("a");
 
@@ -999,11 +1329,13 @@ export default function WatermarkPage() {
         link.click();
         link.remove();
         URL.revokeObjectURL(objectUrl);
-      }, "image/png");
-    } catch {
-      setIsExporting(false);
-      setUploadError("We could not export that image. Please try again.");
-    }
+      })
+      .catch(() => {
+        setUploadError("We could not export that image. Please try again.");
+      })
+      .finally(() => {
+        setIsExporting(false);
+      });
   }
 
   function handleCancelExport() {
@@ -1156,25 +1488,49 @@ export default function WatermarkPage() {
 
   function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
-    const file = event.dataTransfer.files.item(0);
-
-    if (file) {
-      loadMediaFile(file);
-    }
+    loadMediaFiles(Array.from(event.dataTransfer.files));
   }
 
-  function loadMediaFile(file: File) {
-    if (isImageFile(file)) {
-      loadImageFile(file);
+  function loadMediaFiles(files: File[]) {
+    if (!files.length) {
       return;
     }
 
-    if (isVideoFile(file)) {
-      loadVideoFile(file);
+    const imageFiles = files.filter(isImageFile);
+    const videoFiles = files.filter(isVideoFile);
+
+    if (imageFiles.length && videoFiles.length) {
+      setUploadError(
+        "Upload images together or a single video, not both at once.",
+      );
+      return;
+    }
+
+    if (videoFiles.length) {
+      if (videoFiles.length > 1) {
+        setUploadError("Please upload one video at a time.");
+        return;
+      }
+
+      loadVideoFile(videoFiles[0]);
+      return;
+    }
+
+    if (imageFiles.length > 1) {
+      void loadImageBatchFiles(imageFiles);
+      return;
+    }
+
+    if (imageFiles.length === 1) {
+      loadImageFile(imageFiles[0]);
       return;
     }
 
     setUploadError("Please choose a JPG, PNG, WebP, MP4, MOV, or WebM file.");
+  }
+
+  function loadMediaFile(file: File) {
+    loadMediaFiles([file]);
   }
 
   function handleCanvasPointerDown(event: PointerEvent<HTMLCanvasElement>) {
@@ -1428,6 +1784,29 @@ export default function WatermarkPage() {
     setIsWatermarkHovering(false);
     setCropRect(null);
     cropDragRef.current = null;
+
+    if (activeBatchImageId && uploadedImageSize) {
+      setImageBatch((currentBatch) =>
+        currentBatch.map((entry) =>
+          entry.id === activeBatchImageId
+            ? {
+                ...entry,
+                image: nextImage,
+                resizeHeight: nextImage.naturalHeight,
+                resizeWidth: nextImage.naturalWidth,
+                uploadedImageSize: {
+                  height: nextImage.naturalHeight,
+                  width: nextImage.naturalWidth,
+                },
+              }
+            : entry,
+        ),
+      );
+      setUploadedImageSize({
+        height: nextImage.naturalHeight,
+        width: nextImage.naturalWidth,
+      });
+    }
   }
 
   function rotateBaseImage(direction: "left" | "right") {
@@ -1513,6 +1892,52 @@ export default function WatermarkPage() {
     updateResizeWarning(nextImage.naturalWidth, nextImage.naturalHeight);
   }
 
+  async function loadImageBatchFiles(files: File[]) {
+    const imageFiles = files.filter(isImageFile);
+
+    if (!imageFiles.length) {
+      setUploadError("Please choose JPG, PNG, or WebP images.");
+      return;
+    }
+
+    setUploadError("");
+
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+
+    clearImageBatch();
+
+    try {
+      const loadedEntries = await Promise.all(
+        imageFiles.map(async (file) => {
+          const loaded = await loadImageElementFromFile(file);
+          return createBatchImageEntry(
+            loaded.file,
+            loaded.image,
+            loaded.objectUrl,
+          );
+        }),
+      );
+
+      setMediaKind("image");
+      setVideoUrl("");
+      setVideoDuration(0);
+      setVideoSize(null);
+      setVideoFileSize(0);
+      setImageBatch(loadedEntries);
+      applyActiveBatchEntry(loadedEntries[0]);
+      applyStoredWatermarkSettingsOnMediaLoad();
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "We could not load those images. Please try again.",
+      );
+    }
+  }
+
   function loadImageFile(file: File) {
     if (!isImageFile(file)) {
       setUploadError("Please choose a JPG, PNG, or WebP image.");
@@ -1525,12 +1950,18 @@ export default function WatermarkPage() {
       URL.revokeObjectURL(objectUrlRef.current);
     }
 
+    clearImageBatch();
+
     const objectUrl = URL.createObjectURL(file);
     const nextImage = new Image();
 
     objectUrlRef.current = objectUrl;
     nextImage.onload = () => {
+      const entry = createBatchImageEntry(file, nextImage, objectUrl);
+
       setMediaKind("image");
+      setImageBatch([entry]);
+      setActiveBatchImageId(entry.id);
       setImage(nextImage);
       setVideoUrl("");
       setVideoDuration(0);
@@ -1569,6 +2000,8 @@ export default function WatermarkPage() {
       URL.revokeObjectURL(objectUrlRef.current);
     }
 
+    clearImageBatch();
+
     const objectUrl = URL.createObjectURL(file);
     const nextVideo = document.createElement("video");
 
@@ -1577,6 +2010,7 @@ export default function WatermarkPage() {
     nextVideo.onloadedmetadata = () => {
       setMediaKind("video");
       setImage(null);
+      setActiveBatchImageId(null);
       setVideoUrl(objectUrl);
       setVideoDuration(nextVideo.duration);
       setVideoSize({
@@ -1706,6 +2140,7 @@ export default function WatermarkPage() {
     watermarkPositions.find((position) => position.value === watermarkPosition)
       ?.label ?? "Bottom right";
   const hasMedia = Boolean(image || videoUrl);
+  const isBatchImageMode = mediaKind === "image" && imageBatch.length >= 2;
   const loadedMediaDetails =
     mediaKind === "video" && videoSize
       ? `${formatDuration(videoDuration)} · ${videoSize.width}x${videoSize.height}`
@@ -1749,9 +2184,13 @@ export default function WatermarkPage() {
       ? isExporting
         ? "Exporting..."
         : "Export MP4"
-      : isExporting
-        ? "Exporting..."
-        : "Export PNG";
+      : isBatchImageMode
+        ? isExporting
+          ? "Exporting..."
+          : "Export all"
+        : isExporting
+          ? "Exporting..."
+          : "Export PNG";
   const isExportDisabled =
     isExporting ||
     (mediaKind === "video" ? !canExportVideo : !image);
@@ -1795,12 +2234,19 @@ export default function WatermarkPage() {
           <input
             accept={acceptedMediaInputTypes}
             className="hidden"
+            multiple
             onChange={(event) => {
-              const file = event.target.files?.item(0);
+              const files = Array.from(event.target.files ?? []);
 
-              if (file) {
-                loadMediaFile(file);
+              if (files.length) {
+                if (isBatchImageMode && files.every(isImageFile)) {
+                  void appendImageBatchFiles(files);
+                } else {
+                  loadMediaFiles(files);
+                }
               }
+
+              event.target.value = "";
             }}
             ref={fileInputRef}
             type="file"
@@ -1828,11 +2274,31 @@ export default function WatermarkPage() {
           ) : (
             <div className="mt-2 space-y-2">
               <div className="rounded-lg border border-platinum bg-platinum/50 px-2.5 py-1 text-xs text-ink">
-                Loaded: <span className="font-semibold">{fileName}</span>
+                {isBatchImageMode ? (
+                  <>
+                    Batch:{" "}
+                    <span className="font-semibold">
+                      {imageBatch.length} images
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    Loaded: <span className="font-semibold">{fileName}</span>
+                  </>
+                )}
                 {loadedMediaDetails ? (
                   <span className="ml-1 text-battleship">{loadedMediaDetails}</span>
                 ) : null}
               </div>
+
+              {isBatchImageMode ? (
+                <ImageBatchStrip
+                  activeId={activeBatchImageId}
+                  entries={imageBatch}
+                  onRemove={removeBatchImage}
+                  onSelect={selectBatchImage}
+                />
+              ) : null}
 
               {showRestoredSettingsNotice ? (
                 <div className="rounded-lg border border-platinum bg-platinum/40 px-2.5 py-2 text-xs text-ink">
@@ -1866,6 +2332,27 @@ export default function WatermarkPage() {
               >
                 {exportButtonLabel}
               </Button>
+
+              {isExporting && isBatchImageMode && batchExportProgress ? (
+                <div className="rounded-lg border border-platinum bg-paper px-2.5 py-2">
+                  <p className="text-xs font-medium text-battleship">
+                    Processing {batchExportProgress.current} of{" "}
+                    {batchExportProgress.total}...
+                  </p>
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-platinum">
+                    <div
+                      className="h-full rounded-full bg-signal transition-[width] duration-200"
+                      style={{
+                        width: `${
+                          (batchExportProgress.current /
+                            batchExportProgress.total) *
+                          100
+                        }%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : null}
 
               {isExporting && mediaKind === "video" && exportProgress !== null ? (
                 <div className="rounded-lg border border-platinum bg-paper px-2.5 py-2">
@@ -2667,13 +3154,19 @@ export default function WatermarkPage() {
                 </div>
               ) : null}
 
-              <button
-                className="text-xs font-medium text-battleship transition hover:text-ink"
-                onClick={openFilePicker}
-                type="button"
-              >
-                Choose a different image
-              </button>
+              {mediaKind === "image" ? (
+                <button
+                  className="text-xs font-medium text-battleship transition hover:text-ink"
+                  onClick={
+                    isBatchImageMode ? openBatchImagePicker : openFilePicker
+                  }
+                  type="button"
+                >
+                  {isBatchImageMode
+                    ? "Add more images"
+                    : "Choose a different image"}
+                </button>
+              ) : null}
 
               {!showRestoredSettingsNotice ? (
                 <button
@@ -2755,6 +3248,69 @@ type UploadZoneProps = {
   onDrop: (event: DragEvent<HTMLDivElement>) => void;
 };
 
+type ImageBatchStripProps = {
+  activeId: string | null;
+  entries: BatchImageEntry[];
+  onRemove: (id: string) => void;
+  onSelect: (id: string) => void;
+};
+
+function ImageBatchStrip({
+  activeId,
+  entries,
+  onRemove,
+  onSelect,
+}: ImageBatchStripProps) {
+  return (
+    <div className="rounded-lg border border-platinum bg-paper p-2">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-battleship">
+        Batch images
+      </p>
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        {entries.map((entry) => {
+          const isActive = entry.id === activeId;
+
+          return (
+            <div className="relative" key={entry.id}>
+              <button
+                className={`group relative block w-full overflow-hidden rounded-lg border transition ${
+                  isActive
+                    ? "border-signal ring-2 ring-signal/20"
+                    : "border-platinum hover:border-signal/60"
+                }`}
+                onClick={() => onSelect(entry.id)}
+                title={entry.fileName}
+                type="button"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  alt={entry.fileName}
+                  className="aspect-square w-full object-cover"
+                  src={entry.objectUrl}
+                />
+                <span className="block truncate px-1 py-1 text-[10px] text-battleship">
+                  {entry.fileName}
+                </span>
+              </button>
+              <button
+                aria-label={`Remove ${entry.fileName}`}
+                className="absolute right-1 top-1 rounded-full bg-paper/90 p-0.5 text-battleship shadow-sm transition hover:bg-signal hover:text-white"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRemove(entry.id);
+                }}
+                type="button"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function UploadZone({ onClick, onDragOver, onDrop }: UploadZoneProps) {
   return (
     <div
@@ -2765,8 +3321,12 @@ function UploadZone({ onClick, onDragOver, onDrop }: UploadZoneProps) {
       role="button"
       tabIndex={0}
     >
-      <p className="text-lg font-semibold text-ink">Drop your image or video here</p>
-      <p className="mt-2 text-sm text-battleship">or click to browse</p>
+      <p className="text-lg font-semibold text-ink">
+        Drop your images or video here
+      </p>
+      <p className="mt-2 text-sm text-battleship">
+        Select multiple images for batch watermarking, or one video
+      </p>
       <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-battleship">
         JPG, PNG, WebP, MP4, MOV, WebM
       </p>
