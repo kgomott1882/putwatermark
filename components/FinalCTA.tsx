@@ -5,7 +5,7 @@ import { Button } from "./Button";
 
 export function FinalCTA() {
   return (
-    <section className="w-full bg-ink px-6 py-24 text-white sm:px-12 lg:px-20">
+    <section className="w-full bg-charcoal px-6 py-24 text-white sm:px-12 lg:px-20">
       <motion.div
         className="flex w-full flex-col items-center text-center"
         initial={{ opacity: 0, y: 30 }}

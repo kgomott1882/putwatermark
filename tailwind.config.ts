@@ -10,10 +10,13 @@ const config: Config = {
     extend: {
       colors: {
         ink: "#000000",
-        steel: "#A2A2A2",
-        mist: "#D4DDE2",
         paper: "#FFFFFF",
         signal: "#D97757",
+        platinum: "#DCDCDD",
+        frenchGray: "#C5C3C6",
+        battleship: "#899097",
+        payne: "#4C5C68",
+        charcoal: "#36454F",
       },
     },
   },

@@ -67,19 +67,19 @@ export default function ResetPasswordPage() {
   return (
     <main className="flex min-h-screen w-full items-center justify-center bg-paper px-6 py-16 text-ink sm:px-12 lg:px-20">
       <motion.section
-        className="w-full max-w-md rounded-[2rem] border border-mist bg-paper p-8 shadow-2xl shadow-mist/60 sm:p-10"
+        className="w-full max-w-md rounded-[2rem] border border-platinum bg-paper p-8 shadow-2xl shadow-platinum/60 sm:p-10"
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
       >
         <div className="text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-steel">
+          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-battleship">
             New password
           </p>
           <h1 className="mt-4 text-4xl font-bold tracking-[-0.04em] text-ink">
             Reset your password
           </h1>
-          <p className="mt-4 text-sm leading-6 text-steel">
+          <p className="mt-4 text-sm leading-6 text-battleship">
             Choose a new password for your account.
           </p>
         </div>
@@ -91,7 +91,7 @@ export default function ResetPasswordPage() {
         ) : null}
 
         {successMessage ? (
-          <div className="mt-8 rounded-2xl border border-mist bg-mist/60 px-4 py-3 text-sm text-ink">
+          <div className="mt-8 rounded-2xl border border-platinum bg-platinum/60 px-4 py-3 text-sm text-ink">
             {successMessage}
           </div>
         ) : null}
@@ -99,13 +99,13 @@ export default function ResetPasswordPage() {
         <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
           <div>
             <label
-              className="block text-sm font-medium text-steel"
+              className="block text-sm font-medium text-battleship"
               htmlFor="new-password"
             >
               New password
             </label>
             <input
-              className="mt-2 w-full rounded-2xl border border-mist bg-paper px-4 py-3 text-ink outline-none transition placeholder:text-steel/60 focus:border-signal focus:ring-2 focus:ring-signal/20"
+              className="mt-2 w-full rounded-2xl border border-platinum bg-paper px-4 py-3 text-ink outline-none transition placeholder:text-battleship/60 focus:border-signal focus:ring-2 focus:ring-signal/20"
               id="new-password"
               minLength={minimumPasswordLength}
               name="new-password"
@@ -121,13 +121,13 @@ export default function ResetPasswordPage() {
 
           <div>
             <label
-              className="block text-sm font-medium text-steel"
+              className="block text-sm font-medium text-battleship"
               htmlFor="confirm-password"
             >
               Confirm password
             </label>
             <input
-              className="mt-2 w-full rounded-2xl border border-mist bg-paper px-4 py-3 text-ink outline-none transition placeholder:text-steel/60 focus:border-signal focus:ring-2 focus:ring-signal/20"
+              className="mt-2 w-full rounded-2xl border border-platinum bg-paper px-4 py-3 text-ink outline-none transition placeholder:text-battleship/60 focus:border-signal focus:ring-2 focus:ring-signal/20"
               id="confirm-password"
               minLength={minimumPasswordLength}
               name="confirm-password"

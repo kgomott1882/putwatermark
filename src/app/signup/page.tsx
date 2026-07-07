@@ -121,19 +121,19 @@ export default function SignupPage() {
   return (
     <main className="flex min-h-screen w-full items-center justify-center bg-paper px-6 py-16 text-ink sm:px-12 lg:px-20">
       <motion.section
-        className="w-full max-w-md rounded-[2rem] border border-mist bg-paper p-8 shadow-2xl shadow-mist/60 sm:p-10"
+        className="w-full max-w-md rounded-[2rem] border border-platinum bg-paper p-8 shadow-2xl shadow-platinum/60 sm:p-10"
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
       >
         <div className="text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-steel">
+          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-battleship">
             Start free
           </p>
           <h1 className="mt-4 text-4xl font-bold tracking-[-0.04em] text-ink">
             Create your account
           </h1>
-          <p className="mt-4 text-sm leading-6 text-steel">
+          <p className="mt-4 text-sm leading-6 text-battleship">
             Verify your email before logging in.
           </p>
         </div>
@@ -145,7 +145,7 @@ export default function SignupPage() {
         ) : null}
 
         {successMessage ? (
-          <div className="mt-8 rounded-2xl border border-mist bg-mist/60 px-4 py-3 text-sm text-ink">
+          <div className="mt-8 rounded-2xl border border-platinum bg-platinum/60 px-4 py-3 text-sm text-ink">
             {successMessage}
           </div>
         ) : null}
@@ -182,10 +182,10 @@ export default function SignupPage() {
             value={values.password}
           />
 
-          <label className="flex items-start gap-3 text-sm leading-6 text-steel">
+          <label className="flex items-start gap-3 text-sm leading-6 text-battleship">
             <input
               checked={values.marketingConsent}
-              className="mt-1 h-4 w-4 rounded border-mist text-signal focus:ring-signal"
+              className="mt-1 h-4 w-4 rounded border-platinum text-signal focus:ring-signal"
               onChange={(event) =>
                 updateValue("marketingConsent", event.target.checked)
               }
@@ -230,7 +230,7 @@ function Field({
   return (
     <div>
       <label
-        className="block text-sm font-medium text-steel"
+        className="block text-sm font-medium text-battleship"
         htmlFor={name}
       >
         {label}
@@ -238,7 +238,7 @@ function Field({
       <input
         aria-describedby={error ? `${name}-error` : undefined}
         aria-invalid={Boolean(error)}
-        className="mt-2 w-full rounded-2xl border border-mist bg-paper px-4 py-3 text-ink outline-none transition placeholder:text-steel/60 focus:border-signal focus:ring-2 focus:ring-signal/20"
+        className="mt-2 w-full rounded-2xl border border-platinum bg-paper px-4 py-3 text-ink outline-none transition placeholder:text-battleship/60 focus:border-signal focus:ring-2 focus:ring-signal/20"
         id={name}
         name={name}
         onChange={(event) => onChange(event.target.value)}

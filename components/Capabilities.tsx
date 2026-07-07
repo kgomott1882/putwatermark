@@ -53,7 +53,7 @@ const itemVariants: Variants = {
 
 export function Capabilities() {
   return (
-    <section className="w-full bg-mist px-6 py-24 text-ink sm:px-12 lg:px-20">
+    <section className="w-full bg-platinum px-6 py-24 text-ink sm:px-12 lg:px-20">
       <div className="w-full">
         <div className="w-full text-center">
           <h2 className="text-4xl font-bold tracking-[-0.04em] text-ink md:text-6xl">
@@ -78,7 +78,7 @@ export function Capabilities() {
                 <Icon aria-hidden="true" className="h-7 w-7" />
               </div>
               <h3 className="mt-6 text-2xl font-bold text-ink">{title}</h3>
-              <p className="mt-3 max-w-xs leading-7 text-steel">{description}</p>
+              <p className="mt-3 max-w-xs leading-7 text-battleship">{description}</p>
             </motion.div>
           ))}
         </motion.div>

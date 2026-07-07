@@ -45,12 +45,12 @@ export function PricingSelector() {
 
   return (
     <motion.section
-      className="w-full max-w-md rounded-[2rem] border border-mist bg-paper p-8 text-center shadow-2xl shadow-mist/60 sm:p-10"
+      className="w-full max-w-md rounded-[2rem] border border-platinum bg-paper p-8 text-center shadow-2xl shadow-platinum/60 sm:p-10"
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: "easeOut" }}
     >
-      <p className="text-sm font-semibold uppercase tracking-[0.22em] text-steel">
+      <p className="text-sm font-semibold uppercase tracking-[0.22em] text-battleship">
         Buy credits
       </p>
       <h1 className="mt-4 text-4xl font-bold tracking-[-0.04em] text-ink">
@@ -72,14 +72,14 @@ export function PricingSelector() {
           <p className="mt-4 text-xl font-semibold text-ink">
             {numberFormatter.format(selectedTier.credits)} credits
           </p>
-          <p className="mt-2 text-sm text-steel">{selectedTier.photos}</p>
+          <p className="mt-2 text-sm text-battleship">{selectedTier.photos}</p>
         </motion.div>
       </AnimatePresence>
 
       <div className="mt-10">
         <input
           aria-label="Select credit package"
-          className="h-2 w-full cursor-pointer appearance-none rounded-full bg-mist accent-signal"
+          className="h-2 w-full cursor-pointer appearance-none rounded-full bg-platinum accent-signal"
           max={creditTiers.length - 1}
           min={0}
           onChange={(event) => setSelectedTierIndex(Number(event.target.value))}
@@ -87,7 +87,7 @@ export function PricingSelector() {
           type="range"
           value={selectedTierIndex}
         />
-        <div className="mt-4 flex justify-between text-xs font-semibold text-steel">
+        <div className="mt-4 flex justify-between text-xs font-semibold text-battleship">
           {creditTiers.map((tier, index) => (
             <button
               className={`transition hover:text-ink ${

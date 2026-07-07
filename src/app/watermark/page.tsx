@@ -8,8 +8,14 @@ import {
   cancelVideoExportWorker,
   exportVideoWithOverlay,
   getVideoExportFileName,
-  isVideoExportEligible,
+  getVideoExportRejectionMessage,
+  getVideoExportRoute,
+  isAnyVideoExportEligible,
 } from "../../lib/watermarkVideoExport";
+import {
+  exportVideoOnServer,
+  type ServerVideoExportStage,
+} from "../../lib/serverVideoExportClient";
 import {
   clearStoredWatermarkSettings,
   getDefaultStoredWatermarkSettings,
@@ -299,6 +305,7 @@ export default function WatermarkPage() {
     null,
   );
   const videoExportCancelRef = useRef(false);
+  const videoExportAbortControllerRef = useRef<AbortController | null>(null);
   const cropDragRef = useRef<{
     mode: CropDragMode;
     origin: { x: number; y: number };
@@ -310,6 +317,7 @@ export default function WatermarkPage() {
   const [videoUrl, setVideoUrl] = useState("");
   const [videoDuration, setVideoDuration] = useState(0);
   const [videoSize, setVideoSize] = useState<CanvasSize | null>(null);
+  const [videoFileSize, setVideoFileSize] = useState(0);
   const [videoOverlaySize, setVideoOverlaySize] = useState<CanvasSize>({
     height: 0,
     width: 0,
@@ -328,6 +336,9 @@ export default function WatermarkPage() {
   const [exportProgress, setExportProgress] = useState<number | null>(null);
   const [exportError, setExportError] = useState("");
   const [exportNotice, setExportNotice] = useState("");
+  const [exportServerStage, setExportServerStage] =
+    useState<ServerVideoExportStage | null>(null);
+  const [isServerVideoExport, setIsServerVideoExport] = useState(false);
   const [showRestoredSettingsNotice, setShowRestoredSettingsNotice] =
     useState(false);
   const [watermarkType, setWatermarkType] = useState<WatermarkType>("text");
@@ -542,7 +553,7 @@ export default function WatermarkPage() {
     canvas.width = canvasSize.width;
     canvas.height = canvasSize.height;
     context.clearRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "#D4DDE2";
+    context.fillStyle = "#DCDCDD";
     context.fillRect(0, 0, canvas.width, canvas.height);
 
     if (!image) {
@@ -997,22 +1008,19 @@ export default function WatermarkPage() {
 
   function handleCancelExport() {
     videoExportCancelRef.current = true;
+    videoExportAbortControllerRef.current?.abort();
     cancelVideoExportWorker();
     setIsExporting(false);
     setExportProgress(null);
+    setExportServerStage(null);
+    setIsServerVideoExport(false);
     setExportError("");
     setExportNotice("Export cancelled.");
   }
 
   async function handleVideoExport() {
-    if (
-      !videoUrl ||
-      !videoSize ||
-      !isVideoExportEligible(videoDuration, videoSize.width, videoSize.height)
-    ) {
-      setExportError(
-        "Videos over 60 seconds or above 1080p aren't supported yet.",
-      );
+    if (!videoUrl || !videoSize) {
+      setExportError("Reload the video before exporting.");
       return;
     }
 
@@ -1034,7 +1042,12 @@ export default function WatermarkPage() {
     setExportProgress(0);
     setExportError("");
     setExportNotice("");
+    setExportServerStage(null);
+    setIsServerVideoExport(false);
     videoExportCancelRef.current = false;
+    videoExportAbortControllerRef.current?.abort();
+    videoExportAbortControllerRef.current = new AbortController();
+    const abortSignal = videoExportAbortControllerRef.current.signal;
 
     try {
       const overlayCanvas = renderWatermarkOverlayCanvas({
@@ -1063,13 +1076,42 @@ export default function WatermarkPage() {
       }
 
       const videoBlob = await videoResponse.blob();
-      const exportedBlob = await exportVideoWithOverlay({
-        inputFileName: fileName,
-        onProgress: setExportProgress,
-        overlayPngBytes,
-        shouldCancel: () => videoExportCancelRef.current,
-        videoSource: videoBlob,
-      });
+      const effectiveFileSize = videoFileSize || videoBlob.size;
+      const exportRoute = getVideoExportRoute(
+        videoDuration,
+        videoSize.width,
+        videoSize.height,
+        effectiveFileSize,
+      );
+
+      if (exportRoute === "reject") {
+        throw new VideoExportFailedError(getVideoExportRejectionMessage());
+      }
+
+      setIsServerVideoExport(exportRoute === "server");
+
+      const exportedBlob =
+        exportRoute === "server"
+          ? await exportVideoOnServer({
+              abortSignal,
+              duration: videoDuration,
+              fileSizeBytes: effectiveFileSize,
+              height: videoSize.height,
+              inputFileName: fileName,
+              onProgress: setExportProgress,
+              onStageChange: setExportServerStage,
+              overlayPngBytes,
+              shouldCancel: () => videoExportCancelRef.current,
+              videoBlob,
+              width: videoSize.width,
+            })
+          : await exportVideoWithOverlay({
+              inputFileName: fileName,
+              onProgress: setExportProgress,
+              overlayPngBytes,
+              shouldCancel: () => videoExportCancelRef.current,
+              videoSource: videoBlob,
+            });
 
       if (videoExportCancelRef.current) {
         return;
@@ -1101,7 +1143,10 @@ export default function WatermarkPage() {
     } finally {
       setIsExporting(false);
       setExportProgress(null);
+      setExportServerStage(null);
+      setIsServerVideoExport(false);
       videoExportCancelRef.current = false;
+      videoExportAbortControllerRef.current = null;
     }
   }
 
@@ -1490,6 +1535,7 @@ export default function WatermarkPage() {
       setVideoUrl("");
       setVideoDuration(0);
       setVideoSize(null);
+      setVideoFileSize(0);
       setFileName(file.name);
       setUploadedImageSize({
         height: nextImage.naturalHeight,
@@ -1538,6 +1584,7 @@ export default function WatermarkPage() {
         width: nextVideo.videoWidth,
       });
       setFileName(file.name);
+      setVideoFileSize(file.size);
       setUploadError("");
       setResizeWarning("");
       setActiveImageTool(null);
@@ -1668,11 +1715,35 @@ export default function WatermarkPage() {
   const canExportVideo =
     mediaKind === "video" &&
     videoSize !== null &&
-    isVideoExportEligible(videoDuration, videoSize.width, videoSize.height);
+    (videoFileSize > 0
+      ? isAnyVideoExportEligible(
+          videoDuration,
+          videoSize.width,
+          videoSize.height,
+          videoFileSize,
+        )
+      : getVideoExportRoute(
+          videoDuration,
+          videoSize.width,
+          videoSize.height,
+          Number.MAX_SAFE_INTEGER,
+        ) !== "reject");
   const videoExportDisabledReason =
     mediaKind === "video" && !canExportVideo
-      ? "Videos over 60 seconds or above 1080p aren't supported yet."
+      ? videoFileSize > 0
+        ? getVideoExportRejectionMessage()
+        : "Reload the video before exporting."
       : undefined;
+  const videoExportStageLabel =
+    exportServerStage === "preparing"
+      ? "Preparing server export..."
+      : exportServerStage === "uploading"
+        ? "Uploading video..."
+        : exportServerStage === "processing"
+          ? "Processing on our servers — this may take longer"
+          : exportServerStage === "downloading"
+            ? "Downloading processed video..."
+            : "Export progress";
   const exportButtonLabel =
     mediaKind === "video"
       ? isExporting
@@ -1703,8 +1774,8 @@ export default function WatermarkPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
       >
-        <aside className="max-h-full overflow-y-auto rounded-[1.25rem] border border-mist bg-paper p-3 shadow-2xl shadow-mist/60">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-steel">
+        <aside className="max-h-full overflow-y-auto rounded-[1.25rem] border border-platinum bg-paper p-3 shadow-2xl shadow-platinum/60">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-battleship">
             Watermark tool
           </p>
           <h1
@@ -1715,7 +1786,7 @@ export default function WatermarkPage() {
             Design your watermark
           </h1>
           {!hasMedia ? (
-            <p className="mt-4 text-sm leading-6 text-steel">
+            <p className="mt-4 text-sm leading-6 text-battleship">
               Upload an image and preview your own text or logo watermark
               locally in your browser.
             </p>
@@ -1756,15 +1827,15 @@ export default function WatermarkPage() {
             />
           ) : (
             <div className="mt-2 space-y-2">
-              <div className="rounded-lg border border-mist bg-mist/50 px-2.5 py-1 text-xs text-ink">
+              <div className="rounded-lg border border-platinum bg-platinum/50 px-2.5 py-1 text-xs text-ink">
                 Loaded: <span className="font-semibold">{fileName}</span>
                 {loadedMediaDetails ? (
-                  <span className="ml-1 text-steel">{loadedMediaDetails}</span>
+                  <span className="ml-1 text-battleship">{loadedMediaDetails}</span>
                 ) : null}
               </div>
 
               {showRestoredSettingsNotice ? (
-                <div className="rounded-lg border border-mist bg-mist/40 px-2.5 py-2 text-xs text-ink">
+                <div className="rounded-lg border border-platinum bg-platinum/40 px-2.5 py-2 text-xs text-ink">
                   <p>Your last watermark settings were restored.</p>
                   <div className="mt-1.5 flex flex-wrap items-center gap-3">
                     <button
@@ -1775,7 +1846,7 @@ export default function WatermarkPage() {
                       Dismiss
                     </button>
                     <button
-                      className="font-medium text-steel transition hover:text-ink"
+                      className="font-medium text-battleship transition hover:text-ink"
                       onClick={resetWatermarkSettingsToDefaults}
                       type="button"
                     >
@@ -1797,19 +1868,34 @@ export default function WatermarkPage() {
               </Button>
 
               {isExporting && mediaKind === "video" && exportProgress !== null ? (
-                <div className="rounded-lg border border-mist bg-paper px-2.5 py-2">
-                  <div className="flex items-center justify-between gap-2 text-xs">
-                    <span className="font-medium text-steel">Export progress</span>
+                <div className="rounded-lg border border-platinum bg-paper px-2.5 py-2">
+                  {isServerVideoExport ? (
+                    <p className="text-xs font-medium text-battleship">
+                      {videoExportStageLabel}
+                    </p>
+                  ) : null}
+                  <div
+                    className={`flex items-center justify-between gap-2 text-xs ${
+                      isServerVideoExport ? "mt-1.5" : ""
+                    }`}
+                  >
+                    <span className="font-medium text-battleship">
+                      {isServerVideoExport ? "Estimated progress" : "Export progress"}
+                    </span>
                     <span className="font-semibold text-ink">{exportProgress}%</span>
                   </div>
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-mist">
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-platinum">
                     <div
-                      className="h-full rounded-full bg-signal transition-[width] duration-200"
+                      className={`h-full rounded-full bg-signal transition-[width] duration-200 ${
+                        isServerVideoExport && exportServerStage === "processing"
+                          ? "animate-pulse"
+                          : ""
+                      }`}
                       style={{ width: `${exportProgress}%` }}
                     />
                   </div>
                   <button
-                    className="mt-2 w-full rounded-full border border-mist bg-paper px-3 py-1.5 text-xs font-semibold text-ink transition hover:border-signal hover:text-signal"
+                    className="mt-2 w-full rounded-full border border-signal/30 bg-paper px-3 py-2 text-xs font-semibold text-signal transition hover:border-signal hover:bg-signal/5"
                     onClick={handleCancelExport}
                     type="button"
                   >
@@ -1819,11 +1905,11 @@ export default function WatermarkPage() {
               ) : null}
 
               {exportNotice ? (
-                <div className="rounded-lg border border-mist bg-mist/50 px-2.5 py-2 text-xs text-ink">
+                <div className="rounded-lg border border-platinum bg-platinum/50 px-2.5 py-2 text-xs text-ink">
                   <div className="flex items-center justify-between gap-2">
                     <p>{exportNotice}</p>
                     <button
-                      className="shrink-0 font-medium text-steel transition hover:text-ink"
+                      className="shrink-0 font-medium text-battleship transition hover:text-ink"
                       onClick={() => setExportNotice("")}
                       type="button"
                     >
@@ -1850,7 +1936,7 @@ export default function WatermarkPage() {
                       </button>
                     ) : null}
                     <button
-                      className="font-medium text-steel transition hover:text-ink"
+                      className="font-medium text-battleship transition hover:text-ink"
                       onClick={() => setExportError("")}
                       type="button"
                     >
@@ -1864,7 +1950,7 @@ export default function WatermarkPage() {
                 <div className="grid grid-cols-3 gap-1.5">
                   <button
                     aria-label="Undo watermark settings"
-                    className="flex items-center justify-center rounded-full border border-mist bg-paper px-2 py-1.5 text-steel transition hover:border-signal hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-mist disabled:hover:text-steel"
+                    className="flex items-center justify-center rounded-full border border-platinum bg-paper px-2 py-1.5 text-battleship transition hover:border-signal hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-platinum disabled:hover:text-battleship"
                     disabled={!canUndoSettings}
                     onClick={undoWatermarkSettings}
                     type="button"
@@ -1873,7 +1959,7 @@ export default function WatermarkPage() {
                   </button>
                   <button
                     aria-label="Redo watermark settings"
-                    className="flex items-center justify-center rounded-full border border-mist bg-paper px-2 py-1.5 text-steel transition hover:border-signal hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-mist disabled:hover:text-steel"
+                    className="flex items-center justify-center rounded-full border border-platinum bg-paper px-2 py-1.5 text-battleship transition hover:border-signal hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-platinum disabled:hover:text-battleship"
                     disabled={!canRedoSettings}
                     onClick={redoWatermarkSettings}
                     type="button"
@@ -1885,7 +1971,7 @@ export default function WatermarkPage() {
                     className={`flex items-center justify-center rounded-full border px-2 py-1.5 transition ${
                       isSavingPreset
                         ? "border-signal bg-signal text-white"
-                        : "border-mist bg-paper text-steel hover:border-signal hover:text-ink"
+                        : "border-platinum bg-paper text-battleship hover:border-signal hover:text-ink"
                     }`}
                     onClick={() => setIsSavingPreset((value) => !value)}
                     type="button"
@@ -1895,15 +1981,15 @@ export default function WatermarkPage() {
                 </div>
 
                 {isSavingPreset ? (
-                  <div className="mt-1.5 rounded-lg border border-mist bg-paper p-2">
+                  <div className="mt-1.5 rounded-lg border border-platinum bg-paper p-2">
                     <label
-                      className="text-xs font-medium text-steel"
+                      className="text-xs font-medium text-battleship"
                       htmlFor="preset-name"
                     >
                       Name this preset
                     </label>
                     <input
-                      className="mt-1 w-full rounded-lg border border-mist bg-paper px-2 py-1 text-xs text-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
+                      className="mt-1 w-full rounded-lg border border-platinum bg-paper px-2 py-1 text-xs text-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
                       id="preset-name"
                       onChange={(event) => setPresetName(event.target.value)}
                       onKeyDown={(event) => {
@@ -1925,7 +2011,7 @@ export default function WatermarkPage() {
                         Save
                       </button>
                       <button
-                        className="rounded-full border border-mist px-2.5 py-1 text-xs font-semibold text-steel transition hover:border-signal hover:text-ink"
+                        className="rounded-full border border-platinum px-2.5 py-1 text-xs font-semibold text-battleship transition hover:border-signal hover:text-ink"
                         onClick={() => {
                           setPresetName("");
                           setIsSavingPreset(false);
@@ -1940,9 +2026,9 @@ export default function WatermarkPage() {
               </div>
 
               <div>
-                <p className="text-xs font-medium text-steel">Image tools</p>
+                <p className="text-xs font-medium text-battleship">Image tools</p>
                 {mediaKind === "video" ? (
-                  <div className="mt-1 rounded-lg border border-mist bg-mist/40 px-2.5 py-2 text-xs text-steel">
+                  <div className="mt-1 rounded-lg border border-platinum bg-platinum/40 px-2.5 py-2 text-xs text-battleship">
                     Crop, resize, and rotate are not available for video yet.
                   </div>
                 ) : (
@@ -1955,7 +2041,7 @@ export default function WatermarkPage() {
                           className={`rounded-full border px-2 py-1 text-xs font-semibold capitalize transition ${
                             isSelected
                               ? "border-signal bg-signal text-white"
-                              : "border-mist bg-paper text-steel hover:border-signal hover:text-ink"
+                              : "border-platinum bg-paper text-battleship hover:border-signal hover:text-ink"
                           }`}
                           key={tool}
                           onClick={() => handleImageToolSelect(tool)}
@@ -1969,20 +2055,20 @@ export default function WatermarkPage() {
                 )}
 
                 {mediaKind === "image" && activeImageTool === "rotate" ? (
-                  <div className="mt-1.5 rounded-lg border border-mist bg-paper p-2">
-                    <p className="text-xs leading-4 text-steel">
+                  <div className="mt-1.5 rounded-lg border border-platinum bg-paper p-2">
+                    <p className="text-xs leading-4 text-battleship">
                       Rotate the base image. Watermark settings stay unchanged.
                     </p>
                     <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                       <button
-                        className="rounded-full border border-mist px-2.5 py-1 text-xs font-semibold text-steel transition hover:border-signal hover:text-ink"
+                        className="rounded-full border border-platinum px-2.5 py-1 text-xs font-semibold text-battleship transition hover:border-signal hover:text-ink"
                         onClick={() => rotateBaseImage("left")}
                         type="button"
                       >
                         90° left
                       </button>
                       <button
-                        className="rounded-full border border-mist px-2.5 py-1 text-xs font-semibold text-steel transition hover:border-signal hover:text-ink"
+                        className="rounded-full border border-platinum px-2.5 py-1 text-xs font-semibold text-battleship transition hover:border-signal hover:text-ink"
                         onClick={() => rotateBaseImage("right")}
                         type="button"
                       >
@@ -1992,13 +2078,13 @@ export default function WatermarkPage() {
                     <div className="mt-2">
                       <div className="flex items-center justify-between gap-3">
                         <label
-                          className="text-xs font-medium text-steel"
+                          className="text-xs font-medium text-battleship"
                           htmlFor="base-rotation"
                         >
                           Manual angle
                         </label>
                         <input
-                          className="w-16 rounded-lg border border-mist bg-paper px-2 py-1 text-right text-xs text-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
+                          className="w-16 rounded-lg border border-platinum bg-paper px-2 py-1 text-right text-xs text-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
                           id="base-rotation-value"
                           max={360}
                           min={0}
@@ -2012,7 +2098,7 @@ export default function WatermarkPage() {
                         />
                       </div>
                       <input
-                        className="mt-1.5 h-2 w-full cursor-pointer appearance-none rounded-full bg-mist accent-signal"
+                        className="mt-1.5 h-2 w-full cursor-pointer appearance-none rounded-full bg-platinum accent-signal"
                         id="base-rotation"
                         max={360}
                         min={0}
@@ -2028,8 +2114,8 @@ export default function WatermarkPage() {
                 ) : null}
 
                 {mediaKind === "image" && activeImageTool === "crop" ? (
-                  <div className="mt-1.5 rounded-lg border border-mist bg-paper p-2">
-                    <p className="text-xs leading-4 text-steel">
+                  <div className="mt-1.5 rounded-lg border border-platinum bg-paper p-2">
+                    <p className="text-xs leading-4 text-battleship">
                       Drag on the canvas to select a crop. Move the box or drag
                       a corner handle to resize it.
                     </p>
@@ -2043,7 +2129,7 @@ export default function WatermarkPage() {
                         Apply crop
                       </button>
                       <button
-                        className="rounded-full border border-mist px-2.5 py-1 text-xs font-semibold text-steel transition hover:border-signal hover:text-ink"
+                        className="rounded-full border border-platinum px-2.5 py-1 text-xs font-semibold text-battleship transition hover:border-signal hover:text-ink"
                         onClick={cancelCrop}
                         type="button"
                       >
@@ -2054,12 +2140,12 @@ export default function WatermarkPage() {
                 ) : null}
 
                 {mediaKind === "image" && activeImageTool === "resize" ? (
-                  <div className="mt-1.5 rounded-lg border border-mist bg-paper p-2">
+                  <div className="mt-1.5 rounded-lg border border-platinum bg-paper p-2">
                     <div className="grid grid-cols-2 gap-1.5">
-                      <label className="text-xs font-medium text-steel">
+                      <label className="text-xs font-medium text-battleship">
                         Width
                         <input
-                          className="mt-1 w-full rounded-lg border border-mist bg-paper px-2 py-1 text-xs text-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
+                          className="mt-1 w-full rounded-lg border border-platinum bg-paper px-2 py-1 text-xs text-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
                           min={1}
                           onChange={(event) =>
                             handleResizeWidthChange(Number(event.target.value))
@@ -2068,10 +2154,10 @@ export default function WatermarkPage() {
                           value={resizeWidth}
                         />
                       </label>
-                      <label className="text-xs font-medium text-steel">
+                      <label className="text-xs font-medium text-battleship">
                         Height
                         <input
-                          className="mt-1 w-full rounded-lg border border-mist bg-paper px-2 py-1 text-xs text-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
+                          className="mt-1 w-full rounded-lg border border-platinum bg-paper px-2 py-1 text-xs text-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
                           min={1}
                           onChange={(event) =>
                             handleResizeHeightChange(Number(event.target.value))
@@ -2086,7 +2172,7 @@ export default function WatermarkPage() {
                         className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
                           isAspectRatioLocked
                             ? "border-signal bg-signal text-white"
-                            : "border-mist text-steel hover:border-signal hover:text-ink"
+                            : "border-platinum text-battleship hover:border-signal hover:text-ink"
                         }`}
                         onClick={() => setIsAspectRatioLocked((value) => !value)}
                         type="button"
@@ -2111,7 +2197,7 @@ export default function WatermarkPage() {
               </div>
 
               <div>
-                <p className="text-xs font-medium text-steel">Templates</p>
+                <p className="text-xs font-medium text-battleship">Templates</p>
                 <div className="mt-1 grid grid-cols-3 gap-1">
                   {watermarkTemplates.map((template) => {
                     const isSelected = activeTemplate === template.id;
@@ -2122,7 +2208,7 @@ export default function WatermarkPage() {
                         className={`rounded-lg border px-1.5 py-1.5 text-left transition ${
                           isSelected
                             ? "border-signal bg-signal/10 text-ink"
-                            : "border-mist bg-paper text-steel hover:border-signal hover:text-ink"
+                            : "border-platinum bg-paper text-battleship hover:border-signal hover:text-ink"
                         }`}
                         key={template.id}
                         onPointerDown={(event) => event.preventDefault()}
@@ -2142,13 +2228,13 @@ export default function WatermarkPage() {
                 </div>
                 {savedPresets.length ? (
                   <div className="mt-1.5 space-y-1">
-                    <p className="text-xs font-medium text-steel">
+                    <p className="text-xs font-medium text-battleship">
                       Saved presets
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {savedPresets.map((preset) => (
                         <button
-                          className="rounded-full border border-mist bg-paper px-2 py-1 text-[11px] font-semibold text-steel transition hover:border-signal hover:text-ink"
+                          className="rounded-full border border-platinum bg-paper px-2 py-1 text-[11px] font-semibold text-battleship transition hover:border-signal hover:text-ink"
                           key={preset.id}
                           onClick={() =>
                             applyWatermarkSettingsSnapshot(preset.snapshot)
@@ -2165,8 +2251,8 @@ export default function WatermarkPage() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <p className="text-xs font-medium text-steel">Mode</p>
-                  <div className="mt-1 grid grid-cols-2 gap-1 rounded-full bg-mist/50 p-0.5">
+                  <p className="text-xs font-medium text-battleship">Mode</p>
+                  <div className="mt-1 grid grid-cols-2 gap-1 rounded-full bg-platinum/50 p-0.5">
                     {watermarkModes.map(({ label, value }) => {
                       const isSelected = watermarkMode === value;
 
@@ -2175,7 +2261,7 @@ export default function WatermarkPage() {
                           className={`rounded-full px-2 py-1 text-xs font-semibold transition ${
                             isSelected
                               ? "bg-signal text-white"
-                              : "text-steel hover:text-ink"
+                              : "text-battleship hover:text-ink"
                           }`}
                           key={value}
                           onClick={() => {
@@ -2193,8 +2279,8 @@ export default function WatermarkPage() {
                 </div>
 
                 <div>
-                  <p className="text-xs font-medium text-steel">Type</p>
-                  <div className="mt-1 grid grid-cols-2 gap-1 rounded-full bg-mist/50 p-0.5">
+                  <p className="text-xs font-medium text-battleship">Type</p>
+                  <div className="mt-1 grid grid-cols-2 gap-1 rounded-full bg-platinum/50 p-0.5">
                     {watermarkTypes.map(({ label, value }) => {
                       const isSelected = watermarkType === value;
 
@@ -2203,7 +2289,7 @@ export default function WatermarkPage() {
                           className={`rounded-full px-2 py-1 text-xs font-semibold transition ${
                             isSelected
                               ? "bg-signal text-white"
-                              : "text-steel hover:text-ink"
+                              : "text-battleship hover:text-ink"
                           }`}
                           key={value}
                           onClick={() => {
@@ -2224,13 +2310,13 @@ export default function WatermarkPage() {
               {watermarkType === "text" ? (
                 <div>
                   <label
-                    className="block text-sm font-medium text-steel"
+                    className="block text-sm font-medium text-battleship"
                     htmlFor="watermark-text"
                   >
                     Watermark text
                   </label>
                   <input
-                    className="mt-1 w-full rounded-lg border border-mist bg-paper px-2.5 py-1.5 text-sm text-ink outline-none transition placeholder:text-steel/60 focus:border-signal focus:ring-2 focus:ring-signal/20"
+                    className="mt-1 w-full rounded-lg border border-platinum bg-paper px-2.5 py-1.5 text-sm text-ink outline-none transition placeholder:text-battleship/60 focus:border-signal focus:ring-2 focus:ring-signal/20"
                     id="watermark-text"
                     onChange={(event) => setWatermarkText(event.target.value)}
                     placeholder="Your watermark"
@@ -2240,16 +2326,16 @@ export default function WatermarkPage() {
                 </div>
               ) : (
                 <div>
-                  <p className="text-xs font-medium text-steel">Logo image</p>
+                  <p className="text-xs font-medium text-battleship">Logo image</p>
                   {logoImage ? (
                     <div className="mt-1 space-y-1">
-                      <div className="rounded-lg border border-mist bg-mist/50 px-2.5 py-1 text-xs text-ink">
+                      <div className="rounded-lg border border-platinum bg-platinum/50 px-2.5 py-1 text-xs text-ink">
                         Loaded:{" "}
                         <span className="font-semibold">{logoFileName}</span>
                       </div>
                       <div className="flex flex-wrap gap-1.5 text-xs">
                         <button
-                          className="font-medium text-steel transition hover:text-ink"
+                          className="font-medium text-battleship transition hover:text-ink"
                           onClick={openLogoPicker}
                           type="button"
                         >
@@ -2263,14 +2349,14 @@ export default function WatermarkPage() {
                           Remove logo
                         </button>
                       </div>
-                      <div className="rounded-lg border border-mist bg-paper p-2">
+                      <div className="rounded-lg border border-platinum bg-paper p-2">
                         <div className="flex items-center gap-2">
                           <div
-                            className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-mist"
+                            className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-platinum"
                             style={{
                               backgroundColor: "#F8FAFC",
                               backgroundImage:
-                                "linear-gradient(45deg, #D4DDE2 25%, transparent 25%), linear-gradient(-45deg, #D4DDE2 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #D4DDE2 75%), linear-gradient(-45deg, transparent 75%, #D4DDE2 75%)",
+                                "linear-gradient(45deg, #DCDCDD 25%, transparent 25%), linear-gradient(-45deg, #DCDCDD 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #DCDCDD 75%), linear-gradient(-45deg, transparent 75%, #DCDCDD 75%)",
                               backgroundPosition:
                                 "0 0, 0 8px, 8px -8px, -8px 0",
                               backgroundSize: "16px 16px",
@@ -2285,7 +2371,7 @@ export default function WatermarkPage() {
                             />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-medium text-steel">
+                            <p className="text-xs font-medium text-battleship">
                               Remove background
                             </p>
                             <button
@@ -2293,7 +2379,7 @@ export default function WatermarkPage() {
                               className={`mt-1 flex w-full items-center justify-between rounded-full border p-0.5 text-xs font-semibold transition ${
                                 isLogoBackgroundRemoved
                                   ? "border-signal bg-signal text-white"
-                                  : "border-mist bg-mist/40 text-steel hover:border-signal hover:text-ink"
+                                  : "border-platinum bg-platinum/40 text-battleship hover:border-signal hover:text-ink"
                               }`}
                               onClick={handleLogoBackgroundToggle}
                               type="button"
@@ -2311,12 +2397,12 @@ export default function WatermarkPage() {
                             </button>
                           </div>
                         </div>
-                        <p className="mt-1.5 text-[11px] leading-4 text-steel/80">
+                        <p className="mt-1.5 text-[11px] leading-4 text-battleship/80">
                           Best-effort cleanup. Works best with logos on a plain
                           white or solid background.
                         </p>
                         {logoBackgroundMessage ? (
-                          <p className="mt-1 text-[11px] leading-4 text-steel">
+                          <p className="mt-1 text-[11px] leading-4 text-battleship">
                             {logoBackgroundMessage}
                           </p>
                         ) : null}
@@ -2324,14 +2410,14 @@ export default function WatermarkPage() {
                     </div>
                   ) : (
                     <button
-                      className="mt-1 w-full rounded-xl border border-dashed border-steel/50 bg-mist/40 px-4 py-3 text-center transition hover:border-signal hover:bg-mist/70"
+                      className="mt-1 w-full rounded-xl border border-dashed border-battleship/50 bg-platinum/40 px-4 py-3 text-center transition hover:border-signal hover:bg-platinum/70"
                       onClick={openLogoPicker}
                       type="button"
                     >
                       <span className="block text-sm font-semibold text-ink">
                         Upload a logo
                       </span>
-                      <span className="mt-1 block text-xs text-steel">
+                      <span className="mt-1 block text-xs text-battleship">
                         PNG preferred. JPG and WebP supported.
                       </span>
                     </button>
@@ -2347,7 +2433,7 @@ export default function WatermarkPage() {
 
               {watermarkMode === "single" ? (
                 <div>
-                  <p className="text-xs font-medium text-steel">Position</p>
+                  <p className="text-xs font-medium text-battleship">Position</p>
                   <div className="mt-1 grid w-28 grid-cols-3 gap-1">
                     {watermarkPositions.map(({ label, value }) => {
                       const isSelected =
@@ -2359,7 +2445,7 @@ export default function WatermarkPage() {
                           className={`h-7 rounded-md border text-xs transition ${
                             isSelected
                               ? "border-signal bg-signal text-white"
-                              : "border-mist bg-paper text-steel hover:border-signal hover:text-ink"
+                              : "border-platinum bg-paper text-battleship hover:border-signal hover:text-ink"
                           }`}
                           key={value}
                           onClick={() => {
@@ -2380,7 +2466,7 @@ export default function WatermarkPage() {
                         Custom position
                       </span>
                       <button
-                        className="font-medium text-steel transition hover:text-ink"
+                        className="font-medium text-battleship transition hover:text-ink"
                         onClick={() => {
                           clearActiveTemplate();
                           setCustomPosition(null);
@@ -2395,7 +2481,7 @@ export default function WatermarkPage() {
               ) : (
                 <div className="space-y-2">
                   <div>
-                    <p className="text-xs font-medium text-steel">Density</p>
+                    <p className="text-xs font-medium text-battleship">Density</p>
                     <div className="mt-1 grid grid-cols-3 gap-1">
                       {tileDensities.map(({ label, value }) => {
                         const isSelected = tileDensity === value;
@@ -2405,7 +2491,7 @@ export default function WatermarkPage() {
                             className={`rounded-full border px-2 py-1 text-xs font-medium transition ${
                               isSelected
                                 ? "border-signal bg-signal text-white"
-                                : "border-mist bg-paper text-steel hover:border-signal hover:text-ink"
+                                : "border-platinum bg-paper text-battleship hover:border-signal hover:text-ink"
                             }`}
                             key={value}
                             onClick={() => {
@@ -2426,7 +2512,7 @@ export default function WatermarkPage() {
                   </div>
 
                   <div>
-                    <p className="text-xs font-medium text-steel">Angle</p>
+                    <p className="text-xs font-medium text-battleship">Angle</p>
                     <div className="mt-1 grid grid-cols-4 gap-1">
                       {tileAngles.map(({ label, value }) => {
                         const isSelected = tileAngle === value;
@@ -2436,7 +2522,7 @@ export default function WatermarkPage() {
                             className={`rounded-full border px-2 py-1 text-xs font-medium transition ${
                               isSelected
                                 ? "border-signal bg-signal text-white"
-                                : "border-mist bg-paper text-steel hover:border-signal hover:text-ink"
+                                : "border-platinum bg-paper text-battleship hover:border-signal hover:text-ink"
                             }`}
                             key={value}
                             onClick={() => {
@@ -2459,7 +2545,7 @@ export default function WatermarkPage() {
                   <div>
                     <div className="flex items-center justify-between gap-4">
                       <label
-                        className="text-xs font-medium text-steel"
+                        className="text-xs font-medium text-battleship"
                         htmlFor="tile-gap"
                       >
                         Gap
@@ -2469,7 +2555,7 @@ export default function WatermarkPage() {
                       </span>
                     </div>
                     <input
-                      className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-mist accent-signal"
+                      className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-platinum accent-signal"
                       id="tile-gap"
                       max={300}
                       min={50}
@@ -2492,7 +2578,7 @@ export default function WatermarkPage() {
               <div>
                 <div className="flex items-center justify-between gap-4">
                   <label
-                    className="text-xs font-medium text-steel"
+                    className="text-xs font-medium text-battleship"
                     htmlFor="watermark-opacity"
                   >
                     Opacity
@@ -2502,7 +2588,7 @@ export default function WatermarkPage() {
                   </span>
                 </div>
                 <input
-                  className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-mist accent-signal"
+                  className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-platinum accent-signal"
                   id="watermark-opacity"
                   max={100}
                   min={10}
@@ -2523,7 +2609,7 @@ export default function WatermarkPage() {
               <div>
                 <div className="flex items-center justify-between gap-4">
                   <label
-                    className="text-xs font-medium text-steel"
+                    className="text-xs font-medium text-battleship"
                     htmlFor="font-size"
                   >
                     {watermarkType === "logo" ? "Logo size" : "Font size"}
@@ -2533,7 +2619,7 @@ export default function WatermarkPage() {
                   </span>
                 </div>
                 <input
-                  className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-mist accent-signal"
+                  className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-platinum accent-signal"
                   id="font-size"
                   max={135}
                   min={15}
@@ -2554,13 +2640,13 @@ export default function WatermarkPage() {
               {watermarkType === "text" ? (
                 <div>
                   <label
-                    className="block text-xs font-medium text-steel"
+                    className="block text-xs font-medium text-battleship"
                     htmlFor="font-family"
                   >
                     Font family
                   </label>
                   <select
-                    className="mt-1 w-full rounded-lg border border-mist bg-paper px-2.5 py-1.5 text-sm text-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
+                    className="mt-1 w-full rounded-lg border border-platinum bg-paper px-2.5 py-1.5 text-sm text-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
                     id="font-family"
                     onChange={(event) => {
                       if (shouldIgnoreManualSettingsChange()) {
@@ -2582,7 +2668,7 @@ export default function WatermarkPage() {
               ) : null}
 
               <button
-                className="text-xs font-medium text-steel transition hover:text-ink"
+                className="text-xs font-medium text-battleship transition hover:text-ink"
                 onClick={openFilePicker}
                 type="button"
               >
@@ -2591,7 +2677,7 @@ export default function WatermarkPage() {
 
               {!showRestoredSettingsNotice ? (
                 <button
-                  className="block text-xs font-medium text-steel transition hover:text-ink"
+                  className="block text-xs font-medium text-battleship transition hover:text-ink"
                   onClick={resetWatermarkSettingsToDefaults}
                   type="button"
                 >
@@ -2609,12 +2695,12 @@ export default function WatermarkPage() {
         </aside>
 
         <section
-          className="flex min-h-[320px] items-center justify-center overflow-hidden rounded-[1.5rem] border border-mist bg-mist/50 p-2 shadow-2xl shadow-mist/60 md:min-h-0"
+          className="flex min-h-[320px] items-center justify-center overflow-hidden rounded-[1.5rem] border border-platinum bg-platinum/50 p-2 shadow-2xl shadow-platinum/60 md:min-h-0"
           ref={previewPanelRef}
         >
           {mediaKind === "image" && image ? (
             <canvas
-              className="h-full max-h-full w-full touch-none rounded-[1.5rem] bg-mist object-contain"
+              className="h-full max-h-full w-full touch-none rounded-[1.5rem] bg-platinum object-contain"
               onPointerCancel={handleCanvasPointerCancel}
               onPointerDown={handleCanvasPointerDown}
               onPointerLeave={handleCanvasPointerLeave}
@@ -2646,12 +2732,12 @@ export default function WatermarkPage() {
               />
             </div>
           ) : (
-            <div className="flex h-full min-h-[420px] w-full items-center justify-center rounded-[1.5rem] border border-dashed border-steel/50 bg-paper text-center">
+            <div className="flex h-full min-h-[420px] w-full items-center justify-center rounded-[1.5rem] border border-dashed border-battleship/50 bg-paper text-center">
               <div>
                 <p className="text-lg font-semibold text-ink">
                   Your preview will appear here
                 </p>
-                <p className="mt-2 text-sm text-steel">
+                <p className="mt-2 text-sm text-battleship">
                   Upload a JPG, PNG, WebP, MP4, MOV, or WebM to start.
                 </p>
               </div>
@@ -2672,7 +2758,7 @@ type UploadZoneProps = {
 function UploadZone({ onClick, onDragOver, onDrop }: UploadZoneProps) {
   return (
     <div
-      className="mt-8 cursor-pointer rounded-[1.5rem] border border-dashed border-steel/50 bg-mist/40 px-6 py-12 text-center transition hover:border-signal hover:bg-mist/70"
+      className="mt-8 cursor-pointer rounded-[1.5rem] border border-dashed border-battleship/50 bg-platinum/40 px-6 py-12 text-center transition hover:border-signal hover:bg-platinum/70"
       onClick={onClick}
       onDragOver={onDragOver}
       onDrop={onDrop}
@@ -2680,8 +2766,8 @@ function UploadZone({ onClick, onDragOver, onDrop }: UploadZoneProps) {
       tabIndex={0}
     >
       <p className="text-lg font-semibold text-ink">Drop your image or video here</p>
-      <p className="mt-2 text-sm text-steel">or click to browse</p>
-      <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-steel">
+      <p className="mt-2 text-sm text-battleship">or click to browse</p>
+      <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-battleship">
         JPG, PNG, WebP, MP4, MOV, WebM
       </p>
     </div>
@@ -2694,11 +2780,11 @@ type TemplateIconProps = {
 };
 
 function TemplateIcon({ isSelected, variant }: TemplateIconProps) {
-  const markColor = isSelected ? "bg-signal" : "bg-steel";
-  const lineColor = isSelected ? "bg-signal" : "bg-steel/70";
+  const markColor = isSelected ? "bg-signal" : "bg-battleship";
+  const lineColor = isSelected ? "bg-signal" : "bg-battleship/70";
 
   return (
-    <span className="relative block h-6 rounded-md border border-mist bg-mist/40">
+    <span className="relative block h-6 rounded-md border border-platinum bg-platinum/40">
       {variant === "corner" ? (
         <span
           className={`absolute bottom-1 right-1 h-1.5 w-3 rounded-full ${markColor}`}
@@ -2873,7 +2959,7 @@ function createRotatedImage(
   canvas.height = Math.max(1, Math.ceil(bounds.height));
 
   if (context) {
-    context.fillStyle = "#D4DDE2";
+    context.fillStyle = "#DCDCDD";
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.translate(canvas.width / 2, canvas.height / 2);
     context.rotate((degrees * Math.PI) / 180);
@@ -3166,7 +3252,7 @@ function renderExportCanvas({
     return canvas;
   }
 
-  context.fillStyle = "#D4DDE2";
+  context.fillStyle = "#DCDCDD";
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.save();
   context.translate(canvas.width / 2, canvas.height / 2);

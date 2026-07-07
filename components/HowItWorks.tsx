@@ -70,11 +70,11 @@ export function HowItWorks() {
   return (
     <section
       ref={sectionRef}
-      className="w-full bg-mist px-6 py-24 text-ink sm:px-12 lg:px-20"
+      className="w-full bg-platinum px-6 py-24 text-ink sm:px-12 lg:px-20"
     >
       <div className="w-full">
         <div className="w-full text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-steel">
+          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-battleship">
             No download. No installation.
           </p>
           <h2 className="mt-4 text-4xl font-bold tracking-[-0.04em] text-ink md:text-6xl">
@@ -91,18 +91,18 @@ export function HowItWorks() {
               }}
               className="relative overflow-hidden rounded-lg bg-paper p-8 text-left shadow-xl shadow-ink/5"
             >
-              <span className="absolute right-5 top-2 text-8xl font-bold tracking-[-0.08em] text-mist/70">
+              <span className="absolute right-5 top-2 text-8xl font-bold tracking-[-0.08em] text-platinum/70">
                 {number}
               </span>
               <div className="relative">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-mist text-signal">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-platinum text-signal">
                   <Icon aria-hidden="true" className="h-6 w-6" />
                 </div>
-                <p className="mt-8 text-sm font-semibold uppercase tracking-[0.2em] text-steel">
+                <p className="mt-8 text-sm font-semibold uppercase tracking-[0.2em] text-battleship">
                   Step {number}
                 </p>
                 <h3 className="mt-2 text-2xl font-bold text-ink">{title}</h3>
-                <p className="mt-3 leading-7 text-steel">{description}</p>
+                <p className="mt-3 leading-7 text-battleship">{description}</p>
               </div>
             </div>
           ))}

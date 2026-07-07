@@ -274,21 +274,21 @@ export function getVideoExportFileName(fileName: string) {
   return `${baseName || fallbackName}-watermarked.mp4`;
 }
 
+export {
+  getVideoExportRejectionMessage,
+  getVideoExportRoute,
+  isAnyVideoExportEligible,
+  isClientVideoExportEligible,
+  isServerVideoExportEligible,
+} from "./videoExportLimits";
+
+import { isClientVideoExportEligible } from "./videoExportLimits";
+
+/** @deprecated Use isClientVideoExportEligible from videoExportLimits */
 export function isVideoExportEligible(
   duration: number,
   width: number,
   height: number,
 ) {
-  if (!Number.isFinite(duration) || duration <= 0) {
-    return false;
-  }
-
-  if (duration > 60) {
-    return false;
-  }
-
-  const longEdge = Math.max(width, height);
-  const shortEdge = Math.min(width, height);
-
-  return longEdge <= 1920 && shortEdge <= 1080;
+  return isClientVideoExportEligible(duration, width, height);
 }
