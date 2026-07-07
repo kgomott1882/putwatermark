@@ -28,6 +28,18 @@ import {
   getPdfWatermarkExportScale,
 } from "../../lib/pdfExport";
 import {
+  downloadBlob,
+  downloadImageBlob,
+  ensureBlobMimeType,
+  sanitizeDownloadFileName,
+} from "../../lib/downloadBlob";
+import {
+  applyHighQualityCanvasDefaults,
+  getImageExportOutputScale,
+  getImageWatermarkExportScale,
+  IMAGE_EXPORT_JPEG_QUALITY,
+} from "../../lib/imageWatermarkExport";
+import {
   drawBaseImageWithEffect,
   type EffectBorderColor,
   type EffectBorderWidth,
@@ -67,6 +79,7 @@ import {
   EditorToggleRow,
   EditorToolPanel,
 } from "../../../components/watermark/EditorToolPanel";
+import { WatermarkStyleControls } from "../../../components/watermark/WatermarkStyleControls";
 import {
   type EditorPanelId,
   ToolIconRail,
@@ -80,6 +93,8 @@ import {
 } from "react";
 
 const acceptedImageTypes = ["image/jpeg", "image/png", "image/webp"];
+const imageExportMimeType = "image/jpeg";
+const imageExportQuality = IMAGE_EXPORT_JPEG_QUALITY;
 const acceptedVideoTypes = ["video/mp4", "video/quicktime", "video/webm"];
 const acceptedMediaInputTypes =
   "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.mov,application/pdf,.pdf";
@@ -651,6 +666,7 @@ export default function WatermarkPage() {
       return;
     }
 
+    applyHighQualityCanvasDefaults(context);
     canvas.width = canvasSize.width;
     canvas.height = canvasSize.height;
     context.clearRect(0, 0, canvas.width, canvas.height);
@@ -1235,14 +1251,42 @@ export default function WatermarkPage() {
       try {
         const exportCanvas = renderExportCanvas(input);
 
-        exportCanvas.toBlob((blob) => {
-          if (!blob) {
-            reject(new Error("We could not export that image. Please try again."));
-            return;
-          }
+        exportCanvas.toBlob(
+          (blob) => {
+            if (blob) {
+              resolve(ensureBlobMimeType(blob, imageExportMimeType));
+              return;
+            }
 
-          resolve(blob);
-        }, "image/png");
+            try {
+              const dataUrl = exportCanvas.toDataURL(
+                imageExportMimeType,
+                imageExportQuality,
+              );
+              const [header, base64Data] = dataUrl.split(",");
+
+              if (!base64Data) {
+                reject(new Error("We could not export that image. Please try again."));
+                return;
+              }
+
+              const mimeType =
+                header.match(/data:(.*?);/)?.[1] ?? imageExportMimeType;
+              const binary = atob(base64Data);
+              const bytes = new Uint8Array(binary.length);
+
+              for (let index = 0; index < binary.length; index += 1) {
+                bytes[index] = binary.charCodeAt(index);
+              }
+
+              resolve(new Blob([bytes], { type: mimeType }));
+            } catch {
+              reject(new Error("We could not export that image. Please try again."));
+            }
+          },
+          imageExportMimeType,
+          imageExportQuality,
+        );
       } catch {
         reject(new Error("We could not export that image. Please try again."));
       }
@@ -1301,19 +1345,14 @@ export default function WatermarkPage() {
           ),
         );
 
-        zip.file(getUniqueZipEntryName(entry.fileName, usedNames), blob);
+        zip.file(
+          getUniqueZipEntryName(entry.fileName, usedNames),
+          ensureBlobMimeType(blob, imageExportMimeType),
+        );
       }
 
       const zipBlob = await zip.generateAsync({ type: "blob" });
-      const objectUrl = URL.createObjectURL(zipBlob);
-      const link = document.createElement("a");
-
-      link.href = objectUrl;
-      link.download = "watermarked-images.zip";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(objectUrl);
+      downloadBlob(zipBlob, "watermarked-images.zip");
     } catch {
       setUploadError("We could not export those images. Please try again.");
     } finally {
@@ -1324,6 +1363,33 @@ export default function WatermarkPage() {
 
   function openLogoPicker() {
     logoInputRef.current?.click();
+  }
+
+  function handleWatermarkOpacityChange(value: number) {
+    if (shouldIgnoreManualSettingsChange()) {
+      return;
+    }
+
+    clearActiveTemplate();
+    setWatermarkOpacity(value);
+  }
+
+  function handleFontSizeScaleChange(value: number) {
+    if (shouldIgnoreManualSettingsChange()) {
+      return;
+    }
+
+    clearActiveTemplate();
+    setFontSizeScale(value);
+  }
+
+  function handleFontFamilyChange(value: string) {
+    if (shouldIgnoreManualSettingsChange()) {
+      return;
+    }
+
+    clearActiveTemplate();
+    setFontFamily(value);
   }
 
   function clearActiveTemplate() {
@@ -1558,15 +1624,7 @@ export default function WatermarkPage() {
       ),
     )
       .then((blob) => {
-        const objectUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-
-        link.href = objectUrl;
-        link.download = getExportFileName(fileName);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        URL.revokeObjectURL(objectUrl);
+        downloadImageBlob(blob, getExportFileName(fileName), imageExportMimeType);
       })
       .catch(() => {
         setUploadError("We could not export that image. Please try again.");
@@ -2601,7 +2659,7 @@ export default function WatermarkPage() {
             : "Export all"
           : isExporting
             ? "Exporting..."
-            : "Export PNG";
+            : "Export JPEG";
   const isExportDisabled =
     isExporting ||
     isPdfLoading ||
@@ -3268,88 +3326,16 @@ export default function WatermarkPage() {
                 )}
               </AnimatePresence>
 
-              <motion.div
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-2"
-                initial={{ opacity: 0, y: 8 }}
-                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-              >
-              <EditorPanelSection title="Opacity">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-xs font-semibold text-ink">
-                    {watermarkOpacity}%
-                  </span>
-                </div>
-                <input
-                  className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-signal"
-                  id="watermark-opacity"
-                  max={100}
-                  min={10}
-                  onChange={(event) => {
-                    if (shouldIgnoreManualSettingsChange()) {
-                      return;
-                    }
-
-                    clearActiveTemplate();
-                    setWatermarkOpacity(Number(event.target.value));
-                  }}
-                  step={5}
-                  type="range"
-                  value={watermarkOpacity}
-                />
-              </EditorPanelSection>
-
-              <EditorPanelSection
-                title={watermarkType === "logo" ? "Logo size" : "Font size"}
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-xs font-semibold text-ink">
-                    {fontSizeScale}%
-                  </span>
-                </div>
-                <input
-                  className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-signal"
-                  id="font-size"
-                  max={135}
-                  min={15}
-                  onChange={(event) => {
-                    if (shouldIgnoreManualSettingsChange()) {
-                      return;
-                    }
-
-                    clearActiveTemplate();
-                    setFontSizeScale(Number(event.target.value));
-                  }}
-                  step={5}
-                  type="range"
-                  value={fontSizeScale}
-                />
-              </EditorPanelSection>
-
-              {watermarkType === "text" ? (
-                <EditorPanelSection title="Font family">
-                  <select
-                    className="w-full rounded-xl border border-editor-panel-border bg-white px-2.5 py-2 text-sm text-editor-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
-                    id="font-family"
-                    onChange={(event) => {
-                      if (shouldIgnoreManualSettingsChange()) {
-                        return;
-                      }
-
-                      clearActiveTemplate();
-                      setFontFamily(event.target.value);
-                    }}
-                    value={fontFamily}
-                  >
-                    {fontFamilies.map(({ label, value }) => (
-                      <option key={label} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </EditorPanelSection>
-              ) : null}
-              </motion.div>
+              <WatermarkStyleControls
+                fontFamilies={fontFamilies}
+                fontFamily={fontFamily}
+                fontSizeScale={fontSizeScale}
+                onFontFamilyChange={handleFontFamilyChange}
+                onFontSizeScaleChange={handleFontSizeScaleChange}
+                onWatermarkOpacityChange={handleWatermarkOpacityChange}
+                watermarkOpacity={watermarkOpacity}
+                watermarkType={watermarkType}
+              />
 
               {!showRestoredSettingsNotice ? (
                 <button
@@ -3425,6 +3411,17 @@ export default function WatermarkPage() {
                   })}
                 </div>
               </EditorPanelSection>
+
+              <WatermarkStyleControls
+                fontFamilies={fontFamilies}
+                fontFamily={fontFamily}
+                fontSizeScale={fontSizeScale}
+                onFontFamilyChange={handleFontFamilyChange}
+                onFontSizeScaleChange={handleFontSizeScaleChange}
+                onWatermarkOpacityChange={handleWatermarkOpacityChange}
+                watermarkOpacity={watermarkOpacity}
+                watermarkType={watermarkType}
+              />
 
               {savedPresets.length ? (
                 <EditorPanelSection title="Saved presets">
@@ -4372,6 +4369,102 @@ async function canvasToPngBytes(canvas: HTMLCanvasElement) {
   return new Uint8Array(await blob.arrayBuffer());
 }
 
+function paintWatermarkOnExportCanvas({
+  canvasHeight,
+  canvasWidth,
+  context,
+  customPosition,
+  fontFamily,
+  fontSizeScale,
+  logoImage,
+  tileAngle,
+  tileDensity,
+  tileGap,
+  watermarkMode,
+  watermarkOpacity,
+  watermarkPosition,
+  watermarkText,
+  watermarkType,
+}: {
+  canvasHeight: number;
+  canvasWidth: number;
+  context: CanvasRenderingContext2D;
+  customPosition: CustomPosition | null;
+  fontFamily: string;
+  fontSizeScale: number;
+  logoImage: HTMLImageElement | null;
+  tileAngle: TileAngle;
+  tileDensity: TileDensity;
+  tileGap: number;
+  watermarkMode: WatermarkMode;
+  watermarkOpacity: number;
+  watermarkPosition: WatermarkPosition;
+  watermarkText: string;
+  watermarkType: WatermarkType;
+}) {
+  applyHighQualityCanvasDefaults(context);
+
+  const drawable = getDrawableWatermark({
+    context,
+    fontFamily,
+    fontSizeScale,
+    imageWidth: canvasWidth,
+    logoImage,
+    watermarkText,
+    watermarkType,
+  });
+
+  if (!drawable) {
+    return;
+  }
+
+  const alpha = watermarkOpacity / 100;
+
+  if (watermarkMode === "tile") {
+    drawTiledWatermark({
+      alpha,
+      angle: tileAngle,
+      context,
+      density: tileDensity,
+      drawable,
+      gap: tileGap,
+      imageHeight: canvasHeight,
+      imageWidth: canvasWidth,
+      imageX: 0,
+      imageY: 0,
+    });
+    return;
+  }
+
+  const padding = Math.max(24, drawable.height * 0.9);
+  const { x, y, textAlign, textBaseline } = customPosition
+    ? {
+        x: customPosition.xPercent * canvasWidth,
+        y: customPosition.yPercent * canvasHeight,
+        textAlign: "center" as CanvasTextAlign,
+        textBaseline: "middle" as CanvasTextBaseline,
+      }
+    : getWatermarkCoordinates({
+        fontSize: drawable.height,
+        imageHeight: canvasHeight,
+        imageWidth: canvasWidth,
+        imageX: 0,
+        imageY: 0,
+        padding,
+        position: watermarkPosition,
+      });
+
+  drawWatermarkDrawable({
+    alpha,
+    context,
+    drawable,
+    textAlign,
+    textBaseline,
+    x,
+    y,
+  });
+}
+
 function renderExportCanvas({
   customPosition,
   fontFamily,
@@ -4397,20 +4490,27 @@ function renderExportCanvas({
   const sourceHeight =
     useResizePreview && resizeHeight > 0 ? resizeHeight : image.naturalHeight;
   const outputBounds = getRotatedBounds(sourceWidth, sourceHeight, rotationAngle);
-  const canvas = document.createElement("canvas");
-  const context = canvas.getContext("2d");
+  const logicalWidth = Math.max(1, Math.ceil(outputBounds.width));
+  const logicalHeight = Math.max(1, Math.ceil(outputBounds.height));
+  const outputScale = getImageExportOutputScale(logicalWidth, logicalHeight);
+  const exportCanvas = document.createElement("canvas");
+  const context = exportCanvas.getContext("2d");
 
-  canvas.width = Math.max(1, Math.ceil(outputBounds.width));
-  canvas.height = Math.max(1, Math.ceil(outputBounds.height));
+  exportCanvas.width = logicalWidth * outputScale;
+  exportCanvas.height = logicalHeight * outputScale;
 
   if (!context) {
-    return canvas;
+    exportCanvas.width = logicalWidth;
+    exportCanvas.height = logicalHeight;
+    return exportCanvas;
   }
 
+  applyHighQualityCanvasDefaults(context);
+  context.scale(outputScale, outputScale);
   context.fillStyle = "#DCDCDD";
-  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillRect(0, 0, logicalWidth, logicalHeight);
   context.save();
-  context.translate(canvas.width / 2, canvas.height / 2);
+  context.translate(logicalWidth / 2, logicalHeight / 2);
   context.rotate((rotationAngle * Math.PI) / 180);
   drawBaseImageWithEffect(
     context,
@@ -4423,68 +4523,52 @@ function renderExportCanvas({
   );
   context.restore();
 
-  const drawable = getDrawableWatermark({
-    context,
+  const watermarkInput = {
+    canvasHeight: logicalHeight,
+    canvasWidth: logicalWidth,
+    customPosition,
     fontFamily,
     fontSizeScale,
-    imageWidth: canvas.width,
     logoImage,
+    tileAngle,
+    tileDensity,
+    tileGap,
+    watermarkMode,
+    watermarkOpacity,
+    watermarkPosition,
     watermarkText,
     watermarkType,
-  });
+  };
+  const watermarkScale = getImageWatermarkExportScale(logicalWidth, logicalHeight);
 
-  if (!drawable) {
-    return canvas;
-  }
+  if (watermarkScale > 1) {
+    const overlayCanvas = document.createElement("canvas");
+    overlayCanvas.width = logicalWidth * watermarkScale;
+    overlayCanvas.height = logicalHeight * watermarkScale;
+    const overlayContext = overlayCanvas.getContext("2d");
 
-  const alpha = watermarkOpacity / 100;
-
-  if (watermarkMode === "tile") {
-    drawTiledWatermark({
-      alpha,
-      angle: tileAngle,
-      context,
-      density: tileDensity,
-      drawable,
-      gap: tileGap,
-      imageHeight: canvas.height,
-      imageWidth: canvas.width,
-      imageX: 0,
-      imageY: 0,
-    });
-
-    return canvas;
-  }
-
-  const padding = Math.max(24, drawable.height * 0.9);
-  const { x, y, textAlign, textBaseline } = customPosition
-    ? {
-        x: customPosition.xPercent * canvas.width,
-        y: customPosition.yPercent * canvas.height,
-        textAlign: "center" as CanvasTextAlign,
-        textBaseline: "middle" as CanvasTextBaseline,
-      }
-    : getWatermarkCoordinates({
-        fontSize: drawable.height,
-        imageHeight: canvas.height,
-        imageWidth: canvas.width,
-        imageX: 0,
-        imageY: 0,
-        padding,
-        position: watermarkPosition,
+    if (overlayContext) {
+      applyHighQualityCanvasDefaults(overlayContext);
+      overlayContext.scale(watermarkScale, watermarkScale);
+      paintWatermarkOnExportCanvas({
+        ...watermarkInput,
+        context: overlayContext,
       });
+      context.drawImage(overlayCanvas, 0, 0, logicalWidth, logicalHeight);
+    } else {
+      paintWatermarkOnExportCanvas({
+        ...watermarkInput,
+        context,
+      });
+    }
+  } else {
+    paintWatermarkOnExportCanvas({
+      ...watermarkInput,
+      context,
+    });
+  }
 
-  drawWatermarkDrawable({
-    alpha,
-    context,
-    drawable,
-    textAlign,
-    textBaseline,
-    x,
-    y,
-  });
-
-  return canvas;
+  return exportCanvas;
 }
 
 type PdfPageWatermarkOverlayInput = Omit<
@@ -4607,11 +4691,12 @@ function renderWatermarkOverlayForPdfPage({
 
 function getExportFileName(fileName: string) {
   const fallbackName = "watermarked-image";
-  const baseName = fileName.trim()
+  const rawBase = fileName.trim()
     ? fileName.replace(/\.[^/.]+$/, "")
     : fallbackName;
+  const baseName = sanitizeDownloadFileName(rawBase, fallbackName);
 
-  return `${baseName || fallbackName}-watermarked.png`;
+  return `${baseName}-watermarked.jpg`;
 }
 
 function areWatermarkSnapshotsEqual(
@@ -5130,7 +5215,18 @@ function drawWatermarkDrawable({
 
     context.save();
     context.globalAlpha = alpha;
-    context.drawImage(drawable.image, left, top, drawable.width, drawable.height);
+    applyHighQualityCanvasDefaults(context);
+    context.drawImage(
+      drawable.image,
+      0,
+      0,
+      drawable.image.naturalWidth,
+      drawable.image.naturalHeight,
+      left,
+      top,
+      drawable.width,
+      drawable.height,
+    );
     context.restore();
     return;
   }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { CursorFollower } from "../../components/landing/CursorFollower";
 import { SiteNav } from "../../components/SiteNav";
 import { SmoothScrollProvider } from "../../components/SmoothScrollProvider";
 import "./globals.css";
@@ -31,6 +32,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <SmoothScrollProvider>
+          <CursorFollower />
           <SiteNav />
           {children}
         </SmoothScrollProvider>
