@@ -2206,7 +2206,7 @@ export default function WatermarkPage() {
       : "auto";
 
   return (
-    <main className="min-h-screen w-full bg-paper px-4 py-4 text-ink sm:px-6 md:h-screen md:overflow-hidden lg:px-10">
+    <main className="min-h-screen w-full bg-paper px-4 py-4 text-ink sm:px-6 md:h-[calc(100svh-4rem)] md:overflow-hidden lg:px-10">
       <motion.div
         className="grid h-full min-h-0 gap-4 md:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]"
         initial={{ opacity: 0, y: 24 }}

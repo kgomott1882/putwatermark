@@ -16,6 +16,14 @@ const initialValues: FormValues = {
   password: "",
 };
 
+function getSafeRedirectPath(path: string | null) {
+  if (!path || !path.startsWith("/") || path.startsWith("//")) {
+    return "/account";
+  }
+
+  return path;
+}
+
 export default function LoginPage() {
   return (
     <Suspense fallback={<LoginPageFallback />}>
@@ -51,6 +59,7 @@ function LoginPageContent() {
   const isConfirmed = searchParams.get("confirmed") === "true";
   const hasConfirmationError = searchParams.get("error") === "confirmation_failed";
   const hasExpiredLinkError = searchParams.get("error") === "link_expired";
+  const nextPath = getSafeRedirectPath(searchParams.get("next"));
 
   function updateValue(key: keyof FormValues, value: string) {
     setValues((currentValues) => ({
@@ -91,7 +100,7 @@ function LoginPageContent() {
       return;
     }
 
-    router.push("/account");
+    router.push(nextPath);
   }
 
   return (

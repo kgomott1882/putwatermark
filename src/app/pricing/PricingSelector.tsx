@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "../../../components/Button";
 
@@ -8,6 +9,10 @@ type CreditTier = {
   price: string;
   credits: number;
   photos: string;
+};
+
+type PricingSelectorProps = {
+  isLoggedIn: boolean;
 };
 
 const creditTiers: CreditTier[] = [
@@ -35,11 +40,17 @@ const creditTiers: CreditTier[] = [
 
 const numberFormatter = new Intl.NumberFormat("en-US");
 
-export function PricingSelector() {
+export function PricingSelector({ isLoggedIn }: PricingSelectorProps) {
+  const router = useRouter();
   const [selectedTierIndex, setSelectedTierIndex] = useState(0);
   const selectedTier = creditTiers[selectedTierIndex];
 
   function handleContinue() {
+    if (!isLoggedIn) {
+      router.push("/login?next=/pricing");
+      return;
+    }
+
     console.log("Selected credit tier", selectedTier);
   }
 

@@ -69,13 +69,14 @@ export function Hero() {
 function DemoCard() {
   return (
     <motion.div
+      aria-hidden="true"
       id="demo"
-      className="w-full rounded-[2rem] border border-platinum bg-paper p-3 shadow-2xl shadow-platinum/60"
+      className="pointer-events-none w-full rounded-[2rem] border border-platinum bg-paper p-3 shadow-2xl shadow-platinum/60"
       initial={{ opacity: 0, y: 28 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.52, duration: 0.7, ease: "easeOut" }}
     >
-      <div className="overflow-hidden rounded-[1.5rem] border border-platinum bg-white">
+      <div className="rounded-[1.5rem] border border-platinum bg-white">
         <div className="flex h-11 items-center gap-2 border-b border-platinum px-4">
           <span className="h-3 w-3 rounded-full bg-signal" />
           <span className="h-3 w-3 rounded-full bg-platinum" />
