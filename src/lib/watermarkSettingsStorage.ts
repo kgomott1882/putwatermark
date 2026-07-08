@@ -1,4 +1,4 @@
-type WatermarkType = "text" | "logo";
+type WatermarkType = "text" | "logo" | "signature";
 
 type WatermarkPosition =
   | "top-left"
@@ -77,7 +77,9 @@ function isValidStoredSettings(value: unknown): value is StoredWatermarkSettings
     typeof settings.tileGap === "number" &&
     typeof settings.watermarkOpacity === "number" &&
     typeof settings.watermarkText === "string" &&
-    (settings.watermarkType === "text" || settings.watermarkType === "logo") &&
+    (settings.watermarkType === "text" ||
+      settings.watermarkType === "logo" ||
+      settings.watermarkType === "signature") &&
     (settings.watermarkMode === "single" || settings.watermarkMode === "tile") &&
     typeof settings.watermarkPosition === "string" &&
     typeof settings.tileDensity === "string" &&

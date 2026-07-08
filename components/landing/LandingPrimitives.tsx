@@ -4,14 +4,18 @@ import { ArrowRight, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+export function LandingHighlight({ children }: { children: ReactNode }) {
+  return <span className="text-sand">{children}</span>;
+}
+
 export function LandingStarfield() {
   return (
     <div
       aria-hidden
       className="pointer-events-none absolute inset-0 overflow-hidden"
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(217,119,87,0.14),transparent_42%),radial-gradient(circle_at_80%_0%,rgba(255,255,255,0.06),transparent_35%)]" />
-      <div className="absolute inset-0 opacity-40 [background-image:radial-gradient(rgba(255,255,255,0.55)_0.6px,transparent_0.6px)] [background-size:24px_24px]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(217,119,87,0.12),transparent_42%),radial-gradient(circle_at_80%_0%,rgba(205,186,154,0.08),transparent_35%)]" />
+      <div className="absolute inset-0 opacity-35 [background-image:radial-gradient(rgba(242,235,227,0.35)_0.6px,transparent_0.6px)] [background-size:24px_24px]" />
     </div>
   );
 }
@@ -24,30 +28,36 @@ export function LandingSectionHeader({
 }: {
   aside?: string;
   index: string;
-  lead?: string;
+  lead?: ReactNode;
   title: string;
 }) {
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_minmax(0,14rem)] lg:items-end">
+    <div
+      className={`grid gap-8 lg:items-end ${
+        aside
+          ? "lg:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_minmax(0,14rem)]"
+          : "lg:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]"
+      }`}
+    >
       <div className="flex items-start gap-4">
         <div className="h-20 w-px bg-signal" />
         <div>
-          <p className="text-sm font-medium text-paper/50">{index}</p>
+          <p className="landing-soft text-sm font-medium">{index}</p>
           <p className="mt-1 text-sm font-semibold tracking-[0.08em] text-signal">
             PutWatermark
           </p>
         </div>
       </div>
       <div>
-        <h2 className="text-4xl font-bold tracking-[-0.05em] text-paper/90 md:text-6xl">
+        <h2 className="text-4xl font-bold tracking-[-0.05em] text-beige md:text-6xl">
           {title}
         </h2>
         {lead ? (
-          <p className="mt-4 max-w-2xl text-lg leading-8 text-paper/55">{lead}</p>
+          <p className="landing-muted mt-4 max-w-2xl text-lg leading-8">{lead}</p>
         ) : null}
       </div>
       {aside ? (
-        <p className="text-sm leading-6 text-battleship lg:text-right">{aside}</p>
+        <p className="landing-muted text-sm leading-6 lg:text-right">{aside}</p>
       ) : null}
     </div>
   );
@@ -64,8 +74,8 @@ export function BentoCard({
 }) {
   return (
     <div
-      className={`border border-white/10 p-6 md:p-8 ${
-        highlighted ? "bg-signal text-paper" : "bg-charcoal/70 text-paper"
+      className={`landing-border border p-6 md:p-8 ${
+        highlighted ? "bg-signal text-white" : "landing-surface text-beige"
       } ${className}`}
     >
       {children}
@@ -108,7 +118,7 @@ export function LandingGhostCta({
 }) {
   return (
     <Link
-      className={`inline-flex items-center gap-2 rounded-full border border-white/10 bg-charcoal/80 px-4 py-2 text-sm font-medium text-paper/80 transition hover:border-signal/40 hover:text-paper ${className}`}
+      className={`inline-flex items-center gap-2 rounded-full landing-border border bg-night-elevated px-4 py-2 text-sm font-medium text-beige-dim transition hover:border-sand/40 hover:text-beige ${className}`}
       href={href}
     >
       {children}
@@ -120,10 +130,10 @@ export function LandingGhostCta({
 export function HeroOrbs() {
   return (
     <div aria-hidden className="relative mx-auto h-[22rem] w-full max-w-md lg:mx-0 lg:h-[28rem] lg:max-w-none">
-      <div className="absolute left-[18%] top-[18%] h-28 w-28 rotate-12 rounded-[2rem] border border-signal/30 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.18),transparent_55%),linear-gradient(145deg,rgba(217,119,87,0.55),rgba(217,119,87,0.15))] shadow-[0_0_80px_rgba(217,119,87,0.25)]" />
-      <div className="absolute right-[8%] top-[8%] h-36 w-36 -rotate-6 rounded-[2.5rem] border border-white/10 bg-[radial-gradient(circle_at_35%_35%,rgba(255,255,255,0.12),transparent_60%),linear-gradient(160deg,rgba(76,92,104,0.9),rgba(54,69,79,0.55))]" />
-      <div className="absolute bottom-[10%] left-[34%] h-32 w-32 rotate-[18deg] rounded-[2rem] border border-signal/20 bg-[radial-gradient(circle_at_40%_40%,rgba(255,255,255,0.14),transparent_58%),linear-gradient(145deg,rgba(217,119,87,0.35),rgba(54,69,79,0.75))]" />
-      <div className="absolute bottom-[22%] right-[18%] h-20 w-20 rounded-2xl border border-white/10 bg-payne/80" />
+      <div className="absolute left-[18%] top-[18%] h-28 w-28 rotate-12 rounded-[2rem] border border-signal/30 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.18),transparent_55%),linear-gradient(145deg,rgba(217,119,87,0.55),rgba(217,119,87,0.15))] shadow-[0_0_80px_rgba(217,119,87,0.35)]" />
+      <div className="absolute right-[8%] top-[8%] h-36 w-36 -rotate-6 rounded-[2.5rem] border border-beige/10 bg-[radial-gradient(circle_at_35%_35%,rgba(242,235,227,0.1),transparent_60%),linear-gradient(160deg,rgba(42,40,38,0.95),rgba(26,26,26,0.75))]" />
+      <div className="absolute bottom-[10%] left-[34%] h-32 w-32 rotate-[18deg] rounded-[2rem] border border-sand/25 bg-[radial-gradient(circle_at_40%_40%,rgba(205,186,154,0.14),transparent_58%),linear-gradient(145deg,rgba(217,119,87,0.25),rgba(42,40,38,0.85))]" />
+      <div className="absolute bottom-[22%] right-[18%] h-20 w-20 rounded-2xl border border-beige/10 bg-night-card" />
     </div>
   );
 }
@@ -134,7 +144,7 @@ export function DotGrid({ active = 0 }: { active?: number }) {
       {Array.from({ length: 15 }).map((_, index) => (
         <span
           className={`h-1.5 w-1.5 rounded-full ${
-            index === active ? "bg-signal" : "bg-white/15"
+            index === active ? "bg-signal" : "bg-beige/20"
           }`}
           key={index}
         />
@@ -147,7 +157,7 @@ export function BentoDotGrid() {
   return (
     <div aria-hidden className="grid shrink-0 grid-cols-3 gap-1.5">
       {Array.from({ length: 9 }).map((_, index) => (
-        <span className="h-1.5 w-1.5 rounded-full bg-paper/70" key={index} />
+        <span className="h-1.5 w-1.5 rounded-full bg-sand/80" key={index} />
       ))}
     </div>
   );

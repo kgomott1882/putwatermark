@@ -31,6 +31,40 @@ body.landing-cursor-none * {
   cursor: none !important;
 }
 
+@layer components {
+  .landing-theme {
+    @apply bg-night text-beige;
+  }
+
+  .landing-section {
+    @apply w-full border-t border-beige/10 py-24;
+  }
+
+  .landing-border {
+    @apply border-beige/10;
+  }
+
+  .landing-surface {
+    @apply border border-beige/10 bg-night-card/80;
+  }
+
+  .landing-muted {
+    @apply text-beige-dim;
+  }
+
+  .landing-soft {
+    @apply text-beige-dim/80;
+  }
+
+  .landing-accent {
+    @apply text-sand;
+  }
+
+  .landing-cta-label {
+    @apply text-beige-dim transition hover:text-sand;
+  }
+}
+
 @layer utilities {
   .editor-checkerboard {
     background-color: #e8ebef;

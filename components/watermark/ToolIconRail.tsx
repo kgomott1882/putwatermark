@@ -40,8 +40,8 @@ function RailItem({ active, disabled, icon, label, onClick }: RailItemProps) {
     <button
       className={`group relative flex w-full flex-col items-center gap-1 px-1 py-2.5 text-[9px] font-semibold uppercase tracking-[0.08em] transition disabled:cursor-not-allowed disabled:opacity-35 ${
         active
-          ? "bg-white/12 text-white"
-          : "text-white/70 hover:bg-white/8 hover:text-white"
+          ? "bg-white/12 text-beige"
+          : "text-beige-dim hover:bg-white/8 hover:text-beige"
       }`}
       disabled={disabled}
       onClick={onClick}
@@ -81,7 +81,7 @@ export function ToolIconRail({
     >
       <div className="flex flex-1 flex-col">
         <Link
-          className="flex flex-col items-center gap-1 px-1 py-3 text-[9px] font-semibold uppercase tracking-[0.08em] text-white/70 transition hover:bg-white/8 hover:text-white"
+          className="flex flex-col items-center gap-1 px-1 py-3 text-[9px] font-semibold uppercase tracking-[0.08em] text-beige-dim transition hover:bg-white/8 hover:text-beige"
           href="/"
           title="Home"
         >
@@ -89,7 +89,7 @@ export function ToolIconRail({
           <span className="leading-none">Home</span>
         </Link>
 
-        <div className="mx-2 border-t border-white/10" />
+        <div className="mx-2 border-t border-beige/10" />
 
         <RailItem
           active={activePanel === "templates"}

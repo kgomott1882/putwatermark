@@ -40,6 +40,24 @@ import {
   IMAGE_EXPORT_JPEG_QUALITY,
 } from "../../lib/imageWatermarkExport";
 import {
+  acceptedMediaInputTypes,
+  isImageFile,
+  isPdfFile,
+  isVideoFile,
+  validateMediaFiles,
+} from "../../lib/mediaFiles";
+import { consumeEditorHandoffFiles } from "../../lib/editorFileHandoff";
+import {
+  blobToStoredSessionFile,
+  clearEditorSession,
+  persistEditorSession,
+  readEditorSession,
+  storedSessionFilesToFiles,
+  type StoredEditorSessionMeta,
+  type StoredSessionFile,
+} from "../../lib/editorSessionStorage";
+import { SIGNATURE_DRAG_MIME, createImageFromDataUrl } from "../../lib/signatureImage";
+import {
   drawBaseImageWithEffect,
   type EffectBorderColor,
   type EffectBorderWidth,
@@ -72,13 +90,16 @@ import { ImageEffectsPanel } from "../../../components/watermark/ImageEffectsPan
 import {
   EditorApplyButton,
   EditorCard,
-  EditorGridChoice,
   EditorPanelSection,
   EditorPill,
   EditorSegment,
   EditorToggleRow,
   EditorToolPanel,
 } from "../../../components/watermark/EditorToolPanel";
+import {
+  SignatureControls,
+  type SavedSignature,
+} from "../../../components/watermark/SignatureControls";
 import { WatermarkStyleControls } from "../../../components/watermark/WatermarkStyleControls";
 import {
   type EditorPanelId,
@@ -92,14 +113,10 @@ import {
   useState,
 } from "react";
 
-const acceptedImageTypes = ["image/jpeg", "image/png", "image/webp"];
 const imageExportMimeType = "image/jpeg";
 const imageExportQuality = IMAGE_EXPORT_JPEG_QUALITY;
-const acceptedVideoTypes = ["video/mp4", "video/quicktime", "video/webm"];
-const acceptedMediaInputTypes =
-  "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.mov,application/pdf,.pdf";
 
-type WatermarkType = "text" | "logo";
+type WatermarkType = "text" | "logo" | "signature";
 
 type MediaKind = "image" | "video" | "pdf";
 
@@ -246,7 +263,12 @@ type DrawableWatermark =
 const watermarkTypes: { label: string; value: WatermarkType }[] = [
   { label: "Text", value: "text" },
   { label: "Logo", value: "logo" },
+  { label: "Signature", value: "signature" },
 ];
+
+function isImageWatermarkType(watermarkType: WatermarkType) {
+  return watermarkType === "logo" || watermarkType === "signature";
+}
 
 const watermarkPositions: { label: string; value: WatermarkPosition }[] = [
   { label: "Top left", value: "top-left" },
@@ -382,6 +404,9 @@ export default function WatermarkPage() {
   const videoExportAbortControllerRef = useRef<AbortController | null>(null);
   const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
   const pdfBytesRef = useRef<Uint8Array | null>(null);
+  const sessionRestoreRef = useRef<StoredEditorSessionMeta | null>(null);
+  const isRestoringSessionRef = useRef(false);
+  const sessionSaveRef = useRef<(() => Promise<void>) | null>(null);
   const cropDragRef = useRef<{
     mode: CropDragMode;
     origin: { x: number; y: number };
@@ -473,6 +498,11 @@ export default function WatermarkPage() {
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [presetName, setPresetName] = useState("");
   const [savedPresets, setSavedPresets] = useState<SavedWatermarkPreset[]>([]);
+  const [savedSignatures, setSavedSignatures] = useState<SavedSignature[]>([]);
+  const [activeSignatureId, setActiveSignatureId] = useState<string | null>(
+    null,
+  );
+  const [isSignatureDropTarget, setIsSignatureDropTarget] = useState(false);
   const [canvasSize, setCanvasSize] = useState<CanvasSize>({
     width: 900,
     height: 600,
@@ -499,6 +529,39 @@ export default function WatermarkPage() {
     setSettingsHistoryLength(nextHistory.length);
     setSettingsHistoryIndex(nextIndex);
   }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function bootstrapEditor() {
+      const handoffFiles = await consumeEditorHandoffFiles();
+
+      if (cancelled) {
+        return;
+      }
+
+      if (handoffFiles?.length) {
+        loadMediaFiles(handoffFiles);
+        return;
+      }
+
+      const session = await readEditorSession();
+
+      if (cancelled || !session) {
+        return;
+      }
+
+      isRestoringSessionRef.current = true;
+      sessionRestoreRef.current = session.meta;
+      loadMediaFiles(storedSessionFilesToFiles(session.files));
+    }
+
+    void bootstrapEditor();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const panel = previewPanelRef.current;
@@ -561,6 +624,8 @@ export default function WatermarkPage() {
 
   useEffect(() => {
     return () => {
+      void sessionSaveRef.current?.();
+
       if (pdfDocRef.current) {
         void pdfDocRef.current.cleanup();
         pdfDocRef.current = null;
@@ -903,10 +968,11 @@ export default function WatermarkPage() {
     file: File,
     imageElement: HTMLImageElement,
     objectUrl: string,
+    id = createBatchImageId(),
   ): BatchImageEntry {
     return {
       fileName: file.name,
-      id: createBatchImageId(),
+      id,
       image: imageElement,
       objectUrl,
       resizeHeight: imageElement.naturalHeight,
@@ -1138,7 +1204,7 @@ export default function WatermarkPage() {
       setActiveImageTool(null);
       setCropRect(null);
       setIsWatermarkHovering(false);
-      applyStoredWatermarkSettingsOnMediaLoad();
+      finishMediaLoad();
     } catch (error) {
       clearPdfState();
       setMediaKind(null);
@@ -1472,6 +1538,200 @@ export default function WatermarkPage() {
     return true;
   }
 
+  function finishMediaLoad() {
+    if (sessionRestoreRef.current) {
+      void finalizeSessionRestore();
+      return;
+    }
+
+    applyStoredWatermarkSettingsOnMediaLoad();
+  }
+
+  async function finalizeSessionRestore() {
+    const meta = sessionRestoreRef.current;
+
+    if (!meta) {
+      return;
+    }
+
+    sessionRestoreRef.current = null;
+    isRestoringSessionRef.current = false;
+
+    try {
+      const restoredSignatures = await Promise.all(
+        meta.savedSignatures.map(async (entry) => ({
+          ...entry,
+          image: await createImageFromDataUrl(entry.previewSrc),
+        })),
+      );
+      setSavedSignatures(restoredSignatures);
+      setActiveSignatureId(meta.activeSignatureId);
+
+      let originalLogo: HTMLImageElement | null = null;
+      let backgroundRemovedLogo: HTMLImageElement | null = null;
+
+      if (meta.logoDataUrl) {
+        originalLogo = await createImageFromDataUrl(meta.logoDataUrl);
+      }
+
+      if (meta.backgroundRemovedLogoDataUrl) {
+        backgroundRemovedLogo = await createImageFromDataUrl(
+          meta.backgroundRemovedLogoDataUrl,
+        );
+      }
+
+      const activeSignature = restoredSignatures.find(
+        (signature) => signature.id === meta.activeSignatureId,
+      );
+
+      applyWatermarkSettingsSnapshot(
+        {
+          backgroundRemovedLogoImage: backgroundRemovedLogo,
+          customPosition: meta.customPosition,
+          fontFamily: meta.watermarkSettings.fontFamily,
+          fontSizeScale: meta.watermarkSettings.fontSizeScale,
+          isLogoBackgroundRemoved: meta.watermarkSettings.isLogoBackgroundRemoved,
+          logoFileName: meta.logoFileName,
+          logoImage:
+            meta.watermarkSettings.watermarkType === "signature"
+              ? (activeSignature?.image ?? null)
+              : meta.watermarkSettings.isLogoBackgroundRemoved &&
+                  backgroundRemovedLogo
+                ? backgroundRemovedLogo
+                : originalLogo,
+          originalLogoImage: originalLogo,
+          tileAngle: meta.watermarkSettings.tileAngle,
+          tileDensity: meta.watermarkSettings.tileDensity,
+          tileGap: meta.watermarkSettings.tileGap,
+          watermarkMode: meta.watermarkSettings.watermarkMode,
+          watermarkOpacity: meta.watermarkSettings.watermarkOpacity,
+          watermarkPosition: meta.watermarkSettings.watermarkPosition,
+          watermarkText: meta.watermarkSettings.watermarkText,
+          watermarkType: meta.watermarkSettings.watermarkType,
+        },
+        { suppressHistory: true },
+      );
+
+      setActiveTemplate(
+        meta.activeTemplate as WatermarkTemplateId | null,
+      );
+      setActiveEditorPanel(meta.activeEditorPanel);
+      setShowRestoredSettingsNotice(false);
+
+      if (meta.activeBatchImageId) {
+        setActiveBatchImageId(meta.activeBatchImageId);
+      }
+
+      if (meta.activePdfPageId) {
+        void selectPdfPage(meta.activePdfPageId);
+      }
+    } catch {
+      finishMediaLoad();
+    }
+  }
+
+  sessionSaveRef.current = async () => {
+    if (!mediaKind || isRestoringSessionRef.current) {
+      return;
+    }
+
+    try {
+      const files: StoredSessionFile[] = [];
+
+      if (mediaKind === "pdf" && pdfBytesRef.current) {
+        files.push(
+          await blobToStoredSessionFile(
+            new Blob([new Uint8Array(pdfBytesRef.current)]),
+            fileName,
+            "application/pdf",
+          ),
+        );
+      } else if (mediaKind === "video" && videoUrl) {
+        const blob = await fetch(videoUrl).then((response) => response.blob());
+
+        files.push(
+          await blobToStoredSessionFile(blob, fileName, blob.type || "video/mp4"),
+        );
+      } else if (mediaKind === "image") {
+        const entries =
+          imageBatch.length >= 2
+            ? imageBatch
+            : objectUrlRef.current && image
+              ? [
+                  {
+                    fileName,
+                    id: activeBatchImageId ?? "single-image",
+                    objectUrl: objectUrlRef.current,
+                  },
+                ]
+              : [];
+
+        for (const entry of entries) {
+          const blob = await fetch(entry.objectUrl).then((response) =>
+            response.blob(),
+          );
+
+          files.push(
+            await blobToStoredSessionFile(
+              blob,
+              entry.fileName,
+              blob.type || "image/jpeg",
+            ),
+          );
+        }
+      }
+
+      if (!files.length) {
+        return;
+      }
+
+      const logoDataUrl = originalLogoImage
+        ? await imageElementToDataUrl(originalLogoImage)
+        : null;
+      const backgroundRemovedLogoDataUrl = backgroundRemovedLogoImage
+        ? await imageElementToDataUrl(backgroundRemovedLogoImage)
+        : null;
+      const savedSignaturesMeta = await Promise.all(
+        savedSignatures.map(async (signature) => ({
+          id: signature.id,
+          label: signature.label,
+          previewSrc: signature.previewSrc.startsWith("data:")
+            ? signature.previewSrc
+            : await imageElementToDataUrl(signature.image),
+          source: signature.source,
+        })),
+      );
+
+      const meta: StoredEditorSessionMeta = {
+        activeBatchImageId,
+        activeEditorPanel,
+        activePdfPageId,
+        activeSignatureId,
+        activeTemplate,
+        backgroundRemovedLogoDataUrl,
+        batchEntryIds: imageBatch.map((entry) => entry.id),
+        batchFileNames: imageBatch.map((entry) => entry.fileName),
+        customPosition: customPosition ? { ...customPosition } : null,
+        fileName,
+        logoDataUrl,
+        logoFileName,
+        mediaKind,
+        savedSignatures: savedSignaturesMeta,
+        version: 1,
+        videoDuration,
+        videoFileSize,
+        videoSize,
+        watermarkSettings: storedSettingsFromSnapshot(
+          getWatermarkSettingsSnapshot(),
+        ),
+      };
+
+      await persistEditorSession(files, meta);
+    } catch {
+      // Ignore session persistence errors.
+    }
+  };
+
   function resetWatermarkSettingsToDefaults() {
     clearStoredWatermarkSettings();
     const defaults = getDefaultStoredWatermarkSettings();
@@ -1649,8 +1909,12 @@ export default function WatermarkPage() {
       return;
     }
 
-    if (watermarkType === "logo" && !logoImage) {
-      setExportError("Upload a logo before exporting.");
+    if (isImageWatermarkType(watermarkType) && !logoImage) {
+      setExportError(
+        watermarkType === "signature"
+          ? "Add a signature before exporting."
+          : "Upload a logo before exporting.",
+      );
       return;
     }
 
@@ -1739,8 +2003,12 @@ export default function WatermarkPage() {
       return;
     }
 
-    if (watermarkType === "logo" && !logoImage) {
-      setExportError("Upload a logo before exporting.");
+    if (isImageWatermarkType(watermarkType) && !logoImage) {
+      setExportError(
+        watermarkType === "signature"
+          ? "Add a signature before exporting."
+          : "Upload a logo before exporting.",
+      );
       return;
     }
 
@@ -1866,41 +2134,23 @@ export default function WatermarkPage() {
   }
 
   function loadMediaFiles(files: File[]) {
-    if (!files.length) {
+    const validation = validateMediaFiles(files);
+
+    if (!validation.ok) {
+      setUploadError(validation.error);
       return;
     }
 
-    const imageFiles = files.filter(isImageFile);
-    const videoFiles = files.filter(isVideoFile);
-    const pdfFiles = files.filter(isPdfFile);
-
-    if (
-      (imageFiles.length && videoFiles.length) ||
-      (imageFiles.length && pdfFiles.length) ||
-      (videoFiles.length && pdfFiles.length)
-    ) {
-      setUploadError(
-        "Upload one PDF, images together, or a single video at a time.",
-      );
-      return;
-    }
+    const imageFiles = validation.files.filter(isImageFile);
+    const videoFiles = validation.files.filter(isVideoFile);
+    const pdfFiles = validation.files.filter(isPdfFile);
 
     if (pdfFiles.length) {
-      if (pdfFiles.length > 1) {
-        setUploadError("Please upload one PDF at a time.");
-        return;
-      }
-
       void loadPdfFile(pdfFiles[0]);
       return;
     }
 
     if (videoFiles.length) {
-      if (videoFiles.length > 1) {
-        setUploadError("Please upload one video at a time.");
-        return;
-      }
-
       loadVideoFile(videoFiles[0]);
       return;
     }
@@ -1912,12 +2162,7 @@ export default function WatermarkPage() {
 
     if (imageFiles.length === 1) {
       loadImageFile(imageFiles[0]);
-      return;
     }
-
-    setUploadError(
-      "Please choose a JPG, PNG, WebP, PDF, MP4, MOV, or WebM file.",
-    );
   }
 
   function loadMediaFile(file: File) {
@@ -2210,6 +2455,7 @@ export default function WatermarkPage() {
     setExportError("");
     setExportNotice("");
     setActiveEditorPanel("watermark");
+    void clearEditorSession();
   }
 
   async function materializeRotationIfNeeded() {
@@ -2365,13 +2611,15 @@ export default function WatermarkPage() {
     clearPdfState();
 
     try {
+      const preservedIds = sessionRestoreRef.current?.batchEntryIds ?? [];
       const loadedEntries = await Promise.all(
-        imageFiles.map(async (file) => {
+        imageFiles.map(async (file, index) => {
           const loaded = await loadImageElementFromFile(file);
           return createBatchImageEntry(
             loaded.file,
             loaded.image,
             loaded.objectUrl,
+            preservedIds[index],
           );
         }),
       );
@@ -2382,8 +2630,14 @@ export default function WatermarkPage() {
       setVideoSize(null);
       setVideoFileSize(0);
       setImageBatch(loadedEntries);
-      applyActiveBatchEntry(loadedEntries[0]);
-      applyStoredWatermarkSettingsOnMediaLoad();
+
+      const initialEntry =
+        loadedEntries.find(
+          (entry) => entry.id === sessionRestoreRef.current?.activeBatchImageId,
+        ) ?? loadedEntries[0];
+
+      applyActiveBatchEntry(initialEntry);
+      finishMediaLoad();
     } catch (error) {
       setUploadError(
         error instanceof Error
@@ -2434,7 +2688,7 @@ export default function WatermarkPage() {
       setActiveImageTool(null);
       setCropRect(null);
       setIsWatermarkHovering(false);
-      applyStoredWatermarkSettingsOnMediaLoad();
+      finishMediaLoad();
     };
     nextImage.onerror = () => {
       URL.revokeObjectURL(objectUrl);
@@ -2481,7 +2735,7 @@ export default function WatermarkPage() {
       setActiveImageTool(null);
       setCropRect(null);
       setIsWatermarkHovering(false);
-      applyStoredWatermarkSettingsOnMediaLoad();
+      finishMediaLoad();
     };
     nextVideo.onerror = () => {
       URL.revokeObjectURL(objectUrl);
@@ -2492,7 +2746,7 @@ export default function WatermarkPage() {
   }
 
   function loadLogoFile(file: File) {
-    if (!acceptedImageTypes.includes(file.type)) {
+    if (!isImageFile(file)) {
       setLogoError("Please choose a PNG, JPG, or WebP logo image.");
       return;
     }
@@ -2593,9 +2847,109 @@ export default function WatermarkPage() {
     setIsWatermarkHovering(false);
   }
 
-  const lastPresetLabel =
-    watermarkPositions.find((position) => position.value === watermarkPosition)
-      ?.label ?? "Bottom right";
+  function handleWatermarkTypeChange(nextType: WatermarkType) {
+    clearActiveTemplate();
+
+    if (nextType === "signature") {
+      if (watermarkMode === "tile") {
+        setWatermarkMode("single");
+      }
+
+      const activeSignature = savedSignatures.find(
+        (signature) => signature.id === activeSignatureId,
+      );
+
+      setLogoImage(activeSignature?.image ?? null);
+    } else if (nextType === "logo") {
+      if (isLogoBackgroundRemoved && backgroundRemovedLogoImage) {
+        setLogoImage(backgroundRemovedLogoImage);
+      } else {
+        setLogoImage(originalLogoImage);
+      }
+    }
+
+    setWatermarkType(nextType);
+    setIsWatermarkHovering(false);
+  }
+
+  function handleActiveSignatureChange(signature: SavedSignature | null) {
+    setActiveSignatureId(signature?.id ?? null);
+
+    if (watermarkType === "signature") {
+      setLogoImage(signature?.image ?? null);
+      setIsWatermarkHovering(false);
+    }
+  }
+
+  function placeSignatureOnDocument(
+    signature: SavedSignature,
+    position?: { xPercent: number; yPercent: number },
+  ) {
+    clearActiveTemplate();
+
+    if (watermarkType !== "signature") {
+      setWatermarkType("signature");
+    }
+
+    if (watermarkMode !== "single") {
+      setWatermarkMode("single");
+    }
+
+    setActiveSignatureId(signature.id);
+    setLogoImage(signature.image);
+    setCustomPosition(position ?? null);
+    setIsWatermarkHovering(false);
+  }
+
+  function handleSignatureDragOver(event: DragEvent<HTMLCanvasElement>) {
+    if (!event.dataTransfer.types.includes(SIGNATURE_DRAG_MIME)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsSignatureDropTarget(true);
+  }
+
+  function handleSignatureDragLeave(event: DragEvent<HTMLCanvasElement>) {
+    const nextTarget = event.relatedTarget;
+
+    if (
+      nextTarget instanceof Node &&
+      event.currentTarget.contains(nextTarget)
+    ) {
+      return;
+    }
+
+    setIsSignatureDropTarget(false);
+  }
+
+  function handleSignatureDrop(event: DragEvent<HTMLCanvasElement>) {
+    setIsSignatureDropTarget(false);
+
+    const signatureId = event.dataTransfer.getData(SIGNATURE_DRAG_MIME);
+
+    if (!signatureId) {
+      return;
+    }
+
+    const signature = savedSignatures.find((entry) => entry.id === signatureId);
+
+    if (!signature) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const placement = getCanvasPlacementFromDrag(event, event.currentTarget);
+
+    if (!placement) {
+      return;
+    }
+
+    placeSignatureOnDocument(signature, placement);
+  }
+
   const hasMedia = Boolean(
     image ||
       videoUrl ||
@@ -2603,6 +2957,7 @@ export default function WatermarkPage() {
       (mediaKind === "pdf" && pdfPageCount > 0),
   );
   const isBatchImageMode = mediaKind === "image" && imageBatch.length >= 2;
+  const imageToolsEnabled = mediaKind === "image";
   const loadedMediaDetails =
     mediaKind === "video" && videoSize
       ? `${formatDuration(videoDuration)} · ${videoSize.width}x${videoSize.height}`
@@ -2679,7 +3034,35 @@ export default function WatermarkPage() {
           : "auto"
       : "auto";
 
-  const imageToolsEnabled = mediaKind === "image";
+  useEffect(() => {
+    if (!hasMedia || isRestoringSessionRef.current) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void sessionSaveRef.current?.();
+    }, 1200);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [
+    activeEditorPanel,
+    activeBatchImageId,
+    activePdfPageId,
+    activeSignatureId,
+    activeTemplate,
+    customPosition,
+    fileName,
+    hasMedia,
+    imageBatch,
+    mediaKind,
+    savedSignatures,
+    videoUrl,
+    watermarkMode,
+    watermarkType,
+  ]);
+
   const showEditorPanel = activeEditorPanel !== null;
   const editorPanelTitle =
     activeEditorPanel === "templates"
@@ -3018,17 +3401,13 @@ export default function WatermarkPage() {
               ) : null}
 
               <EditorPanelSection title="Type">
-                <div className="grid grid-cols-2 gap-2 rounded-xl bg-white/50 p-1">
+                <div className="grid grid-cols-3 gap-2 rounded-xl bg-white/50 p-1">
                   {watermarkTypes.map(({ label, value }) => (
                     <EditorSegment
                       active={watermarkType === value}
                       groupId="watermark-type"
                       key={value}
-                      onClick={() => {
-                        clearActiveTemplate();
-                        setWatermarkType(value);
-                        setIsWatermarkHovering(false);
-                      }}
+                      onClick={() => handleWatermarkTypeChange(value)}
                     >
                       {label}
                     </EditorSegment>
@@ -3041,9 +3420,21 @@ export default function WatermarkPage() {
                   {watermarkModes.map(({ label, value }) => (
                     <EditorSegment
                       active={watermarkMode === value}
+                      className={
+                        watermarkType === "signature" && value === "tile"
+                          ? "cursor-not-allowed opacity-40"
+                          : ""
+                      }
                       groupId="watermark-mode"
                       key={value}
                       onClick={() => {
+                        if (
+                          watermarkType === "signature" &&
+                          value === "tile"
+                        ) {
+                          return;
+                        }
+
                         clearActiveTemplate();
                         setWatermarkMode(value);
                         setIsWatermarkHovering(false);
@@ -3053,6 +3444,11 @@ export default function WatermarkPage() {
                     </EditorSegment>
                   ))}
                 </div>
+                {watermarkType === "signature" ? (
+                  <p className="text-[11px] leading-4 text-battleship/80">
+                    Signatures use single placement only.
+                  </p>
+                ) : null}
               </EditorPanelSection>
 
               <AnimatePresence mode="wait">
@@ -3081,7 +3477,7 @@ export default function WatermarkPage() {
                       />
                     </EditorCard>
                   </motion.div>
-                ) : (
+                ) : watermarkType === "logo" ? (
                   <motion.div
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
@@ -3192,139 +3588,38 @@ export default function WatermarkPage() {
                     </div>
                   ) : null}
                   </motion.div>
-                )}
-              </AnimatePresence>
-
-              <AnimatePresence mode="wait">
-                {watermarkMode === "single" ? (
-                  <motion.div
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    initial={{ opacity: 0, y: 10 }}
-                    key="watermark-single-mode"
-                    transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-                  >
-                    <EditorPanelSection title="Position">
-                      <div className="grid w-28 grid-cols-3 gap-1">
-                        {watermarkPositions.map(({ label, value }) => {
-                          const isSelected =
-                            !customPosition && watermarkPosition === value;
-
-                          return (
-                            <EditorGridChoice
-                              active={isSelected}
-                              ariaLabel={label}
-                              groupId="watermark-position"
-                              key={value}
-                              onClick={() => {
-                                clearActiveTemplate();
-                                setWatermarkPosition(value);
-                                setCustomPosition(null);
-                              }}
-                            />
-                          );
-                        })}
-                      </div>
-                      {customPosition ? (
-                        <div className="mt-1 flex items-center justify-between gap-2 text-xs">
-                          <span className="font-medium text-signal">
-                            Custom position
-                          </span>
-                          <button
-                            className="font-medium text-battleship transition hover:text-ink"
-                            onClick={() => {
-                              clearActiveTemplate();
-                              setCustomPosition(null);
-                            }}
-                            type="button"
-                          >
-                            Reset to {lastPresetLabel.toLowerCase()}
-                          </button>
-                        </div>
-                      ) : null}
-                    </EditorPanelSection>
-                  </motion.div>
                 ) : (
                   <motion.div
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
                     initial={{ opacity: 0, y: 10 }}
-                    key="watermark-tile-mode"
+                    key="watermark-signature-input"
                     transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
                   >
-                    <div className="space-y-2">
-                      <EditorPanelSection title="Density">
-                        <div className="grid grid-cols-3 gap-1">
-                          {tileDensities.map(({ label, value }) => (
-                            <EditorPill
-                              active={tileDensity === value}
-                              groupId="tile-density"
-                              key={value}
-                              onClick={() => {
-                                if (shouldIgnoreManualSettingsChange()) {
-                                  return;
-                                }
-
-                                clearActiveTemplate();
-                                setTileDensity(value);
-                              }}
-                            >
-                              {label}
-                            </EditorPill>
-                          ))}
-                        </div>
-                      </EditorPanelSection>
-
-                      <EditorPanelSection title="Angle">
-                        <div className="grid grid-cols-4 gap-1">
-                          {tileAngles.map(({ label, value }) => (
-                            <EditorPill
-                              active={tileAngle === value}
-                              groupId="tile-angle"
-                              key={value}
-                              onClick={() => {
-                                if (shouldIgnoreManualSettingsChange()) {
-                                  return;
-                                }
-
-                                clearActiveTemplate();
-                                setTileAngle(value);
-                              }}
-                            >
-                              {label}
-                            </EditorPill>
-                          ))}
-                        </div>
-                      </EditorPanelSection>
-
-                      <EditorPanelSection title="Gap">
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="text-xs font-semibold text-ink">
-                            {tileGap}%
-                          </span>
-                        </div>
-                        <input
-                          className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-signal"
-                          id="tile-gap"
-                          max={300}
-                          min={50}
-                          onChange={(event) => {
-                            if (shouldIgnoreManualSettingsChange()) {
-                              return;
-                            }
-
-                            clearActiveTemplate();
-                            setTileGap(Number(event.target.value));
-                          }}
-                          step={10}
-                          type="range"
-                          value={tileGap}
-                        />
-                      </EditorPanelSection>
+                    <p className="text-xs font-medium text-battleship">
+                      Signature
+                    </p>
+                    <div className="mt-1">
+                      <SignatureControls
+                        activeSignatureId={activeSignatureId}
+                        hasDocument={hasMedia}
+                        onActiveSignatureChange={handleActiveSignatureChange}
+                        onPlaceSignature={placeSignatureOnDocument}
+                        onSignaturesChange={setSavedSignatures}
+                        savedSignatures={savedSignatures}
+                      />
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {watermarkMode === "single" && hasMedia ? (
+                <p className="text-[11px] leading-4 text-battleship/80">
+                  {watermarkType === "signature"
+                    ? "Drag a saved signature onto the preview, or drag it on the canvas to reposition."
+                    : "Drag the watermark on the preview to position it."}
+                </p>
+              ) : null}
 
               <WatermarkStyleControls
                 fontFamilies={fontFamilies}
@@ -3411,6 +3706,79 @@ export default function WatermarkPage() {
                   })}
                 </div>
               </EditorPanelSection>
+
+              {watermarkMode === "tile" ? (
+                <div className="space-y-2">
+                  <EditorPanelSection title="Density">
+                    <div className="grid grid-cols-3 gap-1">
+                      {tileDensities.map(({ label, value }) => (
+                        <EditorPill
+                          active={tileDensity === value}
+                          groupId="template-tile-density"
+                          key={value}
+                          onClick={() => {
+                            if (shouldIgnoreManualSettingsChange()) {
+                              return;
+                            }
+
+                            clearActiveTemplate();
+                            setTileDensity(value);
+                          }}
+                        >
+                          {label}
+                        </EditorPill>
+                      ))}
+                    </div>
+                  </EditorPanelSection>
+
+                  <EditorPanelSection title="Angle">
+                    <div className="grid grid-cols-4 gap-1">
+                      {tileAngles.map(({ label, value }) => (
+                        <EditorPill
+                          active={tileAngle === value}
+                          groupId="template-tile-angle"
+                          key={value}
+                          onClick={() => {
+                            if (shouldIgnoreManualSettingsChange()) {
+                              return;
+                            }
+
+                            clearActiveTemplate();
+                            setTileAngle(value);
+                          }}
+                        >
+                          {label}
+                        </EditorPill>
+                      ))}
+                    </div>
+                  </EditorPanelSection>
+
+                  <EditorPanelSection title="Gap">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-xs font-semibold text-ink">
+                        {tileGap}%
+                      </span>
+                    </div>
+                    <input
+                      className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-signal"
+                      id="template-tile-gap"
+                      max={300}
+                      min={50}
+                      onChange={(event) => {
+                        if (shouldIgnoreManualSettingsChange()) {
+                          return;
+                        }
+
+                        clearActiveTemplate();
+                        setTileGap(Number(event.target.value));
+                      }}
+                      step={10}
+                      type="range"
+                      value={tileGap}
+                    />
+                  </EditorPanelSection>
+                </div>
+              ) : null}
 
               <WatermarkStyleControls
                 fontFamilies={fontFamilies}
@@ -3716,7 +4084,12 @@ export default function WatermarkPage() {
               </div>
             ) : (mediaKind === "image" || mediaKind === "pdf") && image ? (
               <canvas
-                className="max-h-full max-w-full touch-none shadow-lg"
+                className={`max-h-full max-w-full touch-none shadow-lg ${
+                  isSignatureDropTarget ? "ring-2 ring-signal ring-offset-2" : ""
+                }`}
+                onDragLeave={handleSignatureDragLeave}
+                onDragOver={handleSignatureDragOver}
+                onDrop={handleSignatureDrop}
                 onPointerCancel={handleCanvasPointerCancel}
                 onPointerDown={handleCanvasPointerDown}
                 onPointerLeave={handleCanvasPointerLeave}
@@ -3737,7 +4110,14 @@ export default function WatermarkPage() {
                   src={videoUrl}
                 />
                 <canvas
-                  className="absolute inset-0 h-full w-full touch-none"
+                  className={`absolute inset-0 h-full w-full touch-none ${
+                    isSignatureDropTarget
+                      ? "ring-2 ring-inset ring-signal"
+                      : ""
+                  }`}
+                  onDragLeave={handleSignatureDragLeave}
+                  onDragOver={handleSignatureDragOver}
+                  onDrop={handleSignatureDrop}
                   onPointerCancel={handleCanvasPointerCancel}
                   onPointerDown={handleCanvasPointerDown}
                   onPointerLeave={handleCanvasPointerLeave}
@@ -3976,6 +4356,25 @@ function TemplateIcon({ isSelected, variant }: TemplateIconProps) {
   );
 }
 
+function imageElementToDataUrl(image: HTMLImageElement): Promise<string> {
+  if (image.src.startsWith("data:")) {
+    return Promise.resolve(image.src);
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return Promise.resolve(image.src);
+  }
+
+  context.drawImage(image, 0, 0);
+  return Promise.resolve(canvas.toDataURL("image/png"));
+}
+
 function getCanvasPoint(event: PointerEvent<HTMLCanvasElement>) {
   const canvas = event.currentTarget;
   const rect = canvas.getBoundingClientRect();
@@ -3996,6 +4395,22 @@ function getCanvasPoint(event: PointerEvent<HTMLCanvasElement>) {
   );
 
   return { x, y };
+}
+
+function getCanvasPlacementFromDrag(
+  event: DragEvent<HTMLCanvasElement>,
+  canvas: HTMLCanvasElement,
+) {
+  const rect = canvas.getBoundingClientRect();
+
+  if (!rect.width || !rect.height) {
+    return null;
+  }
+
+  return {
+    xPercent: clamp((event.clientX - rect.left) / rect.width, 0, 1),
+    yPercent: clamp((event.clientY - rect.top) / rect.height, 0, 1),
+  };
 }
 
 function forwardPointerEventToElementBelow(
@@ -4035,27 +4450,6 @@ function isPointInBounds(point: { x: number; y: number }, bounds: TextBounds) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
-}
-
-function isImageFile(file: File) {
-  return acceptedImageTypes.includes(file.type);
-}
-
-function isVideoFile(file: File) {
-  const fileName = file.name.toLowerCase();
-
-  return (
-    acceptedVideoTypes.includes(file.type) ||
-    fileName.endsWith(".mov") ||
-    fileName.endsWith(".mp4") ||
-    fileName.endsWith(".webm")
-  );
-}
-
-function isPdfFile(file: File) {
-  const fileName = file.name.toLowerCase();
-
-  return file.type === "application/pdf" || fileName.endsWith(".pdf");
 }
 
 function formatDuration(duration: number) {
@@ -5148,7 +5542,7 @@ function getDrawableWatermark({
     Math.min(imageWidth / 12, 72) * (fontSizeScale / 100),
   );
 
-  if (watermarkType === "logo") {
+  if (isImageWatermarkType(watermarkType)) {
     if (!logoImage) {
       return null;
     }

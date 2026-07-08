@@ -8,7 +8,7 @@ import { KeyFeatures } from "../../components/KeyFeatures";
 
 export default function Home() {
   return (
-    <main className="bg-ink text-paper">
+    <main className="landing-theme">
       <Hero />
       <HowItWorks />
       <KeyFeatures />

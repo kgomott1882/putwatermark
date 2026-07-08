@@ -15,7 +15,7 @@ type WatermarkStyleControlsProps = {
   onFontSizeScaleChange: (value: number) => void;
   onWatermarkOpacityChange: (value: number) => void;
   watermarkOpacity: number;
-  watermarkType: "logo" | "text";
+  watermarkType: "logo" | "signature" | "text";
 };
 
 export function WatermarkStyleControls({
@@ -47,7 +47,13 @@ export function WatermarkStyleControls({
       </EditorPanelSection>
 
       <EditorPanelSection
-        title={watermarkType === "logo" ? "Logo size" : "Font size"}
+        title={
+          watermarkType === "logo"
+            ? "Logo size"
+            : watermarkType === "signature"
+              ? "Signature size"
+              : "Font size"
+        }
       >
         <div className="flex items-center justify-between gap-4">
           <span className="text-xs font-semibold text-ink">{fontSizeScale}%</span>

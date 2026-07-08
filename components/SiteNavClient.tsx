@@ -10,17 +10,19 @@ type SiteNavClientProps = {
 };
 
 const navLinks = [
+  { href: "/features", label: "Features" },
   { href: "/watermark", label: "Watermark Tool" },
   { href: "/pricing", label: "Pricing" },
 ] as const;
 
 const siteLogoSrc = "/pw-logo.png";
+const siteIconSrc = "/Icon.png";
 
 export function SiteNavClient({ isLoggedIn }: SiteNavClientProps) {
   const pathname = usePathname();
   const isEditorMode =
     pathname === "/watermark" || pathname.startsWith("/watermark/");
-  const isLanding = pathname === "/";
+  const isLanding = pathname === "/" || pathname === "/features";
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
 
@@ -42,16 +44,23 @@ export function SiteNavClient({ isLoggedIn }: SiteNavClientProps) {
 
   if (isLanding) {
     return (
-      <header className="sticky top-0 z-50 bg-ink/95 backdrop-blur-sm">
+      <header className="sticky top-0 z-50 bg-night/95 backdrop-blur-sm">
         <nav
           aria-label="Main navigation"
           className={`${pageContainerClass} grid h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]`}
         >
           <Link
-            className="inline-flex shrink-0 items-center transition hover:opacity-80"
+            className="inline-flex shrink-0 items-center gap-2.5 transition hover:opacity-80"
             href="/"
           >
-            <span className="text-sm font-bold uppercase tracking-[0.18em] text-paper">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              alt=""
+              className="h-10 w-10 object-contain"
+              decoding="async"
+              src={siteIconSrc}
+            />
+            <span className="text-sm font-bold uppercase tracking-[0.18em] text-beige">
               PutWatermark
             </span>
           </Link>
@@ -59,7 +68,7 @@ export function SiteNavClient({ isLoggedIn }: SiteNavClientProps) {
           <div className="hidden items-center justify-center gap-8 md:flex">
             {navLinks.map(({ href, label }) => (
               <Link
-                className="text-[11px] font-semibold uppercase tracking-[0.2em] text-paper/70 transition hover:text-paper"
+                className="text-[11px] font-semibold uppercase tracking-[0.2em] text-beige-dim transition hover:text-beige"
                 href={href}
                 key={href}
               >
@@ -71,7 +80,7 @@ export function SiteNavClient({ isLoggedIn }: SiteNavClientProps) {
           <div className="hidden items-center justify-end gap-6 md:flex">
             {isLoggedIn ? (
               <Link
-                className="text-[11px] font-semibold uppercase tracking-[0.2em] text-paper/70 transition hover:text-paper"
+                className="text-[11px] font-semibold uppercase tracking-[0.2em] text-beige-dim transition hover:text-beige"
                 href="/account"
               >
                 Account
@@ -79,20 +88,20 @@ export function SiteNavClient({ isLoggedIn }: SiteNavClientProps) {
             ) : (
               <>
                 <Link
-                  className="text-[11px] font-semibold uppercase tracking-[0.2em] text-paper/70 transition hover:text-paper"
+                  className="text-[11px] font-semibold uppercase tracking-[0.2em] text-beige-dim transition hover:text-beige"
                   href="/login"
                 >
                   Log in
                 </Link>
                 <Link
-                  className="text-[11px] font-semibold uppercase tracking-[0.2em] text-signal transition hover:text-paper"
+                  className="text-[11px] font-semibold uppercase tracking-[0.2em] text-signal transition hover:text-sand"
                   href="/signup"
                 >
                   Sign up
                 </Link>
               </>
             )}
-            <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-battleship">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-beige-dim">
               ©2026
             </span>
           </div>
@@ -105,7 +114,7 @@ export function SiteNavClient({ isLoggedIn }: SiteNavClientProps) {
             onClick={() => setIsMenuOpen((open) => !open)}
             type="button"
           >
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-paper">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-beige">
               {isMenuOpen ? "Close" : "Menu"}
             </span>
           </button>
@@ -113,13 +122,13 @@ export function SiteNavClient({ isLoggedIn }: SiteNavClientProps) {
 
         {isMenuOpen ? (
           <div
-            className={`${pageContainerClass} border-t border-white/10 py-4 md:hidden`}
+            className={`${pageContainerClass} landing-border border-t py-4 md:hidden`}
             id="mobile-nav-menu"
           >
             <div className="flex flex-col gap-1">
               {navLinks.map(({ href, label }) => (
                 <Link
-                  className="rounded-lg px-3 py-3 text-sm font-semibold uppercase tracking-[0.16em] text-paper transition hover:bg-white/5"
+                  className="rounded-lg px-3 py-3 text-sm font-semibold uppercase tracking-[0.16em] text-beige transition hover:bg-white/5"
                   href={href}
                   key={href}
                   onClick={() => setIsMenuOpen(false)}
@@ -130,7 +139,7 @@ export function SiteNavClient({ isLoggedIn }: SiteNavClientProps) {
 
               {isLoggedIn ? (
                 <Link
-                  className="rounded-lg px-3 py-3 text-sm font-semibold uppercase tracking-[0.16em] text-paper transition hover:bg-white/5"
+                  className="rounded-lg px-3 py-3 text-sm font-semibold uppercase tracking-[0.16em] text-beige transition hover:bg-white/5"
                   href="/account"
                   onClick={() => setIsMenuOpen(false)}
                 >
@@ -139,7 +148,7 @@ export function SiteNavClient({ isLoggedIn }: SiteNavClientProps) {
               ) : (
                 <>
                   <Link
-                    className="rounded-lg px-3 py-3 text-sm font-semibold uppercase tracking-[0.16em] text-paper transition hover:bg-white/5"
+                    className="rounded-lg px-3 py-3 text-sm font-semibold uppercase tracking-[0.16em] text-beige transition hover:bg-white/5"
                     href="/login"
                     onClick={() => setIsMenuOpen(false)}
                   >

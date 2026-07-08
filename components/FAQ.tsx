@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useId, useState } from "react";
-import { LandingSectionHeader } from "./landing/LandingPrimitives";
+import { LandingHighlight, LandingSectionHeader } from "./landing/LandingPrimitives";
 import { pageContainerClass } from "./pageContainer";
 
 type FaqItem = {
@@ -13,6 +13,11 @@ type FaqItem = {
 };
 
 const faqItems: FaqItem[] = [
+  {
+    question: "What is PutWatermark?",
+    answer:
+      "PutWatermark is a browser-based tool for watermarking photos, PDFs, and videos — free to try, with no signup required. It helps protect your work from unauthorized use by letting you add text or logo watermarks as a single mark or tiled across the whole file, and lets you sign documents directly by drawing or typing your signature. No software to install and no upfront payment to get started.",
+  },
   {
     question: "Do I need to create an account to use PutWatermark?",
     answer:
@@ -99,7 +104,7 @@ function FaqBadge() {
         </text>
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="h-3 w-3 rounded-full bg-paper" />
+        <span className="h-3 w-3 rounded-full bg-beige" />
       </div>
     </div>
   );
@@ -110,17 +115,21 @@ export function FAQ() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
-    <section className="w-full border-t border-white/10 bg-ink py-24 text-paper">
+    <section className="landing-section">
       <div className={pageContainerClass}>
         <LandingSectionHeader
-          aside="Spend less time guessing and more time building."
           index="004"
-          lead="Simple explanations to help you get started and move faster."
+          lead={
+            <>
+              Simple explanations to help you{" "}
+              <LandingHighlight>get started and move faster</LandingHighlight>.
+            </>
+          }
           title="Questions & answers"
         />
 
         <div className="mt-16 grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
-          <div className="overflow-hidden rounded-2xl border border-white/10 bg-charcoal/70">
+          <div className="landing-surface overflow-hidden rounded-2xl">
             {faqItems.map(({ question, answer }, index) => {
               const isOpen = openIndex === index;
               const panelId = `${baseId}-panel-${index}`;
@@ -128,7 +137,7 @@ export function FAQ() {
 
               return (
                 <div
-                  className="border-b border-white/10 last:border-b-0"
+                  className="landing-border border-b last:border-b-0"
                   key={question}
                 >
                   <button
@@ -141,7 +150,7 @@ export function FAQ() {
                     }
                     type="button"
                   >
-                    <span className="text-base font-medium leading-7 text-paper md:text-[1.05rem]">
+                    <span className="text-base font-medium leading-7 text-beige md:text-[1.05rem]">
                       {question}
                     </span>
                     <FaqToggleIcon isOpen={isOpen} />
@@ -159,7 +168,7 @@ export function FAQ() {
                         transition={{ duration: 0.28, ease: "easeOut" }}
                       >
                         <div className="overflow-hidden px-6 pb-6 md:px-8 md:pb-7">
-                          <p className="max-w-2xl text-sm leading-7 text-battleship md:text-[0.95rem]">
+                          <p className="landing-muted max-w-2xl text-sm leading-7 md:text-[0.95rem]">
                             {answer}
                           </p>
                         </div>
@@ -172,25 +181,35 @@ export function FAQ() {
           </div>
 
           <div className="flex flex-col gap-4">
-            <div className="relative min-h-[18rem] overflow-hidden rounded-2xl border border-white/10">
+            <div className="relative min-h-[18rem] overflow-hidden rounded-2xl landing-border border">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 alt="Team collaborating around laptops"
                 className="absolute inset-0 h-full w-full object-cover object-center grayscale"
                 decoding="async"
-                src="/Pics/faq-team.jpg"
+                src="/people_working_in_office.jpeg"
               />
               <FaqBadge />
             </div>
 
-            <div className="flex flex-1 flex-col justify-between rounded-2xl border border-white/10 bg-charcoal/70 p-6 md:p-8">
+            <div className="landing-surface flex flex-1 flex-col justify-between rounded-2xl p-6 md:p-8">
               <div>
-                <h3 className="text-2xl font-bold tracking-[-0.03em] text-paper md:text-[1.75rem]">
+                <h3 className="text-2xl font-bold tracking-[-0.03em] text-beige md:text-[1.75rem]">
                   You still have questions?
                 </h3>
-                <p className="mt-4 max-w-md text-sm leading-7 text-battleship md:text-[0.95rem]">
-                  Every workflow is different. Start with a free test export, then buy
-                  credits only when you need more volume or paid features.
+                <p className="landing-muted mt-4 max-w-md text-sm leading-7 md:text-[0.95rem]">
+                  Every workflow is different. Start with a{" "}
+                  <LandingHighlight>free test export</LandingHighlight>, then buy credits
+                  only when you need more volume or paid features.
+                </p>
+                <p className="landing-muted mt-4 max-w-md text-sm leading-7 md:text-[0.95rem]">
+                  Still stuck? Contact us at{" "}
+                  <a
+                    className="font-medium text-sand transition hover:text-signal"
+                    href="mailto:hello@putwatermark.com"
+                  >
+                    hello@putwatermark.com
+                  </a>
                 </p>
               </div>
 
@@ -198,7 +217,7 @@ export function FAQ() {
                 className="group mt-8 inline-flex items-center gap-4 self-start"
                 href="/watermark"
               >
-                <span className="text-sm font-medium text-paper transition group-hover:text-signal">
+                <span className="text-sm font-medium text-sand transition group-hover:text-signal">
                   Try it free
                 </span>
                 <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-signal text-ink transition group-hover:brightness-110">

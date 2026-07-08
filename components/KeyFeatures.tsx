@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { BentoDotGrid, LandingSectionHeader } from "./landing/LandingPrimitives";
+import { BentoDotGrid, LandingHighlight, LandingSectionHeader } from "./landing/LandingPrimitives";
 import { pageContainerClass } from "./pageContainer";
 
 type Feature = {
@@ -17,34 +17,38 @@ const features: Feature[] = [
   {
     title: "Text & logo",
     description:
-      "Type your text or drop in your logo. Tile it, position it, style it — see it update live.",
+      "Type your text or drop in your logo to watermark your content in seconds.",
     href: "/watermark",
     image: "/Sonos.jpeg",
   },
   {
-    title: "Batch export",
+    title: "Batch export & PDF",
     description:
-      "Upload a folder, not a file. Apply the same watermark to every photo in one pass.",
+      "Upload a folder of photos or a multi-page PDF. Apply the same watermark to every image in one pass, preview every page, and export in your browser.",
     href: "/watermark",
     image: "/Batch%20Pics.jpeg",
   },
   {
-    title: "PDF support",
+    title: "Sign your documents",
     description:
-      "Upload a PDF, preview every page, and export a fully watermarked document in your browser.",
+      "Draw your signature or type it in a handwriting style, save it for reuse, and drag it onto any photo, video, or PDF — perfect for signing contracts and agreements.",
     href: "/watermark",
-    image: "/Shoes.jpeg",
+    image: "/Tablet_signing.jpeg",
   },
 ];
 
 export function KeyFeatures() {
   return (
-    <section className="w-full border-t border-white/10 bg-ink py-24 text-paper">
+    <section className="landing-section">
       <div className={pageContainerClass}>
         <LandingSectionHeader
-          aside="Every feature is designed to solve real watermarking problems, not add clutter."
           index="002"
-          lead="No bloat. Just the tools that matter."
+          lead={
+            <>
+              No bloat. Just the{" "}
+              <LandingHighlight>tools that matter</LandingHighlight>.
+            </>
+          }
           title="Everything you need"
         />
 
@@ -67,7 +71,7 @@ function FeatureCard({
 }) {
   return (
     <motion.article
-      className="group flex flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-charcoal/40"
+      className="group flex flex-col overflow-hidden rounded-[2rem] landing-surface"
       initial={{ opacity: 0, y: 28 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.2 }}
@@ -83,14 +87,34 @@ function FeatureCard({
 
       <div className="flex flex-col p-8 md:p-9">
         <div className="flex items-start justify-between gap-4">
-          <h3 className="text-2xl font-semibold tracking-[-0.03em] text-paper md:text-[1.65rem]">
+          <h3 className="text-2xl font-semibold tracking-[-0.03em] text-beige md:text-[1.65rem]">
             {feature.title}
           </h3>
           <BentoDotGrid />
         </div>
 
-        <p className="mt-5 max-w-[18rem] text-sm leading-6 text-paper/70 md:text-[0.95rem] md:leading-7">
-          {feature.description}
+        <p className="landing-muted mt-5 max-w-[18rem] text-sm leading-6 md:text-[0.95rem] md:leading-7">
+          {feature.title === "Text & logo" ? (
+            <>
+              Type your text or drop in your{" "}
+              <LandingHighlight>logo</LandingHighlight> to watermark your content in
+              seconds.
+            </>
+          ) : feature.title === "Batch export & PDF" ? (
+            <>
+              Upload a folder of photos or a{" "}
+              <LandingHighlight>multi-page PDF</LandingHighlight>. Apply the same
+              watermark to every image in one pass, preview every page, and export in
+              your browser.
+            </>
+          ) : (
+            <>
+              Draw your signature or type it in a handwriting style, save it for reuse,
+              and drag it onto any{" "}
+              <LandingHighlight>photo, video, or PDF</LandingHighlight> — perfect for
+              signing contracts and agreements.
+            </>
+          )}
         </p>
         <Link
           aria-label={`Open ${feature.title}`}
