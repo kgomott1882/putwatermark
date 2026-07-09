@@ -40,8 +40,8 @@ function RailItem({ active, disabled, icon, label, onClick }: RailItemProps) {
     <button
       className={`group relative flex w-full flex-col items-center gap-1 px-1 py-2.5 text-[9px] font-semibold uppercase tracking-[0.08em] transition disabled:cursor-not-allowed disabled:opacity-35 ${
         active
-          ? "bg-white/12 text-beige"
-          : "text-beige-dim hover:bg-white/8 hover:text-beige"
+          ? "bg-beige/10 text-beige"
+          : "text-beige-dim hover:bg-beige/5 hover:text-beige"
       }`}
       disabled={disabled}
       onClick={onClick}
@@ -50,7 +50,7 @@ function RailItem({ active, disabled, icon, label, onClick }: RailItemProps) {
       {active ? (
         <span
           aria-hidden
-          className="absolute bottom-2 left-0 top-2 w-0.5 rounded-r bg-editor-accent"
+          className="absolute bottom-2 left-0 top-2 w-0.5 rounded-r bg-signal"
         />
       ) : null}
       <span className="flex h-5 w-5 items-center justify-center">{icon}</span>
@@ -77,11 +77,11 @@ export function ToolIconRail({
   return (
     <nav
       aria-label="Editor tools"
-      className="flex h-full w-[4.5rem] shrink-0 flex-col border-r border-black/10 bg-editor-rail"
+      className="flex h-full w-[4.5rem] shrink-0 flex-col border-r border-beige/10 bg-editor-rail"
     >
       <div className="flex flex-1 flex-col">
         <Link
-          className="flex flex-col items-center gap-1 px-1 py-3 text-[9px] font-semibold uppercase tracking-[0.08em] text-beige-dim transition hover:bg-white/8 hover:text-beige"
+          className="flex flex-col items-center gap-1 px-1 py-3 text-[9px] font-semibold uppercase tracking-[0.08em] text-beige-dim transition hover:bg-beige/5 hover:text-beige"
           href="/"
           title="Home"
         >
@@ -122,7 +122,7 @@ export function ToolIconRail({
       </div>
 
       <Link
-        className="mx-2 mb-3 flex flex-col items-center gap-1 rounded-xl bg-editor-accent px-1 py-2.5 text-[9px] font-bold uppercase tracking-[0.08em] text-white shadow-md transition hover:brightness-105"
+        className="mx-2 mb-3 flex flex-col items-center gap-1 rounded-xl bg-signal px-1 py-2.5 text-[9px] font-bold uppercase tracking-[0.08em] text-white shadow-md transition hover:brightness-110"
         href="/pricing"
       >
         <Crown className="h-4 w-4" strokeWidth={2} />

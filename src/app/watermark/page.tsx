@@ -66,7 +66,7 @@ import {
 } from "../../lib/imageEffects";
 import {
   buildPdfPageThumbnails,
-  loadPdfDocument,
+  loadPdfDocumentFromBytes,
   renderPdfPagePreview,
   type PdfPageThumbnail,
 } from "../../lib/pdfPreview";
@@ -75,6 +75,8 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BookmarkPlus,
+  ChevronLeft,
+  ChevronRight,
   Crop,
   Droplets,
   Images,
@@ -83,6 +85,7 @@ import {
   RotateCw,
   Sparkles,
   Star,
+  Trash2,
   X,
 } from "lucide-react";
 import { EditorBottomBar } from "../../../components/watermark/EditorBottomBar";
@@ -100,7 +103,17 @@ import {
   SignatureControls,
   type SavedSignature,
 } from "../../../components/watermark/SignatureControls";
+import { WatermarkLayersPanel } from "../../../components/watermark/WatermarkLayersPanel";
 import { WatermarkStyleControls } from "../../../components/watermark/WatermarkStyleControls";
+import {
+  createDefaultLogoLayer,
+  createDefaultTextLayer,
+  legacySnapshotToLogoLayer,
+  legacySnapshotToTextLayer,
+  revokeLogoLayerUrls,
+  type LogoWatermarkLayer,
+  type TextWatermarkLayer,
+} from "../../lib/watermarkLayers";
 import {
   type EditorPanelId,
   ToolIconRail,
@@ -108,6 +121,7 @@ import {
 import {
   type DragEvent,
   type PointerEvent,
+  type ReactNode,
   useEffect,
   useRef,
   useState,
@@ -206,6 +220,8 @@ type RgbaColor = {
 };
 
 type WatermarkSettingsSnapshot = {
+  activeLogoLayerId?: string;
+  activeTextLayerId?: string;
   backgroundRemovedLogoImage: HTMLImageElement | null;
   customPosition: CustomPosition | null;
   fontFamily: string;
@@ -213,7 +229,9 @@ type WatermarkSettingsSnapshot = {
   isLogoBackgroundRemoved: boolean;
   logoFileName: string;
   logoImage: HTMLImageElement | null;
+  logoLayers?: LogoWatermarkLayer[];
   originalLogoImage: HTMLImageElement | null;
+  textLayers?: TextWatermarkLayer[];
   tileAngle: TileAngle;
   tileDensity: TileDensity;
   tileGap: number;
@@ -388,8 +406,10 @@ export default function WatermarkPage() {
   const objectUrlRef = useRef<string | null>(null);
   const logoObjectUrlRef = useRef<string | null>(null);
   const textBoundsRef = useRef<TextBounds | null>(null);
+  const layerBoundsRef = useRef<Map<string, TextBounds>>(new Map());
   const imageFrameRef = useRef<ImageFrame | null>(null);
   const isDraggingRef = useRef(false);
+  const draggingLayerIdRef = useRef<string | null>(null);
   const settingsHistoryRef = useRef<WatermarkSettingsSnapshot[]>([]);
   const settingsHistoryIndexRef = useRef(0);
   const settingsHistoryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -407,6 +427,7 @@ export default function WatermarkPage() {
   const sessionRestoreRef = useRef<StoredEditorSessionMeta | null>(null);
   const isRestoringSessionRef = useRef(false);
   const sessionSaveRef = useRef<(() => Promise<void>) | null>(null);
+  const mediaLoadGenerationRef = useRef(0);
   const cropDragRef = useRef<{
     mode: CropDragMode;
     origin: { x: number; y: number };
@@ -466,6 +487,16 @@ export default function WatermarkPage() {
   const [showRestoredSettingsNotice, setShowRestoredSettingsNotice] =
     useState(false);
   const [watermarkType, setWatermarkType] = useState<WatermarkType>("text");
+  const initialTextLayer = createDefaultTextLayer();
+  const initialLogoLayer = createDefaultLogoLayer();
+  const [textLayers, setTextLayers] = useState<TextWatermarkLayer[]>([
+    initialTextLayer,
+  ]);
+  const [logoLayers, setLogoLayers] = useState<LogoWatermarkLayer[]>([
+    initialLogoLayer,
+  ]);
+  const [activeTextLayerId, setActiveTextLayerId] = useState(initialTextLayer.id);
+  const [activeLogoLayerId, setActiveLogoLayerId] = useState(initialLogoLayer.id);
   const [watermarkText, setWatermarkText] = useState("");
   const [originalLogoImage, setOriginalLogoImage] =
     useState<HTMLImageElement | null>(null);
@@ -531,12 +562,12 @@ export default function WatermarkPage() {
   }
 
   useEffect(() => {
-    let cancelled = false;
+    const loadGeneration = ++mediaLoadGenerationRef.current;
 
     async function bootstrapEditor() {
       const handoffFiles = await consumeEditorHandoffFiles();
 
-      if (cancelled) {
+      if (loadGeneration !== mediaLoadGenerationRef.current) {
         return;
       }
 
@@ -547,7 +578,7 @@ export default function WatermarkPage() {
 
       const session = await readEditorSession();
 
-      if (cancelled || !session) {
+      if (loadGeneration !== mediaLoadGenerationRef.current || !session) {
         return;
       }
 
@@ -559,7 +590,8 @@ export default function WatermarkPage() {
     void bootstrapEditor();
 
     return () => {
-      cancelled = true;
+      mediaLoadGenerationRef.current += 1;
+      setIsPdfLoading(false);
     };
   }, []);
 
@@ -656,24 +688,7 @@ export default function WatermarkPage() {
   }, [imageBatch]);
 
   useEffect(() => {
-    const snapshot: WatermarkSettingsSnapshot = {
-      backgroundRemovedLogoImage,
-      customPosition: customPosition ? { ...customPosition } : null,
-      fontFamily,
-      fontSizeScale,
-      isLogoBackgroundRemoved,
-      logoFileName,
-      logoImage,
-      originalLogoImage,
-      tileAngle,
-      tileDensity,
-      tileGap,
-      watermarkMode,
-      watermarkOpacity,
-      watermarkPosition,
-      watermarkText,
-      watermarkType,
-    };
+    const snapshot = getWatermarkSettingsSnapshot();
 
     if (!settingsHistoryRef.current.length) {
       commitSettingsHistorySnapshot(snapshot);
@@ -700,21 +715,14 @@ export default function WatermarkPage() {
       }
     };
   }, [
-    backgroundRemovedLogoImage,
-    customPosition,
-    fontFamily,
-    fontSizeScale,
-    isLogoBackgroundRemoved,
-    logoFileName,
-    logoImage,
-    originalLogoImage,
+    activeLogoLayerId,
+    activeTextLayerId,
+    logoLayers,
+    textLayers,
     tileAngle,
     tileDensity,
     tileGap,
     watermarkMode,
-    watermarkOpacity,
-    watermarkPosition,
-    watermarkText,
     watermarkType,
   ]);
 
@@ -793,90 +801,36 @@ export default function WatermarkPage() {
     );
     context.restore();
 
-    const drawable = getDrawableWatermark({
+    const { activeBounds, boundsByLayer } = paintWatermarkLayers({
+      activeLayerId:
+        watermarkType === "text"
+          ? activeTextLayerId
+          : watermarkType === "logo"
+            ? activeLogoLayerId
+            : activeTextLayerId,
+      canvasHeight: canvas.height,
+      canvasWidth: canvas.width,
       context,
-      fontFamily,
-      fontSizeScale,
+      imageHeight,
       imageWidth,
-      logoImage,
-      watermarkText,
+      imageX,
+      imageY,
+      logoLayers,
+      signatureFontSizeScale: fontSizeScale,
+      signatureImage: watermarkType === "signature" ? logoImage : null,
+      signatureOpacity: watermarkOpacity,
+      signaturePosition: watermarkPosition,
+      signatureCustomPosition: customPosition,
+      textLayers,
+      tileAngle,
+      tileDensity,
+      tileGap,
+      watermarkMode,
       watermarkType,
     });
 
-    if (!drawable) {
-      textBoundsRef.current = null;
-      drawCropOverlay({
-        context,
-        cropRect,
-        frame: imageFrame,
-        image,
-        isActive: activeImageTool === "crop",
-      });
-      return;
-    }
-
-    const alpha = watermarkOpacity / 100;
-
-    if (watermarkMode === "tile") {
-      textBoundsRef.current = null;
-      drawTiledWatermark({
-        alpha,
-        context,
-        drawable,
-        angle: tileAngle,
-        imageHeight,
-        imageWidth,
-        imageX,
-        imageY,
-        density: tileDensity,
-        gap: tileGap,
-      });
-      drawCropOverlay({
-        context,
-        cropRect,
-        frame: imageFrame,
-        image,
-        isActive: activeImageTool === "crop",
-      });
-      return;
-    }
-
-    const padding = Math.max(24, drawable.height * 0.9);
-    const { x, y, textAlign, textBaseline } = customPosition
-      ? {
-          x: customPosition.xPercent * canvas.width,
-          y: customPosition.yPercent * canvas.height,
-          textAlign: "center" as CanvasTextAlign,
-          textBaseline: "middle" as CanvasTextBaseline,
-        }
-      : getWatermarkCoordinates({
-          fontSize: drawable.height,
-          imageHeight,
-          imageWidth,
-          imageX,
-          imageY,
-          padding,
-          position: watermarkPosition,
-        });
-
-    context.save();
-    textBoundsRef.current = getDrawableBounds({
-      drawable,
-      textAlign,
-      textBaseline,
-      x,
-      y,
-    });
-    drawWatermarkDrawable({
-      alpha,
-      context,
-      drawable,
-      textAlign,
-      textBaseline,
-      x,
-      y,
-    });
-    context.restore();
+    layerBoundsRef.current = boundsByLayer;
+    textBoundsRef.current = activeBounds;
     drawCropOverlay({
       context,
       cropRect,
@@ -906,23 +860,36 @@ export default function WatermarkPage() {
     canvas.width = videoOverlaySize.width;
     canvas.height = videoOverlaySize.height;
     context.clearRect(0, 0, canvas.width, canvas.height);
-    textBoundsRef.current = drawWatermarkOnly({
+    const { activeBounds, boundsByLayer } = paintWatermarkLayers({
+      activeLayerId:
+        watermarkType === "text"
+          ? activeTextLayerId
+          : watermarkType === "logo"
+            ? activeLogoLayerId
+            : activeTextLayerId,
+      canvasHeight: canvas.height,
+      canvasWidth: canvas.width,
       context,
-      customPosition,
-      fontFamily,
-      fontSizeScale,
-      height: canvas.height,
-      logoImage,
+      imageHeight: canvas.height,
+      imageWidth: canvas.width,
+      imageX: 0,
+      imageY: 0,
+      logoLayers,
+      signatureFontSizeScale: fontSizeScale,
+      signatureImage: watermarkType === "signature" ? logoImage : null,
+      signatureOpacity: watermarkOpacity,
+      signaturePosition: watermarkPosition,
+      signatureCustomPosition: customPosition,
+      textLayers,
       tileAngle,
       tileDensity,
       tileGap,
       watermarkMode,
-      watermarkOpacity,
-      watermarkPosition,
-      watermarkText,
       watermarkType,
-      width: canvas.width,
     });
+
+    layerBoundsRef.current = boundsByLayer;
+    textBoundsRef.current = activeBounds;
   });
 
   function getImageEffectSettings(): ImageEffectSettings {
@@ -1159,8 +1126,12 @@ export default function WatermarkPage() {
       return;
     }
 
+    const loadGeneration = ++mediaLoadGenerationRef.current;
+
     setUploadError("");
     setIsPdfLoading(true);
+    setFileName(file.name);
+    setMediaKind("pdf");
 
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
@@ -1174,23 +1145,37 @@ export default function WatermarkPage() {
     setVideoDuration(0);
     setVideoSize(null);
     setVideoFileSize(0);
-    setMediaKind(null);
-    setFileName("");
+    setPdfPages([]);
+    setPdfPageCount(0);
+    setActivePdfPageId(null);
+    pdfDocRef.current = null;
+    pdfBytesRef.current = null;
 
     try {
       const pdfBytes = new Uint8Array(await file.arrayBuffer());
-      const pdfDocument = await loadPdfDocument(file);
-      const pages = await buildPdfPageThumbnails(pdfDocument);
+
+      if (loadGeneration !== mediaLoadGenerationRef.current) {
+        return;
+      }
+
+      const pdfDocument = await loadPdfDocumentFromBytes(pdfBytes);
+
+      if (loadGeneration !== mediaLoadGenerationRef.current) {
+        return;
+      }
 
       pdfBytesRef.current = pdfBytes;
       pdfDocRef.current = pdfDocument;
       setMediaKind("pdf");
       setFileName(file.name);
       setPdfPageCount(pdfDocument.numPages);
-      setPdfPages(pages);
-      setActivePdfPageId(pages[0]?.id ?? null);
+      setActivePdfPageId("pdf-page-1");
 
       const firstPage = await renderPdfPagePreview(pdfDocument, 1);
+
+      if (loadGeneration !== mediaLoadGenerationRef.current) {
+        return;
+      }
 
       setImage(firstPage.image);
       setUploadedImageSize({
@@ -1205,7 +1190,31 @@ export default function WatermarkPage() {
       setCropRect(null);
       setIsWatermarkHovering(false);
       finishMediaLoad();
+
+      void buildPdfPageThumbnails(pdfDocument)
+        .then((pages) => {
+          if (loadGeneration !== mediaLoadGenerationRef.current) {
+            return;
+          }
+
+          setPdfPages(pages);
+        })
+        .catch((error) => {
+          if (loadGeneration !== mediaLoadGenerationRef.current) {
+            return;
+          }
+
+          setUploadError(
+            error instanceof Error
+              ? error.message
+              : "We could not build PDF page previews.",
+          );
+        });
     } catch (error) {
+      if (loadGeneration !== mediaLoadGenerationRef.current) {
+        return;
+      }
+
       clearPdfState();
       setMediaKind(null);
       setFileName("");
@@ -1217,7 +1226,9 @@ export default function WatermarkPage() {
           : "We could not load that PDF. Please try another file.",
       );
     } finally {
-      setIsPdfLoading(false);
+      if (loadGeneration === mediaLoadGenerationRef.current) {
+        setIsPdfLoading(false);
+      }
     }
   }
 
@@ -1291,15 +1302,19 @@ export default function WatermarkPage() {
     useResizePreview: boolean,
   ): ExportRenderInput {
     return {
+      activeLogoLayerId,
+      activeTextLayerId,
       customPosition,
       fontFamily,
       fontSizeScale,
       image: imageElement,
       imageEffectSettings: getImageEffectSettings(),
       logoImage,
+      logoLayers,
       resizeHeight: entryResizeHeight,
       resizeWidth: entryResizeWidth,
       rotationAngle: entryRotationAngle,
+      textLayers,
       tileAngle,
       tileDensity,
       tileGap,
@@ -1466,23 +1481,174 @@ export default function WatermarkPage() {
     return shouldIgnoreManualSettingsRef.current;
   }
 
+  const activeTextLayer =
+    textLayers.find((layer) => layer.id === activeTextLayerId) ?? textLayers[0];
+  const activeLogoLayer =
+    logoLayers.find((layer) => layer.id === activeLogoLayerId) ?? logoLayers[0];
+
+  function syncLegacyFromTextLayer(layer: TextWatermarkLayer) {
+    setWatermarkText(layer.text);
+    setWatermarkOpacity(layer.opacity);
+    setFontFamily(layer.fontFamily);
+    setFontSizeScale(layer.fontSizeScale);
+    setWatermarkPosition(layer.watermarkPosition);
+    setCustomPosition(
+      layer.customPosition ? { ...layer.customPosition } : null,
+    );
+  }
+
+  function syncLegacyFromLogoLayer(layer: LogoWatermarkLayer) {
+    setLogoImage(layer.logoImage);
+    setOriginalLogoImage(layer.originalLogoImage);
+    setBackgroundRemovedLogoImage(layer.backgroundRemovedLogoImage);
+    setLogoFileName(layer.logoFileName);
+    setIsLogoBackgroundRemoved(layer.isLogoBackgroundRemoved);
+    setWatermarkOpacity(layer.opacity);
+    setFontSizeScale(layer.fontSizeScale);
+    setWatermarkPosition(layer.watermarkPosition);
+    setCustomPosition(
+      layer.customPosition ? { ...layer.customPosition } : null,
+    );
+  }
+
+  function setLayerCustomPosition(
+    layerId: string,
+    canvas: HTMLCanvasElement,
+    point: { x: number; y: number },
+  ) {
+    const position = {
+      xPercent: point.x / canvas.width,
+      yPercent: point.y / canvas.height,
+    };
+
+    if (watermarkType === "text") {
+      updateTextLayer(layerId, { customPosition: position });
+      syncLegacyFromTextLayer({
+        ...activeTextLayer,
+        customPosition: position,
+      });
+      return;
+    }
+
+    if (watermarkType === "logo") {
+      updateLogoLayer(layerId, { customPosition: position });
+      syncLegacyFromLogoLayer({
+        ...activeLogoLayer,
+        customPosition: position,
+      });
+      return;
+    }
+
+    setCustomPosition(position);
+  }
+
+  function updateTextLayer(
+    layerId: string,
+    patch: Partial<TextWatermarkLayer>,
+  ) {
+    clearActiveTemplate();
+    setTextLayers((layers) =>
+      layers.map((layer) =>
+        layer.id === layerId ? { ...layer, ...patch } : layer,
+      ),
+    );
+  }
+
+  function updateLogoLayer(
+    layerId: string,
+    patch: Partial<LogoWatermarkLayer>,
+  ) {
+    clearActiveTemplate();
+    setLogoLayers((layers) =>
+      layers.map((layer) =>
+        layer.id === layerId ? { ...layer, ...patch } : layer,
+      ),
+    );
+  }
+
+  function addTextLayer() {
+    if (watermarkMode !== "single") {
+      return;
+    }
+
+    const nextLayer = createDefaultTextLayer();
+    setTextLayers((layers) => [...layers, nextLayer]);
+    setActiveTextLayerId(nextLayer.id);
+    setIsWatermarkHovering(false);
+  }
+
+  function addLogoLayer() {
+    if (watermarkMode !== "single") {
+      return;
+    }
+
+    const nextLayer = createDefaultLogoLayer();
+    setLogoLayers((layers) => [...layers, nextLayer]);
+    setActiveLogoLayerId(nextLayer.id);
+    setIsWatermarkHovering(false);
+  }
+
+  function removeTextLayer(layerId: string) {
+    if (textLayers.length <= 1) {
+      return;
+    }
+
+    const removed = textLayers.find((layer) => layer.id === layerId);
+
+    if (removed) {
+      // no-op placeholder for future cleanup
+    }
+
+    const remaining = textLayers.filter((layer) => layer.id !== layerId);
+    setTextLayers(remaining);
+
+    if (activeTextLayerId === layerId) {
+      setActiveTextLayerId(remaining[0]?.id ?? activeTextLayerId);
+    }
+  }
+
+  function removeLogoLayer(layerId: string) {
+    if (logoLayers.length <= 1) {
+      return;
+    }
+
+    const removed = logoLayers.find((layer) => layer.id === layerId);
+
+    if (removed) {
+      revokeLogoLayerUrls(removed);
+    }
+
+    const remaining = logoLayers.filter((layer) => layer.id !== layerId);
+    setLogoLayers(remaining);
+
+    if (activeLogoLayerId === layerId) {
+      setActiveLogoLayerId(remaining[0]?.id ?? activeLogoLayerId);
+    }
+  }
+
   function getWatermarkSettingsSnapshot(): WatermarkSettingsSnapshot {
     return {
-      backgroundRemovedLogoImage,
-      customPosition: customPosition ? { ...customPosition } : null,
-      fontFamily,
-      fontSizeScale,
-      isLogoBackgroundRemoved,
-      logoFileName,
-      logoImage,
-      originalLogoImage,
+      activeLogoLayerId,
+      activeTextLayerId,
+      backgroundRemovedLogoImage: activeLogoLayer.backgroundRemovedLogoImage,
+      customPosition: activeTextLayer.customPosition
+        ? { ...activeTextLayer.customPosition }
+        : null,
+      fontFamily: activeTextLayer.fontFamily,
+      fontSizeScale: activeTextLayer.fontSizeScale,
+      isLogoBackgroundRemoved: activeLogoLayer.isLogoBackgroundRemoved,
+      logoFileName: activeLogoLayer.logoFileName,
+      logoImage: activeLogoLayer.logoImage,
+      logoLayers: logoLayers.map((layer) => ({ ...layer })),
+      originalLogoImage: activeLogoLayer.originalLogoImage,
+      textLayers: textLayers.map((layer) => ({ ...layer })),
       tileAngle,
       tileDensity,
       tileGap,
       watermarkMode,
-      watermarkOpacity,
-      watermarkPosition,
-      watermarkText,
+      watermarkOpacity: activeTextLayer.opacity,
+      watermarkPosition: activeTextLayer.watermarkPosition,
+      watermarkText: activeTextLayer.text,
       watermarkType,
     };
   }
@@ -1495,25 +1661,65 @@ export default function WatermarkPage() {
       isApplyingSettingsHistoryRef.current = true;
     }
 
-    setOriginalLogoImage(snapshot.originalLogoImage);
-    setLogoImage(snapshot.logoImage);
-    setBackgroundRemovedLogoImage(snapshot.backgroundRemovedLogoImage);
-    setLogoFileName(snapshot.logoFileName);
-    setIsLogoBackgroundRemoved(snapshot.isLogoBackgroundRemoved);
+    const nextTextLayers = snapshot.textLayers?.length
+      ? snapshot.textLayers.map((layer) => ({ ...layer }))
+      : [
+          legacySnapshotToTextLayer({
+            customPosition: snapshot.customPosition,
+            fontFamily: snapshot.fontFamily,
+            fontSizeScale: snapshot.fontSizeScale,
+            watermarkOpacity: snapshot.watermarkOpacity,
+            watermarkPosition: snapshot.watermarkPosition,
+            watermarkText: snapshot.watermarkText,
+          }),
+        ];
+    const nextLogoLayers = snapshot.logoLayers?.length
+      ? snapshot.logoLayers.map((layer) => ({ ...layer }))
+      : [
+          legacySnapshotToLogoLayer({
+            backgroundRemovedLogoImage: snapshot.backgroundRemovedLogoImage,
+            customPosition: snapshot.customPosition,
+            fontSizeScale: snapshot.fontSizeScale,
+            isLogoBackgroundRemoved: snapshot.isLogoBackgroundRemoved,
+            logoFileName: snapshot.logoFileName,
+            logoImage: snapshot.logoImage,
+            originalLogoImage: snapshot.originalLogoImage,
+            watermarkOpacity: snapshot.watermarkOpacity,
+            watermarkPosition: snapshot.watermarkPosition,
+          }),
+        ];
+
+    setTextLayers(nextTextLayers);
+    setLogoLayers(nextLogoLayers);
+    setActiveTextLayerId(
+      snapshot.activeTextLayerId ?? nextTextLayers[0]?.id ?? activeTextLayerId,
+    );
+    setActiveLogoLayerId(
+      snapshot.activeLogoLayerId ?? nextLogoLayers[0]?.id ?? activeLogoLayerId,
+    );
+
+    const primaryTextLayer = nextTextLayers[0];
+    const primaryLogoLayer = nextLogoLayers[0];
+
+    setOriginalLogoImage(primaryLogoLayer.originalLogoImage);
+    setLogoImage(primaryLogoLayer.logoImage);
+    setBackgroundRemovedLogoImage(primaryLogoLayer.backgroundRemovedLogoImage);
+    setLogoFileName(primaryLogoLayer.logoFileName);
+    setIsLogoBackgroundRemoved(primaryLogoLayer.isLogoBackgroundRemoved);
     setLogoBackgroundMessage("");
     setWatermarkType(snapshot.watermarkType);
-    setWatermarkText(snapshot.watermarkText);
+    setWatermarkText(primaryTextLayer.text);
     setWatermarkMode(snapshot.watermarkMode);
-    setWatermarkPosition(snapshot.watermarkPosition);
+    setWatermarkPosition(primaryTextLayer.watermarkPosition);
     setCustomPosition(
-      snapshot.customPosition ? { ...snapshot.customPosition } : null,
+      primaryTextLayer.customPosition ? { ...primaryTextLayer.customPosition } : null,
     );
     setTileDensity(snapshot.tileDensity);
     setTileGap(snapshot.tileGap);
     setTileAngle(snapshot.tileAngle);
-    setWatermarkOpacity(snapshot.watermarkOpacity);
-    setFontSizeScale(snapshot.fontSizeScale);
-    setFontFamily(snapshot.fontFamily);
+    setWatermarkOpacity(primaryTextLayer.opacity);
+    setFontSizeScale(primaryTextLayer.fontSizeScale);
+    setFontFamily(primaryTextLayer.fontFamily);
     setIsWatermarkHovering(false);
   }
 
@@ -1828,6 +2034,18 @@ export default function WatermarkPage() {
       customPosition: null,
       fontFamily: template.fontFamily,
       fontSizeScale: template.fontSizeScale,
+      textLayers: currentSnapshot.textLayers?.map((layer) =>
+        layer.id === currentSnapshot.activeTextLayerId
+          ? {
+              ...layer,
+              customPosition: null,
+              fontFamily: template.fontFamily,
+              fontSizeScale: template.fontSizeScale,
+              opacity: template.opacity,
+              watermarkPosition: template.position,
+            }
+          : layer,
+      ),
       tileAngle: template.tileAngle,
       tileDensity: template.density,
       tileGap: template.tileGap,
@@ -1902,19 +2120,29 @@ export default function WatermarkPage() {
 
     if (
       watermarkType === "text" &&
-      !watermarkText.trim() &&
+      !textLayers.some((layer) => layer.text.trim()) &&
       watermarkMode === "single"
     ) {
       setExportError("Add watermark text before exporting.");
       return;
     }
 
-    if (isImageWatermarkType(watermarkType) && !logoImage) {
-      setExportError(
-        watermarkType === "signature"
-          ? "Add a signature before exporting."
-          : "Upload a logo before exporting.",
-      );
+    if (
+      watermarkType === "text" &&
+      watermarkMode === "tile" &&
+      !activeTextLayer.text.trim()
+    ) {
+      setExportError("Add watermark text before exporting.");
+      return;
+    }
+
+    if (watermarkType === "logo" && !logoLayers.some((layer) => layer.logoImage)) {
+      setExportError("Upload a logo before exporting.");
+      return;
+    }
+
+    if (watermarkType === "signature" && !logoImage) {
+      setExportError("Add a signature before exporting.");
       return;
     }
 
@@ -1924,10 +2152,14 @@ export default function WatermarkPage() {
     setPdfExportProgress({ current: 0, total: pdfPageCount });
 
     const watermarkInput = {
+      activeLogoLayerId,
+      activeTextLayerId,
       customPosition,
       fontFamily,
       fontSizeScale,
       logoImage,
+      logoLayers,
+      textLayers,
       tileAngle,
       tileDensity,
       tileGap,
@@ -1996,19 +2228,29 @@ export default function WatermarkPage() {
 
     if (
       watermarkType === "text" &&
-      !watermarkText.trim() &&
+      !textLayers.some((layer) => layer.text.trim()) &&
       watermarkMode === "single"
     ) {
       setExportError("Add watermark text before exporting.");
       return;
     }
 
-    if (isImageWatermarkType(watermarkType) && !logoImage) {
-      setExportError(
-        watermarkType === "signature"
-          ? "Add a signature before exporting."
-          : "Upload a logo before exporting.",
-      );
+    if (
+      watermarkType === "text" &&
+      watermarkMode === "tile" &&
+      !activeTextLayer.text.trim()
+    ) {
+      setExportError("Add watermark text before exporting.");
+      return;
+    }
+
+    if (watermarkType === "logo" && !logoLayers.some((layer) => layer.logoImage)) {
+      setExportError("Upload a logo before exporting.");
+      return;
+    }
+
+    if (watermarkType === "signature" && !logoImage) {
+      setExportError("Add a signature before exporting.");
       return;
     }
 
@@ -2025,11 +2267,15 @@ export default function WatermarkPage() {
 
     try {
       const overlayCanvas = renderWatermarkOverlayCanvas({
+        activeLogoLayerId,
+        activeTextLayerId,
         customPosition,
         fontFamily,
         fontSizeScale,
         height: videoSize.height,
         logoImage,
+        logoLayers,
+        textLayers,
         tileAngle,
         tileDensity,
         tileGap,
@@ -2184,6 +2430,43 @@ export default function WatermarkPage() {
     }
 
     const point = getCanvasPoint(event);
+    const boundsMap = layerBoundsRef.current;
+    const layerOrder =
+      watermarkType === "text"
+        ? [...textLayers].reverse()
+        : watermarkType === "logo"
+          ? [...logoLayers].reverse()
+          : [];
+
+    for (const layer of layerOrder) {
+      const bounds = boundsMap.get(layer.id);
+
+      if (point && bounds && isPointInBounds(point, bounds)) {
+        event.preventDefault();
+        isDraggingRef.current = true;
+        draggingLayerIdRef.current = layer.id;
+        clearActiveTemplate();
+        setIsDraggingWatermark(true);
+        setIsWatermarkHovering(true);
+        event.currentTarget.setPointerCapture(event.pointerId);
+
+        if (watermarkType === "text" && layer.id !== activeTextLayerId) {
+          setActiveTextLayerId(layer.id);
+          if (layer.type === "text") {
+            syncLegacyFromTextLayer(layer);
+          }
+        } else if (watermarkType === "logo" && layer.id !== activeLogoLayerId) {
+          setActiveLogoLayerId(layer.id);
+          if (layer.type === "logo") {
+            syncLegacyFromLogoLayer(layer);
+          }
+        }
+
+        setLayerCustomPosition(layer.id, event.currentTarget, point);
+        return;
+      }
+    }
+
     const bounds = textBoundsRef.current;
 
     if (!point || !bounds || !isPointInBounds(point, bounds)) {
@@ -2196,14 +2479,21 @@ export default function WatermarkPage() {
 
     event.preventDefault();
     isDraggingRef.current = true;
+    draggingLayerIdRef.current =
+      watermarkType === "text"
+        ? activeTextLayerId
+        : watermarkType === "logo"
+          ? activeLogoLayerId
+          : null;
     clearActiveTemplate();
     setIsDraggingWatermark(true);
     setIsWatermarkHovering(true);
     event.currentTarget.setPointerCapture(event.pointerId);
-    setCustomPosition({
-      xPercent: point.x / event.currentTarget.width,
-      yPercent: point.y / event.currentTarget.height,
-    });
+    setLayerCustomPosition(
+      draggingLayerIdRef.current ?? activeTextLayerId,
+      event.currentTarget,
+      point,
+    );
   }
 
   function handleCanvasPointerMove(event: PointerEvent<HTMLCanvasElement>) {
@@ -2224,10 +2514,16 @@ export default function WatermarkPage() {
     }
 
     event.preventDefault();
-    setCustomPosition({
-      xPercent: point.x / event.currentTarget.width,
-      yPercent: point.y / event.currentTarget.height,
-    });
+    setLayerCustomPosition(
+      draggingLayerIdRef.current ??
+        (watermarkType === "text"
+          ? activeTextLayerId
+          : watermarkType === "logo"
+            ? activeLogoLayerId
+            : activeTextLayerId),
+      event.currentTarget,
+      point,
+    );
   }
 
   function handleCanvasPointerUp(event: PointerEvent<HTMLCanvasElement>) {
@@ -2242,6 +2538,7 @@ export default function WatermarkPage() {
 
     event.preventDefault();
     isDraggingRef.current = false;
+    draggingLayerIdRef.current = null;
     setIsDraggingWatermark(false);
 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -2266,6 +2563,7 @@ export default function WatermarkPage() {
   function handleCanvasPointerCancel(event: PointerEvent<HTMLCanvasElement>) {
     cropDragRef.current = null;
     isDraggingRef.current = false;
+    draggingLayerIdRef.current = null;
     setIsDraggingWatermark(false);
     setIsWatermarkHovering(false);
 
@@ -2278,9 +2576,18 @@ export default function WatermarkPage() {
     point: { x: number; y: number } | null,
     mode: WatermarkMode,
   ) {
-    const bounds = textBoundsRef.current;
+    if (mode !== "single" || !point) {
+      return false;
+    }
 
-    return mode === "single" && Boolean(point && bounds && isPointInBounds(point, bounds));
+    for (const bounds of layerBoundsRef.current.values()) {
+      if (isPointInBounds(point, bounds)) {
+        return true;
+      }
+    }
+
+    const bounds = textBoundsRef.current;
+    return Boolean(bounds && isPointInBounds(point, bounds));
   }
 
   function handleCropPointerDown(event: PointerEvent<HTMLCanvasElement>) {
@@ -2423,6 +2730,12 @@ export default function WatermarkPage() {
     }
 
     void openImageToolPanel(panel);
+  }
+
+  function removeLoadedMedia() {
+    mediaLoadGenerationRef.current += 1;
+    setIsPdfLoading(false);
+    clearAllMedia();
   }
 
   function clearAllMedia() {
@@ -2753,15 +3066,26 @@ export default function WatermarkPage() {
 
     setLogoError("");
 
-    if (logoObjectUrlRef.current) {
-      URL.revokeObjectURL(logoObjectUrlRef.current);
+    const activeLayer =
+      logoLayers.find((layer) => layer.id === activeLogoLayerId) ?? activeLogoLayer;
+
+    if (activeLayer.logoObjectUrl) {
+      URL.revokeObjectURL(activeLayer.logoObjectUrl);
     }
 
     const objectUrl = URL.createObjectURL(file);
     const nextLogo = new Image();
 
-    logoObjectUrlRef.current = objectUrl;
     nextLogo.onload = () => {
+      updateLogoLayer(activeLogoLayerId, {
+        backgroundRemovedLogoImage: null,
+        customPosition: null,
+        isLogoBackgroundRemoved: false,
+        logoFileName: file.name,
+        logoImage: nextLogo,
+        logoObjectUrl: objectUrl,
+        originalLogoImage: nextLogo,
+      });
       setOriginalLogoImage(nextLogo);
       setLogoImage(nextLogo);
       setBackgroundRemovedLogoImage(null);
@@ -2773,32 +3097,43 @@ export default function WatermarkPage() {
     };
     nextLogo.onerror = () => {
       URL.revokeObjectURL(objectUrl);
-      logoObjectUrlRef.current = null;
       setLogoError("We could not load that logo. Please try another file.");
     };
     nextLogo.src = objectUrl;
   }
 
   function handleLogoBackgroundToggle() {
-    if (!originalLogoImage) {
+    const activeLayer =
+      logoLayers.find((layer) => layer.id === activeLogoLayerId) ?? activeLogoLayer;
+    const originalLogoImageForLayer = activeLayer.originalLogoImage;
+
+    if (!originalLogoImageForLayer) {
       return;
     }
 
-    if (isLogoBackgroundRemoved) {
-      setLogoImage(originalLogoImage);
+    if (activeLayer.isLogoBackgroundRemoved) {
+      updateLogoLayer(activeLogoLayerId, {
+        isLogoBackgroundRemoved: false,
+        logoImage: originalLogoImageForLayer,
+      });
+      setLogoImage(originalLogoImageForLayer);
       setIsLogoBackgroundRemoved(false);
       setLogoBackgroundMessage("");
       return;
     }
 
-    if (backgroundRemovedLogoImage) {
-      setLogoImage(backgroundRemovedLogoImage);
+    if (activeLayer.backgroundRemovedLogoImage) {
+      updateLogoLayer(activeLogoLayerId, {
+        isLogoBackgroundRemoved: true,
+        logoImage: activeLayer.backgroundRemovedLogoImage,
+      });
+      setLogoImage(activeLayer.backgroundRemovedLogoImage);
       setIsLogoBackgroundRemoved(true);
       setLogoBackgroundMessage("Best-effort background removal is on.");
       return;
     }
 
-    const result = createBackgroundRemovedLogo(originalLogoImage);
+    const result = createBackgroundRemovedLogo(originalLogoImageForLayer);
 
     if (!result) {
       setLogoBackgroundMessage(
@@ -2808,8 +3143,13 @@ export default function WatermarkPage() {
     }
 
     if (result.alreadyTransparent) {
-      setLogoImage(originalLogoImage);
-      setBackgroundRemovedLogoImage(originalLogoImage);
+      updateLogoLayer(activeLogoLayerId, {
+        backgroundRemovedLogoImage: originalLogoImageForLayer,
+        isLogoBackgroundRemoved: true,
+        logoImage: originalLogoImageForLayer,
+      });
+      setLogoImage(originalLogoImageForLayer);
+      setBackgroundRemovedLogoImage(originalLogoImageForLayer);
       setIsLogoBackgroundRemoved(true);
       setLogoBackgroundMessage("This logo already appears to have transparent corners.");
       return;
@@ -2818,6 +3158,11 @@ export default function WatermarkPage() {
     const cleanedLogo = new Image();
 
     cleanedLogo.onload = () => {
+      updateLogoLayer(activeLogoLayerId, {
+        backgroundRemovedLogoImage: cleanedLogo,
+        isLogoBackgroundRemoved: true,
+        logoImage: cleanedLogo,
+      });
       setBackgroundRemovedLogoImage(cleanedLogo);
       setLogoImage(cleanedLogo);
       setIsLogoBackgroundRemoved(true);
@@ -2832,11 +3177,22 @@ export default function WatermarkPage() {
   }
 
   function removeLogo() {
-    if (logoObjectUrlRef.current) {
-      URL.revokeObjectURL(logoObjectUrlRef.current);
-      logoObjectUrlRef.current = null;
+    const activeLayer =
+      logoLayers.find((layer) => layer.id === activeLogoLayerId) ?? activeLogoLayer;
+
+    if (activeLayer.logoObjectUrl) {
+      revokeLogoLayerUrls(activeLayer);
     }
 
+    updateLogoLayer(activeLogoLayerId, {
+      backgroundRemovedLogoImage: null,
+      customPosition: null,
+      isLogoBackgroundRemoved: false,
+      logoFileName: "",
+      logoImage: null,
+      logoObjectUrl: null,
+      originalLogoImage: null,
+    });
     setOriginalLogoImage(null);
     setLogoImage(null);
     setBackgroundRemovedLogoImage(null);
@@ -2861,11 +3217,9 @@ export default function WatermarkPage() {
 
       setLogoImage(activeSignature?.image ?? null);
     } else if (nextType === "logo") {
-      if (isLogoBackgroundRemoved && backgroundRemovedLogoImage) {
-        setLogoImage(backgroundRemovedLogoImage);
-      } else {
-        setLogoImage(originalLogoImage);
-      }
+      syncLegacyFromLogoLayer(activeLogoLayer);
+    } else if (nextType === "text") {
+      syncLegacyFromTextLayer(activeTextLayer);
     }
 
     setWatermarkType(nextType);
@@ -3100,7 +3454,7 @@ export default function WatermarkPage() {
         : null;
 
   return (
-    <main className="flex h-[100svh] w-full flex-col overflow-hidden bg-editor-panel text-ink">
+    <main className="editor-theme flex h-[100svh] w-full flex-col overflow-hidden">
       <motion.div
         className="grid min-h-0 flex-1 md:grid-cols-[auto_minmax(0,1fr)]"
         initial={{ opacity: 0, y: 16 }}
@@ -3180,60 +3534,88 @@ export default function WatermarkPage() {
                 <EditorCard>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-editor-muted">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-beige-dim">
                         {isPdfLoading
                           ? "Loading PDF..."
                           : isBatchImageMode
                             ? "Batch"
                             : "Loaded"}
                       </p>
-                      <p className="mt-1 truncate text-sm font-semibold text-editor-ink">
+                      <p className="mt-1 truncate text-sm font-semibold text-beige">
                         {isBatchImageMode ? `${imageBatch.length} images` : fileName}
                         {loadedMediaDetails ? (
-                          <span className="ml-1 font-normal text-editor-muted">
+                          <span className="ml-1 font-normal text-beige-dim">
                             {loadedMediaDetails}
                           </span>
                         ) : null}
                       </p>
                     </div>
 
-                    {!isPdfLoading ? (
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        <button
-                          aria-label={
-                            mediaKind === "pdf"
-                              ? "Choose a different PDF"
-                              : mediaKind === "video"
-                                ? "Choose a different video"
-                                : "Choose a different image"
-                          }
-                          className="flex h-9 w-9 items-center justify-center rounded-xl border border-editor-panel-border bg-white text-editor-muted transition hover:border-editor-accent hover:text-editor-accent"
-                          onClick={openReplaceMediaPicker}
-                          title={
-                            mediaKind === "pdf"
-                              ? "Change PDF"
-                              : mediaKind === "video"
-                                ? "Change video"
-                                : "Change image"
-                          }
-                          type="button"
-                        >
-                          <RefreshCw className="h-4 w-4" strokeWidth={2} />
-                        </button>
-
-                        {mediaKind === "image" ? (
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {!isPdfLoading ? (
+                        <>
                           <button
-                            aria-label="Add more images"
-                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-editor-panel-border bg-white text-editor-muted transition hover:border-editor-accent hover:text-editor-accent"
-                            onClick={openAddMoreImagesPicker}
-                            title="Upload more images"
+                            aria-label={
+                              mediaKind === "pdf"
+                                ? "Choose a different PDF"
+                                : mediaKind === "video"
+                                  ? "Choose a different video"
+                                  : "Choose a different image"
+                            }
+                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-beige/10 bg-night-card text-beige-dim transition hover:border-sand hover:text-sand"
+                            onClick={openReplaceMediaPicker}
+                            title={
+                              mediaKind === "pdf"
+                                ? "Change PDF"
+                                : mediaKind === "video"
+                                  ? "Change video"
+                                  : "Change image"
+                            }
                             type="button"
                           >
-                            <Images className="h-4 w-4" strokeWidth={2} />
+                            <RefreshCw className="h-4 w-4" strokeWidth={2} />
                           </button>
-                        ) : null}
-                      </div>
-                    ) : null}
+
+                          {mediaKind === "image" ? (
+                            <button
+                              aria-label="Add more images"
+                              className="flex h-9 w-9 items-center justify-center rounded-xl border border-beige/10 bg-night-card text-beige-dim transition hover:border-sand hover:text-sand"
+                              onClick={openAddMoreImagesPicker}
+                              title="Upload more images"
+                              type="button"
+                            >
+                              <Images className="h-4 w-4" strokeWidth={2} />
+                            </button>
+                          ) : null}
+                        </>
+                      ) : null}
+
+                      <button
+                        aria-label={
+                          isPdfLoading
+                            ? "Cancel loading"
+                            : mediaKind === "pdf"
+                              ? "Remove PDF"
+                              : mediaKind === "video"
+                                ? "Remove video"
+                                : "Remove image"
+                        }
+                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-beige/10 bg-night-card text-beige-dim transition hover:border-signal/40 hover:text-signal"
+                        onClick={removeLoadedMedia}
+                        title={
+                          isPdfLoading
+                            ? "Cancel loading"
+                            : mediaKind === "pdf"
+                              ? "Remove PDF"
+                              : mediaKind === "video"
+                                ? "Remove video"
+                                : "Remove image"
+                        }
+                        type="button"
+                      >
+                        <Trash2 className="h-4 w-4" strokeWidth={2} />
+                      </button>
+                    </div>
                   </div>
                 </EditorCard>
               ) : null}
@@ -3258,18 +3640,18 @@ export default function WatermarkPage() {
               ) : null}
 
               {showRestoredSettingsNotice ? (
-                <div className="rounded-lg border border-platinum bg-platinum/40 px-2.5 py-2 text-xs text-ink">
+                <div className="rounded-lg border border-beige/10 bg-beige/5 px-2.5 py-2 text-xs text-beige">
                   <p>Your last watermark settings were restored.</p>
                   <div className="mt-1.5 flex flex-wrap items-center gap-3">
                     <button
-                      className="font-medium text-signal transition hover:text-ink"
+                      className="font-medium text-signal transition hover:text-beige"
                       onClick={() => setShowRestoredSettingsNotice(false)}
                       type="button"
                     >
                       Dismiss
                     </button>
                     <button
-                      className="font-medium text-battleship transition hover:text-ink"
+                      className="font-medium text-beige-dim transition hover:text-beige"
                       onClick={resetWatermarkSettingsToDefaults}
                       type="button"
                     >
@@ -3280,12 +3662,12 @@ export default function WatermarkPage() {
               ) : null}
 
               {isExporting && isBatchImageMode && batchExportProgress ? (
-                <div className="rounded-lg border border-platinum bg-paper px-2.5 py-2">
-                  <p className="text-xs font-medium text-battleship">
+                <div className="rounded-lg border border-beige/10 bg-night-card px-2.5 py-2">
+                  <p className="text-xs font-medium text-beige-dim">
                     Processing {batchExportProgress.current} of{" "}
                     {batchExportProgress.total}...
                   </p>
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-platinum">
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-beige/10">
                     <div
                       className="h-full rounded-full bg-signal transition-[width] duration-200"
                       style={{
@@ -3301,12 +3683,12 @@ export default function WatermarkPage() {
               ) : null}
 
               {isExporting && mediaKind === "pdf" && pdfExportProgress ? (
-                <div className="rounded-lg border border-platinum bg-paper px-2.5 py-2">
-                  <p className="text-xs font-medium text-battleship">
+                <div className="rounded-lg border border-beige/10 bg-night-card px-2.5 py-2">
+                  <p className="text-xs font-medium text-beige-dim">
                     Processing page {pdfExportProgress.current} of{" "}
                     {pdfExportProgress.total}...
                   </p>
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-platinum">
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-beige/10">
                     <div
                       className="h-full rounded-full bg-signal transition-[width] duration-200"
                       style={{
@@ -3322,9 +3704,9 @@ export default function WatermarkPage() {
               ) : null}
 
               {isExporting && mediaKind === "video" && exportProgress !== null ? (
-                <div className="rounded-lg border border-platinum bg-paper px-2.5 py-2">
+                <div className="rounded-lg border border-beige/10 bg-night-card px-2.5 py-2">
                   {isServerVideoExport ? (
-                    <p className="text-xs font-medium text-battleship">
+                    <p className="text-xs font-medium text-beige-dim">
                       {videoExportStageLabel}
                     </p>
                   ) : null}
@@ -3333,12 +3715,12 @@ export default function WatermarkPage() {
                       isServerVideoExport ? "mt-1.5" : ""
                     }`}
                   >
-                    <span className="font-medium text-battleship">
+                    <span className="font-medium text-beige-dim">
                       {isServerVideoExport ? "Estimated progress" : "Export progress"}
                     </span>
-                    <span className="font-semibold text-ink">{exportProgress}%</span>
+                    <span className="font-semibold text-beige">{exportProgress}%</span>
                   </div>
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-platinum">
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-beige/10">
                     <div
                       className={`h-full rounded-full bg-signal transition-[width] duration-200 ${
                         isServerVideoExport && exportServerStage === "processing"
@@ -3349,7 +3731,7 @@ export default function WatermarkPage() {
                     />
                   </div>
                   <button
-                    className="mt-2 w-full rounded-full border border-signal/30 bg-paper px-3 py-2 text-xs font-semibold text-signal transition hover:border-signal hover:bg-signal/5"
+                    className="mt-2 w-full rounded-full border border-signal/30 bg-night-card px-3 py-2 text-xs font-semibold text-signal transition hover:border-signal hover:bg-signal/5"
                     onClick={handleCancelExport}
                     type="button"
                   >
@@ -3359,11 +3741,11 @@ export default function WatermarkPage() {
               ) : null}
 
               {exportNotice ? (
-                <div className="rounded-lg border border-platinum bg-platinum/50 px-2.5 py-2 text-xs text-ink">
+                <div className="rounded-lg border border-beige/10 bg-beige/5 px-2.5 py-2 text-xs text-beige">
                   <div className="flex items-center justify-between gap-2">
                     <p>{exportNotice}</p>
                     <button
-                      className="shrink-0 font-medium text-battleship transition hover:text-ink"
+                      className="shrink-0 font-medium text-beige-dim transition hover:text-beige"
                       onClick={() => setExportNotice("")}
                       type="button"
                     >
@@ -3374,12 +3756,12 @@ export default function WatermarkPage() {
               ) : null}
 
               {exportError ? (
-                <div className="rounded-lg border border-signal/30 bg-signal/10 px-2.5 py-2 text-xs text-ink">
+                <div className="rounded-lg border border-signal/30 bg-signal/10 px-2.5 py-2 text-xs text-beige">
                   <p>{exportError}</p>
                   <div className="mt-2 flex items-center gap-3">
                     {mediaKind === "video" && canExportVideo ? (
                       <button
-                        className="font-medium text-signal transition hover:text-ink"
+                        className="font-medium text-signal transition hover:text-beige"
                         onClick={() => {
                           setExportError("");
                           void handleVideoExport();
@@ -3390,7 +3772,7 @@ export default function WatermarkPage() {
                       </button>
                     ) : null}
                     <button
-                      className="font-medium text-battleship transition hover:text-ink"
+                      className="font-medium text-beige-dim transition hover:text-beige"
                       onClick={() => setExportError("")}
                       type="button"
                     >
@@ -3401,7 +3783,7 @@ export default function WatermarkPage() {
               ) : null}
 
               <EditorPanelSection title="Type">
-                <div className="grid grid-cols-3 gap-2 rounded-xl bg-white/50 p-1">
+                <div className="grid grid-cols-3 gap-2 rounded-xl bg-night-card/60 p-1">
                   {watermarkTypes.map(({ label, value }) => (
                     <EditorSegment
                       active={watermarkType === value}
@@ -3416,7 +3798,7 @@ export default function WatermarkPage() {
               </EditorPanelSection>
 
               <EditorPanelSection title="Mode">
-                <div className="grid grid-cols-2 gap-2 rounded-xl bg-white/50 p-1">
+                <div className="grid grid-cols-2 gap-2 rounded-xl bg-night-card/60 p-1">
                   {watermarkModes.map(({ label, value }) => (
                     <EditorSegment
                       active={watermarkMode === value}
@@ -3445,7 +3827,7 @@ export default function WatermarkPage() {
                   ))}
                 </div>
                 {watermarkType === "signature" ? (
-                  <p className="text-[11px] leading-4 text-battleship/80">
+                  <p className="text-[11px] leading-4 text-beige-dim/80">
                     Signatures use single placement only.
                   </p>
                 ) : null}
@@ -3457,136 +3839,185 @@ export default function WatermarkPage() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
                     initial={{ opacity: 0, y: 10 }}
-                    key="watermark-text-input"
+                    key="watermark-text-layers"
                     transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
                   >
-                    <EditorCard>
-                      <label
-                        className="block text-[10px] font-bold uppercase tracking-[0.12em] text-editor-muted"
-                        htmlFor="watermark-text"
-                      >
-                        Watermark text
-                      </label>
-                      <input
-                        className="mt-2 w-full rounded-xl border border-editor-panel-border bg-white px-3 py-2.5 text-sm text-editor-ink outline-none transition placeholder:text-editor-muted/70 focus:border-signal focus:ring-2 focus:ring-signal/20"
-                        id="watermark-text"
-                        onChange={(event) => setWatermarkText(event.target.value)}
-                        placeholder="Add text here"
-                        type="text"
-                        value={watermarkText}
-                      />
-                    </EditorCard>
+                    <WatermarkLayersPanel
+                      activeLayerId={activeTextLayerId}
+                      fontFamilies={fontFamilies}
+                      hasMedia={hasMedia}
+                      layer={activeTextLayer}
+                      layerCount={textLayers.length}
+                      layerIds={textLayers.map((layer) => layer.id)}
+                      mode={watermarkMode}
+                      onAddLayer={addTextLayer}
+                      onFontFamilyChange={(value) => {
+                        if (shouldIgnoreManualSettingsChange()) {
+                          return;
+                        }
+
+                        updateTextLayer(activeTextLayerId, { fontFamily: value });
+                        handleFontFamilyChange(value);
+                      }}
+                      onFontSizeScaleChange={(value) => {
+                        if (shouldIgnoreManualSettingsChange()) {
+                          return;
+                        }
+
+                        updateTextLayer(activeTextLayerId, { fontSizeScale: value });
+                        handleFontSizeScaleChange(value);
+                      }}
+                      onLayerSelect={(id) => {
+                        setActiveTextLayerId(id);
+                        const layer = textLayers.find((entry) => entry.id === id);
+
+                        if (layer) {
+                          syncLegacyFromTextLayer(layer);
+                        }
+
+                        setIsWatermarkHovering(false);
+                      }}
+                      onPositionChange={(position) => {
+                        if (shouldIgnoreManualSettingsChange()) {
+                          return;
+                        }
+
+                        updateTextLayer(activeTextLayerId, {
+                          customPosition: null,
+                          watermarkPosition: position,
+                        });
+                        setWatermarkPosition(position);
+                        setCustomPosition(null);
+                      }}
+                      onRemoveLayer={removeTextLayer}
+                      onTextChange={(value) => {
+                        updateTextLayer(activeTextLayerId, { text: value });
+                        setWatermarkText(value);
+                      }}
+                      onTileAngleChange={(value) => {
+                        if (shouldIgnoreManualSettingsChange()) {
+                          return;
+                        }
+
+                        clearActiveTemplate();
+                        setTileAngle(value);
+                      }}
+                      onTileDensityChange={(value) => {
+                        if (shouldIgnoreManualSettingsChange()) {
+                          return;
+                        }
+
+                        clearActiveTemplate();
+                        setTileDensity(value);
+                      }}
+                      onTileGapChange={(value) => {
+                        if (shouldIgnoreManualSettingsChange()) {
+                          return;
+                        }
+
+                        clearActiveTemplate();
+                        setTileGap(value);
+                      }}
+                      onWatermarkOpacityChange={(value) => {
+                        updateTextLayer(activeTextLayerId, { opacity: value });
+                        handleWatermarkOpacityChange(value);
+                      }}
+                      tileAngle={tileAngle}
+                      tileDensity={tileDensity}
+                      tileGap={tileGap}
+                      type="text"
+                      watermarkPosition={activeTextLayer.watermarkPosition}
+                    />
                   </motion.div>
                 ) : watermarkType === "logo" ? (
                   <motion.div
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
                     initial={{ opacity: 0, y: 10 }}
-                    key="watermark-logo-input"
+                    key="watermark-logo-layers"
                     transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
                   >
-                  <p className="text-xs font-medium text-battleship">Logo image</p>
-                  {logoImage ? (
-                    <div className="mt-1 space-y-1">
-                      <div className="rounded-lg border border-platinum bg-platinum/50 px-2.5 py-1 text-xs text-ink">
-                        Loaded:{" "}
-                        <span className="font-semibold">{logoFileName}</span>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5 text-xs">
-                        <button
-                          className="font-medium text-battleship transition hover:text-ink"
-                          onClick={openLogoPicker}
-                          type="button"
-                        >
-                          Choose different logo
-                        </button>
-                        <button
-                          className="font-medium text-signal transition hover:brightness-90"
-                          onClick={removeLogo}
-                          type="button"
-                        >
-                          Remove logo
-                        </button>
-                      </div>
-                      <div className="rounded-lg border border-platinum bg-paper p-2">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-platinum"
-                            style={{
-                              backgroundColor: "#F8FAFC",
-                              backgroundImage:
-                                "linear-gradient(45deg, #DCDCDD 25%, transparent 25%), linear-gradient(-45deg, #DCDCDD 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #DCDCDD 75%), linear-gradient(-45deg, transparent 75%, #DCDCDD 75%)",
-                              backgroundPosition:
-                                "0 0, 0 8px, 8px -8px, -8px 0",
-                              backgroundSize: "16px 16px",
-                            }}
-                          >
-                            {/* Object/data URLs cannot be optimized by next/image. */}
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              alt="Logo background preview"
-                              className="max-h-9 max-w-9 object-contain"
-                              src={logoImage.src}
-                            />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-medium text-battleship">
-                              Remove background
-                            </p>
-                            <button
-                              aria-pressed={isLogoBackgroundRemoved}
-                              className={`mt-1 flex w-full items-center justify-between rounded-full border p-0.5 text-xs font-semibold transition ${
-                                isLogoBackgroundRemoved
-                                  ? "border-signal bg-signal text-white"
-                                  : "border-platinum bg-platinum/40 text-battleship hover:border-signal hover:text-ink"
-                              }`}
-                              onClick={handleLogoBackgroundToggle}
-                              type="button"
-                            >
-                              <span className="px-2">
-                                {isLogoBackgroundRemoved ? "On" : "Off"}
-                              </span>
-                              <span
-                                className={`h-5 w-5 rounded-full transition ${
-                                  isLogoBackgroundRemoved
-                                    ? "bg-white"
-                                    : "bg-paper"
-                                }`}
-                              />
-                            </button>
-                          </div>
-                        </div>
-                        <p className="mt-1.5 text-[11px] leading-4 text-battleship/80">
-                          Best-effort cleanup. Works best with logos on a plain
-                          white or solid background.
-                        </p>
-                        {logoBackgroundMessage ? (
-                          <p className="mt-1 text-[11px] leading-4 text-battleship">
-                            {logoBackgroundMessage}
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      className="mt-1 w-full rounded-xl border border-dashed border-battleship/50 bg-platinum/40 px-4 py-3 text-center transition hover:border-signal hover:bg-platinum/70"
-                      onClick={openLogoPicker}
-                      type="button"
-                    >
-                      <span className="block text-sm font-semibold text-ink">
-                        Upload a logo
-                      </span>
-                      <span className="mt-1 block text-xs text-battleship">
-                        PNG preferred. JPG and WebP supported.
-                      </span>
-                    </button>
-                  )}
+                    <WatermarkLayersPanel
+                      activeLayerId={activeLogoLayerId}
+                      fontFamilies={fontFamilies}
+                      hasMedia={hasMedia}
+                      layer={activeLogoLayer}
+                      layerCount={logoLayers.length}
+                      layerIds={logoLayers.map((layer) => layer.id)}
+                      logoBackgroundMessage={logoBackgroundMessage}
+                      logoError={logoError}
+                      mode={watermarkMode}
+                      onAddLayer={addLogoLayer}
+                      onFontFamilyChange={() => undefined}
+                      onFontSizeScaleChange={(value) => {
+                        if (shouldIgnoreManualSettingsChange()) {
+                          return;
+                        }
 
-                  {logoError ? (
-                    <div className="mt-3 rounded-2xl border border-signal/30 bg-signal/10 px-4 py-3 text-sm text-ink">
-                      {logoError}
-                    </div>
-                  ) : null}
+                        updateLogoLayer(activeLogoLayerId, { fontSizeScale: value });
+                        handleFontSizeScaleChange(value);
+                      }}
+                      onLayerSelect={(id) => {
+                        setActiveLogoLayerId(id);
+                        const layer = logoLayers.find((entry) => entry.id === id);
+
+                        if (layer) {
+                          syncLegacyFromLogoLayer(layer);
+                        }
+
+                        setIsWatermarkHovering(false);
+                      }}
+                      onLogoBackgroundToggle={handleLogoBackgroundToggle}
+                      onLogoPick={openLogoPicker}
+                      onLogoRemove={removeLogo}
+                      onPositionChange={(position) => {
+                        if (shouldIgnoreManualSettingsChange()) {
+                          return;
+                        }
+
+                        updateLogoLayer(activeLogoLayerId, {
+                          customPosition: null,
+                          watermarkPosition: position,
+                        });
+                        setWatermarkPosition(position);
+                        setCustomPosition(null);
+                      }}
+                      onRemoveLayer={removeLogoLayer}
+                      onTextChange={() => undefined}
+                      onTileAngleChange={(value) => {
+                        if (shouldIgnoreManualSettingsChange()) {
+                          return;
+                        }
+
+                        clearActiveTemplate();
+                        setTileAngle(value);
+                      }}
+                      onTileDensityChange={(value) => {
+                        if (shouldIgnoreManualSettingsChange()) {
+                          return;
+                        }
+
+                        clearActiveTemplate();
+                        setTileDensity(value);
+                      }}
+                      onTileGapChange={(value) => {
+                        if (shouldIgnoreManualSettingsChange()) {
+                          return;
+                        }
+
+                        clearActiveTemplate();
+                        setTileGap(value);
+                      }}
+                      onWatermarkOpacityChange={(value) => {
+                        updateLogoLayer(activeLogoLayerId, { opacity: value });
+                        handleWatermarkOpacityChange(value);
+                      }}
+                      tileAngle={tileAngle}
+                      tileDensity={tileDensity}
+                      tileGap={tileGap}
+                      type="logo"
+                      watermarkPosition={activeLogoLayer.watermarkPosition}
+                    />
                   </motion.div>
                 ) : (
                   <motion.div
@@ -3596,7 +4027,7 @@ export default function WatermarkPage() {
                     key="watermark-signature-input"
                     transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
                   >
-                    <p className="text-xs font-medium text-battleship">
+                    <p className="text-xs font-medium text-beige-dim">
                       Signature
                     </p>
                     <div className="mt-1">
@@ -3613,28 +4044,16 @@ export default function WatermarkPage() {
                 )}
               </AnimatePresence>
 
-              {watermarkMode === "single" && hasMedia ? (
-                <p className="text-[11px] leading-4 text-battleship/80">
-                  {watermarkType === "signature"
-                    ? "Drag a saved signature onto the preview, or drag it on the canvas to reposition."
-                    : "Drag the watermark on the preview to position it."}
+              {watermarkMode === "single" && hasMedia && watermarkType === "signature" ? (
+                <p className="text-[11px] leading-4 text-beige-dim/80">
+                  Drag a saved signature onto the preview, or drag it on the canvas
+                  to reposition.
                 </p>
               ) : null}
 
-              <WatermarkStyleControls
-                fontFamilies={fontFamilies}
-                fontFamily={fontFamily}
-                fontSizeScale={fontSizeScale}
-                onFontFamilyChange={handleFontFamilyChange}
-                onFontSizeScaleChange={handleFontSizeScaleChange}
-                onWatermarkOpacityChange={handleWatermarkOpacityChange}
-                watermarkOpacity={watermarkOpacity}
-                watermarkType={watermarkType}
-              />
-
               {!showRestoredSettingsNotice ? (
                 <button
-                  className="block text-xs font-medium text-editor-muted transition hover:text-editor-ink"
+                  className="block text-xs font-medium text-beige-dim transition hover:text-beige"
                   onClick={resetWatermarkSettingsToDefaults}
                   type="button"
                 >
@@ -3644,11 +4063,11 @@ export default function WatermarkPage() {
 
               {!hasMedia ? (
                 <EditorCard>
-                  <p className="text-sm leading-6 text-editor-muted">
+                  <p className="text-sm leading-6 text-beige-dim">
                     Upload an image, PDF, or video to start watermarking.
                   </p>
                   <button
-                    className="mt-3 w-full rounded-xl border border-dashed border-editor-panel-border bg-white/70 px-4 py-3 text-sm font-semibold text-editor-ink transition hover:border-editor-accent hover:bg-white"
+                    className="mt-3 w-full rounded-xl border border-dashed border-beige/10 bg-night-card/70 px-4 py-3 text-sm font-semibold text-beige transition hover:border-sand hover:bg-night-card"
                     onClick={openFilePicker}
                     type="button"
                   >
@@ -3672,7 +4091,7 @@ export default function WatermarkPage() {
                         className={`relative rounded-xl border px-1.5 py-2 text-left transition-colors ${
                           isSelected
                             ? "border-signal text-white"
-                            : "border-white/70 bg-white/85 text-editor-muted hover:border-signal hover:text-editor-ink"
+                            : "border-beige/10 bg-night-card text-beige-dim hover:border-signal hover:text-beige"
                         }`}
                         key={template.id}
                         onPointerDown={(event) => event.preventDefault()}
@@ -3755,7 +4174,7 @@ export default function WatermarkPage() {
 
                   <EditorPanelSection title="Gap">
                     <div className="flex items-center justify-between gap-4">
-                      <span className="text-xs font-semibold text-ink">
+                      <span className="text-xs font-semibold text-beige">
                         {tileGap}%
                       </span>
                     </div>
@@ -3796,7 +4215,7 @@ export default function WatermarkPage() {
                   <div className="flex flex-wrap gap-1.5">
                     {savedPresets.map((preset) => (
                       <button
-                        className="rounded-full border border-white/70 bg-white/85 px-2.5 py-1 text-[11px] font-semibold text-editor-muted transition hover:border-editor-accent hover:text-editor-ink"
+                        className="rounded-full border border-beige/10 bg-night-card px-2.5 py-1 text-[11px] font-semibold text-beige-dim transition hover:border-sand hover:text-beige"
                         key={preset.id}
                         onClick={() =>
                           applyWatermarkSettingsSnapshot(preset.snapshot)
@@ -3816,7 +4235,7 @@ export default function WatermarkPage() {
                   className={`flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] transition ${
                     isSavingPreset
                       ? "border-signal bg-signal text-white"
-                      : "border-white/70 bg-white/85 text-editor-muted hover:border-signal hover:text-editor-ink"
+                      : "border-beige/10 bg-night-card text-beige-dim hover:border-signal hover:text-beige"
                   }`}
                   onClick={() => setIsSavingPreset((value) => !value)}
                   type="button"
@@ -3828,13 +4247,13 @@ export default function WatermarkPage() {
                 {isSavingPreset ? (
                   <EditorCard className="mt-2">
                     <label
-                      className="text-xs font-medium text-editor-muted"
+                      className="text-xs font-medium text-beige-dim"
                       htmlFor="preset-name"
                     >
                       Name this preset
                     </label>
                     <input
-                      className="mt-1 w-full rounded-lg border border-editor-panel-border bg-white px-2 py-1.5 text-xs text-editor-ink outline-none transition focus:border-editor-accent focus:ring-2 focus:ring-editor-accent/20"
+                      className="mt-1 w-full rounded-lg border border-beige/10 bg-night-card px-2 py-1.5 text-xs text-beige outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
                       id="preset-name"
                       onChange={(event) => setPresetName(event.target.value)}
                       onKeyDown={(event) => {
@@ -3848,7 +4267,7 @@ export default function WatermarkPage() {
                     />
                     <div className="mt-2 grid grid-cols-2 gap-1.5">
                       <button
-                        className="rounded-lg bg-editor-accent px-2.5 py-1.5 text-xs font-semibold text-white transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg bg-signal px-2.5 py-1.5 text-xs font-semibold text-white transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={!presetName.trim()}
                         onClick={saveCurrentPreset}
                         type="button"
@@ -3856,7 +4275,7 @@ export default function WatermarkPage() {
                         Save
                       </button>
                       <button
-                        className="rounded-lg border border-editor-panel-border px-2.5 py-1.5 text-xs font-semibold text-editor-muted transition hover:text-editor-ink"
+                        className="rounded-lg border border-beige/10 px-2.5 py-1.5 text-xs font-semibold text-beige-dim transition hover:text-beige"
                         onClick={() => {
                           setPresetName("");
                           setIsSavingPreset(false);
@@ -3876,14 +4295,14 @@ export default function WatermarkPage() {
             <div className="space-y-3">
               {mediaKind !== "image" ? (
                 <EditorCard>
-                  <p className="text-sm text-editor-muted">
+                  <p className="text-sm text-beige-dim">
                     Crop is not available for video or PDF yet.
                   </p>
                 </EditorCard>
               ) : (
                 <>
                   <EditorCard>
-                    <p className="text-sm leading-6 text-editor-muted">
+                    <p className="text-sm leading-6 text-beige-dim">
                       Drag on the canvas to select a crop. Move the box or drag
                       a corner handle to resize it.
                     </p>
@@ -3895,7 +4314,7 @@ export default function WatermarkPage() {
                     Apply crop
                   </EditorApplyButton>
                   <button
-                    className="w-full rounded-xl border border-editor-panel-border bg-white/70 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-editor-muted transition hover:text-editor-ink"
+                    className="w-full rounded-xl border border-beige/10 bg-night-card/70 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-beige-dim transition hover:text-beige"
                     onClick={cancelCrop}
                     type="button"
                   >
@@ -3910,7 +4329,7 @@ export default function WatermarkPage() {
             <div className="space-y-3">
               {mediaKind !== "image" ? (
                 <EditorCard>
-                  <p className="text-sm text-editor-muted">
+                  <p className="text-sm text-beige-dim">
                     Resize is not available for video or PDF yet.
                   </p>
                 </EditorCard>
@@ -3918,11 +4337,11 @@ export default function WatermarkPage() {
                 <>
                   <div className="grid grid-cols-2 gap-2">
                     <EditorCard>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-editor-muted">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-beige-dim">
                         Width
                       </p>
                       <input
-                        className="mt-1 w-full bg-transparent text-lg font-semibold text-editor-ink outline-none"
+                        className="mt-1 w-full bg-transparent text-lg font-semibold text-beige outline-none"
                         min={1}
                         onChange={(event) =>
                           handleResizeWidthChange(Number(event.target.value))
@@ -3930,14 +4349,14 @@ export default function WatermarkPage() {
                         type="number"
                         value={resizeWidth}
                       />
-                      <span className="text-xs text-editor-muted">px</span>
+                      <span className="text-xs text-beige-dim">px</span>
                     </EditorCard>
                     <EditorCard>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-editor-muted">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-beige-dim">
                         Height
                       </p>
                       <input
-                        className="mt-1 w-full bg-transparent text-lg font-semibold text-editor-ink outline-none"
+                        className="mt-1 w-full bg-transparent text-lg font-semibold text-beige outline-none"
                         min={1}
                         onChange={(event) =>
                           handleResizeHeightChange(Number(event.target.value))
@@ -3945,7 +4364,7 @@ export default function WatermarkPage() {
                         type="number"
                         value={resizeHeight}
                       />
-                      <span className="text-xs text-editor-muted">px</span>
+                      <span className="text-xs text-beige-dim">px</span>
                     </EditorCard>
                   </div>
                   <EditorToggleRow
@@ -3966,26 +4385,26 @@ export default function WatermarkPage() {
             <div className="space-y-3">
               {mediaKind !== "image" ? (
                 <EditorCard>
-                  <p className="text-sm text-editor-muted">
+                  <p className="text-sm text-beige-dim">
                     Rotate is not available for video or PDF yet.
                   </p>
                 </EditorCard>
               ) : (
                 <>
                   <EditorCard>
-                    <p className="text-sm leading-6 text-editor-muted">
+                    <p className="text-sm leading-6 text-beige-dim">
                       Rotate the base image. Watermark settings stay unchanged.
                     </p>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <button
-                        className="rounded-xl border border-editor-panel-border bg-white px-3 py-2 text-xs font-semibold text-editor-ink transition hover:border-editor-accent"
+                        className="rounded-xl border border-beige/10 bg-night-card px-3 py-2 text-xs font-semibold text-beige transition hover:border-sand"
                         onClick={() => rotateBaseImage("left")}
                         type="button"
                       >
                         90° left
                       </button>
                       <button
-                        className="rounded-xl border border-editor-panel-border bg-white px-3 py-2 text-xs font-semibold text-editor-ink transition hover:border-editor-accent"
+                        className="rounded-xl border border-beige/10 bg-night-card px-3 py-2 text-xs font-semibold text-beige transition hover:border-sand"
                         onClick={() => rotateBaseImage("right")}
                         type="button"
                       >
@@ -3995,13 +4414,13 @@ export default function WatermarkPage() {
                     <div className="mt-3">
                       <div className="flex items-center justify-between gap-3">
                         <label
-                          className="text-xs font-medium text-editor-muted"
+                          className="text-xs font-medium text-beige-dim"
                           htmlFor="base-rotation"
                         >
                           Manual angle
                         </label>
                         <input
-                          className="w-16 rounded-lg border border-editor-panel-border bg-white px-2 py-1 text-right text-xs text-editor-ink outline-none"
+                          className="w-16 rounded-lg border border-beige/10 bg-night-card px-2 py-1 text-right text-xs text-beige outline-none"
                           id="base-rotation-value"
                           max={360}
                           min={0}
@@ -4015,7 +4434,7 @@ export default function WatermarkPage() {
                         />
                       </div>
                       <input
-                        className="mt-2 h-2 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-editor-accent"
+                        className="mt-2 h-2 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-signal"
                         id="base-rotation"
                         max={360}
                         min={0}
@@ -4040,7 +4459,7 @@ export default function WatermarkPage() {
             <div className="space-y-3">
               {mediaKind !== "image" ? (
                 <EditorCard>
-                  <p className="text-sm text-editor-muted">
+                  <p className="text-sm text-beige-dim">
                     Effects are not available for video or PDF yet.
                   </p>
                 </EditorCard>
@@ -4064,7 +4483,7 @@ export default function WatermarkPage() {
           ) : null}
 
           {uploadError ? (
-            <div className="absolute bottom-20 left-[4.5rem] z-10 max-w-xs rounded-xl border border-signal/30 bg-signal/10 px-4 py-3 text-sm text-ink">
+            <div className="absolute bottom-20 left-[4.5rem] z-10 max-w-xs rounded-xl border border-signal/30 bg-signal/10 px-4 py-3 text-sm text-beige">
               {uploadError}
             </div>
           ) : null}
@@ -4077,8 +4496,8 @@ export default function WatermarkPage() {
           <div className="editor-checkerboard flex min-h-0 flex-1 items-center justify-center p-4 md:p-6">
             {isPdfLoading ? (
               <div className="text-center">
-                <p className="text-lg font-semibold text-editor-ink">Loading PDF...</p>
-                <p className="mt-2 text-sm text-editor-muted">
+                <p className="text-lg font-semibold text-beige">Loading PDF...</p>
+                <p className="mt-2 text-sm text-beige-dim">
                   Rendering pages in your browser.
                 </p>
               </div>
@@ -4139,7 +4558,7 @@ export default function WatermarkPage() {
           </div>
 
           {canvasMetaLabel ? (
-            <p className="border-t border-editor-panel-border bg-white/50 py-2 text-center text-xs text-editor-muted">
+            <p className="border-t border-beige/10 bg-night-card py-2 text-center text-xs text-beige-dim">
               {canvasMetaLabel}
             </p>
           ) : null}
@@ -4174,6 +4593,105 @@ type ImageBatchStripProps = {
   onSelect: (id: string) => void;
 };
 
+const stripVisibleCount = 3;
+
+type PaginatedThreeColumnStripProps<T> = {
+  activeId: string | null;
+  getItemId: (item: T) => string;
+  items: readonly T[];
+  renderItem: (item: T) => ReactNode;
+};
+
+function PaginatedThreeColumnStrip<T>({
+  activeId,
+  getItemId,
+  items,
+  renderItem,
+}: PaginatedThreeColumnStripProps<T>) {
+  const [startIndex, setStartIndex] = useState(0);
+  const maxStartIndex = Math.max(0, items.length - stripVisibleCount);
+  const safeStartIndex = Math.min(startIndex, maxStartIndex);
+  const visibleItems = items.slice(
+    safeStartIndex,
+    safeStartIndex + stripVisibleCount,
+  );
+  const canGoLeft = safeStartIndex > 0;
+  const canGoRight = safeStartIndex + stripVisibleCount < items.length;
+  const showNavigation = items.length > stripVisibleCount;
+
+  useEffect(() => {
+    if (!activeId) {
+      return;
+    }
+
+    const activeIndex = items.findIndex((item) => getItemId(item) === activeId);
+
+    if (activeIndex === -1) {
+      return;
+    }
+
+    setStartIndex((previousStart) => {
+      if (activeIndex < previousStart) {
+        return activeIndex;
+      }
+
+      if (activeIndex >= previousStart + stripVisibleCount) {
+        return activeIndex - stripVisibleCount + 1;
+      }
+
+      return previousStart;
+    });
+  }, [activeId, getItemId, items]);
+
+  useEffect(() => {
+    setStartIndex((previousStart) => Math.min(previousStart, maxStartIndex));
+  }, [maxStartIndex]);
+
+  return (
+    <>
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        {visibleItems.map((item) => (
+          <div className="min-w-0" key={getItemId(item)}>
+            {renderItem(item)}
+          </div>
+        ))}
+      </div>
+
+      {showNavigation ? (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <button
+            aria-label="Show previous items"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-beige/10 bg-night-elevated text-beige-dim transition hover:border-sand/40 hover:text-beige disabled:cursor-not-allowed disabled:opacity-35"
+            disabled={!canGoLeft}
+            onClick={() => setStartIndex((index) => Math.max(0, index - 1))}
+            type="button"
+          >
+            <ChevronLeft className="h-4 w-4" strokeWidth={2} />
+          </button>
+
+          <p className="text-center text-[10px] font-medium tabular-nums text-beige-dim">
+            {safeStartIndex + 1}–
+            {Math.min(safeStartIndex + stripVisibleCount, items.length)} of{" "}
+            {items.length}
+          </p>
+
+          <button
+            aria-label="Show next items"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-beige/10 bg-night-elevated text-beige-dim transition hover:border-sand/40 hover:text-beige disabled:cursor-not-allowed disabled:opacity-35"
+            disabled={!canGoRight}
+            onClick={() =>
+              setStartIndex((index) => Math.min(maxStartIndex, index + 1))
+            }
+            type="button"
+          >
+            <ChevronRight className="h-4 w-4" strokeWidth={2} />
+          </button>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 function ImageBatchStrip({
   activeId,
   entries,
@@ -4181,21 +4699,24 @@ function ImageBatchStrip({
   onSelect,
 }: ImageBatchStripProps) {
   return (
-    <div className="rounded-lg border border-platinum bg-paper p-2">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-battleship">
+    <div className="rounded-lg border border-beige/10 bg-night-card p-2">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-beige-dim">
         Batch images
       </p>
-      <div className="mt-2 grid grid-cols-3 gap-2">
-        {entries.map((entry) => {
+      <PaginatedThreeColumnStrip
+        activeId={activeId}
+        getItemId={(entry) => entry.id}
+        items={entries}
+        renderItem={(entry) => {
           const isActive = entry.id === activeId;
 
           return (
-            <div className="relative" key={entry.id}>
+            <div className="relative">
               <button
                 className={`group relative block w-full overflow-hidden rounded-lg border transition ${
                   isActive
                     ? "border-signal ring-2 ring-signal/20"
-                    : "border-platinum hover:border-signal/60"
+                    : "border-beige/10 hover:border-signal/60"
                 }`}
                 onClick={() => onSelect(entry.id)}
                 title={entry.fileName}
@@ -4207,13 +4728,13 @@ function ImageBatchStrip({
                   className="aspect-square w-full object-cover"
                   src={entry.objectUrl}
                 />
-                <span className="block truncate px-1 py-1 text-[10px] text-battleship">
+                <span className="block truncate px-1 py-1 text-[10px] text-beige-dim">
                   {entry.fileName}
                 </span>
               </button>
               <button
                 aria-label={`Remove ${entry.fileName}`}
-                className="absolute right-1 top-1 rounded-full bg-paper/90 p-0.5 text-battleship shadow-sm transition hover:bg-signal hover:text-white"
+                className="absolute right-1 top-1 rounded-full bg-night-card/90 p-0.5 text-beige-dim shadow-sm transition hover:bg-signal hover:text-white"
                 onClick={(event) => {
                   event.stopPropagation();
                   onRemove(entry.id);
@@ -4224,8 +4745,8 @@ function ImageBatchStrip({
               </button>
             </div>
           );
-        })}
-      </div>
+        }}
+      />
     </div>
   );
 }
@@ -4238,12 +4759,15 @@ type PdfPageStripProps = {
 
 function PdfPageStrip({ activeId, onSelect, pages }: PdfPageStripProps) {
   return (
-    <div className="rounded-lg border border-platinum bg-paper p-2">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-battleship">
+    <div className="rounded-lg border border-beige/10 bg-night-card p-2">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-beige-dim">
         PDF pages
       </p>
-      <div className="mt-2 grid grid-cols-3 gap-2">
-        {pages.map((page) => {
+      <PaginatedThreeColumnStrip
+        activeId={activeId}
+        getItemId={(page) => page.id}
+        items={pages}
+        renderItem={(page) => {
           const isActive = page.id === activeId;
 
           return (
@@ -4251,9 +4775,8 @@ function PdfPageStrip({ activeId, onSelect, pages }: PdfPageStripProps) {
               className={`block w-full overflow-hidden rounded-lg border transition ${
                 isActive
                   ? "border-signal ring-2 ring-signal/20"
-                  : "border-platinum hover:border-signal/60"
+                  : "border-beige/10 hover:border-signal/60"
               }`}
-              key={page.id}
               onClick={() => onSelect(page.id)}
               title={`Page ${page.pageNumber}`}
               type="button"
@@ -4261,16 +4784,16 @@ function PdfPageStrip({ activeId, onSelect, pages }: PdfPageStripProps) {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 alt={`Page ${page.pageNumber}`}
-                className="aspect-[3/4] w-full bg-platinum object-contain"
+                className="aspect-[3/4] w-full bg-beige/10 object-contain"
                 src={page.thumbnailUrl}
               />
-              <span className="block truncate px-1 py-1 text-[10px] text-battleship">
+              <span className="block truncate px-1 py-1 text-[10px] text-beige-dim">
                 Page {page.pageNumber}
               </span>
             </button>
           );
-        })}
-      </div>
+        }}
+      />
     </div>
   );
 }
@@ -4278,20 +4801,20 @@ function PdfPageStrip({ activeId, onSelect, pages }: PdfPageStripProps) {
 function UploadZone({ onClick, onDragOver, onDrop }: UploadZoneProps) {
   return (
     <div
-      className="cursor-pointer rounded-2xl border border-dashed border-editor-panel-border bg-white/80 px-6 py-12 text-center shadow-sm transition hover:border-editor-accent hover:bg-white"
+      className="cursor-pointer rounded-2xl border border-dashed border-beige/20 bg-night-card/80 px-6 py-12 text-center transition hover:border-sand hover:bg-night-elevated"
       onClick={onClick}
       onDragOver={onDragOver}
       onDrop={onDrop}
       role="button"
       tabIndex={0}
     >
-      <p className="text-lg font-semibold text-editor-ink">
+      <p className="text-lg font-semibold text-beige">
         Drop your images, PDF, or video here
       </p>
-      <p className="mt-2 text-sm text-editor-muted">
+      <p className="mt-2 text-sm text-beige-dim">
         Select multiple images for batch watermarking, one PDF, or one video
       </p>
-      <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-editor-muted">
+      <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-beige-dim">
         JPG, PNG, WebP, PDF, MP4, MOV, WebM
       </p>
     </div>
@@ -4304,11 +4827,11 @@ type TemplateIconProps = {
 };
 
 function TemplateIcon({ isSelected, variant }: TemplateIconProps) {
-  const markColor = isSelected ? "bg-signal" : "bg-battleship";
-  const lineColor = isSelected ? "bg-signal" : "bg-battleship/70";
+  const markColor = isSelected ? "bg-signal" : "bg-beige-dim";
+  const lineColor = isSelected ? "bg-signal" : "bg-beige-dim/70";
 
   return (
-    <span className="relative block h-6 rounded-md border border-platinum bg-platinum/40">
+    <span className="relative block h-6 rounded-md border border-beige/10 bg-beige/5">
       {variant === "corner" ? (
         <span
           className={`absolute bottom-1 right-1 h-1.5 w-3 rounded-full ${markColor}`}
@@ -4575,15 +5098,19 @@ function createImageFromCanvas(canvas: HTMLCanvasElement) {
 }
 
 type ExportRenderInput = {
+  activeLogoLayerId: string;
+  activeTextLayerId: string;
   customPosition: CustomPosition | null;
   fontFamily: string;
   fontSizeScale: number;
   image: HTMLImageElement;
   imageEffectSettings: ImageEffectSettings;
   logoImage: HTMLImageElement | null;
+  logoLayers: LogoWatermarkLayer[];
   resizeHeight: number;
   resizeWidth: number;
   rotationAngle: number;
+  textLayers: TextWatermarkLayer[];
   tileAngle: TileAngle;
   tileDensity: TileDensity;
   tileGap: number;
@@ -4595,13 +5122,245 @@ type ExportRenderInput = {
   watermarkType: WatermarkType;
 };
 
+type WatermarkLayerPaintInput = {
+  activeLayerId: string;
+  canvasHeight: number;
+  canvasWidth: number;
+  context: CanvasRenderingContext2D;
+  imageHeight: number;
+  imageWidth: number;
+  imageX: number;
+  imageY: number;
+  logoLayers: LogoWatermarkLayer[];
+  resolveCustomPosition?: (
+    position: CustomPosition,
+  ) => {
+    textAlign: CanvasTextAlign;
+    textBaseline: CanvasTextBaseline;
+    x: number;
+    y: number;
+  };
+  signatureCustomPosition: CustomPosition | null;
+  signatureFontSizeScale: number;
+  signatureImage: HTMLImageElement | null;
+  signatureOpacity: number;
+  signaturePosition: WatermarkPosition;
+  textLayers: TextWatermarkLayer[];
+  tileAngle: TileAngle;
+  tileDensity: TileDensity;
+  tileGap: number;
+  watermarkMode: WatermarkMode;
+  watermarkType: WatermarkType;
+};
+
+const defaultWatermarkFontFamily =
+  'Arial, Helvetica, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+function paintWatermarkLayers({
+  activeLayerId,
+  canvasHeight,
+  canvasWidth,
+  context,
+  imageHeight,
+  imageWidth,
+  imageX,
+  imageY,
+  logoLayers,
+  resolveCustomPosition,
+  signatureCustomPosition,
+  signatureFontSizeScale,
+  signatureImage,
+  signatureOpacity,
+  signaturePosition,
+  textLayers,
+  tileAngle,
+  tileDensity,
+  tileGap,
+  watermarkMode,
+  watermarkType,
+}: WatermarkLayerPaintInput): {
+  activeBounds: TextBounds | null;
+  boundsByLayer: Map<string, TextBounds>;
+} {
+  const boundsByLayer = new Map<string, TextBounds>();
+  let activeBounds: TextBounds | null = null;
+
+  const resolvePosition = (position: CustomPosition) => {
+    if (resolveCustomPosition) {
+      return resolveCustomPosition(position);
+    }
+
+    return {
+      textAlign: "center" as CanvasTextAlign,
+      textBaseline: "middle" as CanvasTextBaseline,
+      x: position.xPercent * canvasWidth,
+      y: position.yPercent * canvasHeight,
+    };
+  };
+
+  const drawLayer = ({
+    customPosition,
+    fontFamily,
+    fontSizeScale,
+    isActive,
+    layerId,
+    logoImage,
+    opacity,
+    watermarkPosition,
+    watermarkText,
+    layerType,
+  }: {
+    customPosition: CustomPosition | null;
+    fontFamily: string;
+    fontSizeScale: number;
+    isActive: boolean;
+    layerId: string;
+    logoImage: HTMLImageElement | null;
+    opacity: number;
+    watermarkPosition: WatermarkPosition;
+    watermarkText: string;
+    layerType: "text" | "logo";
+  }) => {
+    const drawable = getDrawableWatermark({
+      context,
+      fontFamily,
+      fontSizeScale,
+      imageWidth,
+      logoImage,
+      watermarkText,
+      watermarkType: layerType,
+    });
+
+    if (!drawable) {
+      return;
+    }
+
+    const alpha = opacity / 100;
+    const useTile = watermarkMode === "tile" && isActive;
+
+    if (useTile) {
+      drawTiledWatermark({
+        alpha,
+        angle: tileAngle,
+        context,
+        density: tileDensity,
+        drawable,
+        gap: tileGap,
+        imageHeight,
+        imageWidth,
+        imageX,
+        imageY,
+      });
+      return;
+    }
+
+    const padding = Math.max(24, drawable.height * 0.9);
+    const { x, y, textAlign, textBaseline } = customPosition
+      ? resolvePosition(customPosition)
+      : getWatermarkCoordinates({
+          fontSize: drawable.height,
+          imageHeight,
+          imageWidth,
+          imageX,
+          imageY,
+          padding,
+          position: watermarkPosition,
+        });
+
+    context.save();
+    const bounds = getDrawableBounds({
+      drawable,
+      textAlign,
+      textBaseline,
+      x,
+      y,
+    });
+    boundsByLayer.set(layerId, bounds);
+
+    if (isActive) {
+      activeBounds = bounds;
+    }
+
+    drawWatermarkDrawable({
+      alpha,
+      context,
+      drawable,
+      textAlign,
+      textBaseline,
+      x,
+      y,
+    });
+    context.restore();
+  };
+
+  if (watermarkType === "text") {
+    for (const layer of textLayers) {
+      if (!layer.text.trim()) {
+        continue;
+      }
+
+      drawLayer({
+        customPosition: layer.customPosition,
+        fontFamily: layer.fontFamily,
+        fontSizeScale: layer.fontSizeScale,
+        isActive: layer.id === activeLayerId,
+        layerId: layer.id,
+        logoImage: null,
+        opacity: layer.opacity,
+        watermarkPosition: layer.watermarkPosition,
+        watermarkText: layer.text,
+        layerType: "text",
+      });
+    }
+  } else if (watermarkType === "logo") {
+    for (const layer of logoLayers) {
+      if (!layer.logoImage) {
+        continue;
+      }
+
+      drawLayer({
+        customPosition: layer.customPosition,
+        fontFamily: defaultWatermarkFontFamily,
+        fontSizeScale: layer.fontSizeScale,
+        isActive: layer.id === activeLayerId,
+        layerId: layer.id,
+        logoImage: layer.logoImage,
+        opacity: layer.opacity,
+        watermarkPosition: layer.watermarkPosition,
+        watermarkText: "",
+        layerType: "logo",
+      });
+    }
+  } else if (watermarkType === "signature" && signatureImage) {
+    drawLayer({
+      customPosition: signatureCustomPosition,
+      fontFamily: defaultWatermarkFontFamily,
+      fontSizeScale: signatureFontSizeScale,
+      isActive: true,
+      layerId: "signature",
+      logoImage: signatureImage,
+      opacity: signatureOpacity,
+      watermarkPosition: signaturePosition,
+      watermarkText: "",
+      layerType: "logo",
+    });
+  }
+
+  return { activeBounds, boundsByLayer };
+}
+
 type WatermarkOnlyRenderInput = {
+  activeLayerId?: string;
+  activeLogoLayerId?: string;
+  activeTextLayerId?: string;
   context: CanvasRenderingContext2D;
   customPosition: CustomPosition | null;
   fontFamily: string;
   fontSizeScale: number;
   height: number;
   logoImage: HTMLImageElement | null;
+  logoLayers?: LogoWatermarkLayer[];
+  textLayers?: TextWatermarkLayer[];
   tileAngle: TileAngle;
   tileDensity: TileDensity;
   tileGap: number;
@@ -4620,6 +5379,11 @@ function drawWatermarkOnly({
   fontSizeScale,
   height,
   logoImage,
+  logoLayers,
+  activeLayerId,
+  activeLogoLayerId,
+  activeTextLayerId,
+  textLayers,
   tileAngle,
   tileDensity,
   tileGap,
@@ -4630,85 +5394,65 @@ function drawWatermarkOnly({
   watermarkType,
   width,
 }: WatermarkOnlyRenderInput): TextBounds | null {
-  const drawable = getDrawableWatermark({
+  const { activeBounds } = paintWatermarkLayers({
+    activeLayerId:
+      activeLayerId ??
+      (watermarkType === "text"
+        ? activeTextLayerId ?? ""
+        : watermarkType === "logo"
+          ? activeLogoLayerId ?? ""
+          : activeTextLayerId ?? ""),
+    canvasHeight: height,
+    canvasWidth: width,
     context,
-    fontFamily,
-    fontSizeScale,
+    imageHeight: height,
     imageWidth: width,
-    logoImage,
-    watermarkText,
+    imageX: 0,
+    imageY: 0,
+    logoLayers: logoLayers ?? [],
+    signatureCustomPosition: customPosition,
+    signatureFontSizeScale: fontSizeScale,
+    signatureImage: watermarkType === "signature" ? logoImage : null,
+    signatureOpacity: watermarkOpacity,
+    signaturePosition: watermarkPosition,
+    textLayers:
+      textLayers ??
+      (watermarkText.trim()
+        ? [
+            {
+              customPosition,
+              fontFamily,
+              fontSizeScale,
+              id: "legacy-text",
+              opacity: watermarkOpacity,
+              text: watermarkText,
+              type: "text" as const,
+              watermarkPosition,
+            },
+          ]
+        : []),
+    tileAngle,
+    tileDensity,
+    tileGap,
+    watermarkMode,
     watermarkType,
   });
 
-  if (!drawable) {
-    return null;
-  }
-
-  const alpha = watermarkOpacity / 100;
-
-  if (watermarkMode === "tile") {
-    drawTiledWatermark({
-      alpha,
-      angle: tileAngle,
-      context,
-      density: tileDensity,
-      drawable,
-      gap: tileGap,
-      imageHeight: height,
-      imageWidth: width,
-      imageX: 0,
-      imageY: 0,
-    });
-    return null;
-  }
-
-  const padding = Math.max(24, drawable.height * 0.9);
-  const { x, y, textAlign, textBaseline } = customPosition
-    ? {
-        x: customPosition.xPercent * width,
-        y: customPosition.yPercent * height,
-        textAlign: "center" as CanvasTextAlign,
-        textBaseline: "middle" as CanvasTextBaseline,
-      }
-    : getWatermarkCoordinates({
-        fontSize: drawable.height,
-        imageHeight: height,
-        imageWidth: width,
-        imageX: 0,
-        imageY: 0,
-        padding,
-        position: watermarkPosition,
-      });
-
-  const bounds = getDrawableBounds({
-    drawable,
-    textAlign,
-    textBaseline,
-    x,
-    y,
-  });
-
-  drawWatermarkDrawable({
-    alpha,
-    context,
-    drawable,
-    textAlign,
-    textBaseline,
-    x,
-    y,
-  });
-
-  return bounds;
+  return activeBounds;
 }
 
 type WatermarkOverlayCanvasInput = Omit<WatermarkOnlyRenderInput, "context">;
 
 function renderWatermarkOverlayCanvas({
+  activeLogoLayerId,
+  activeTextLayerId,
   customPosition,
   fontFamily,
   fontSizeScale,
   height,
   logoImage,
+  logoLayers,
+  textLayers,
   tileAngle,
   tileDensity,
   tileGap,
@@ -4731,12 +5475,16 @@ function renderWatermarkOverlayCanvas({
 
   context.clearRect(0, 0, canvas.width, canvas.height);
   drawWatermarkOnly({
+    activeLogoLayerId,
+    activeTextLayerId,
     context,
     customPosition,
     fontFamily,
     fontSizeScale,
     height: canvas.height,
     logoImage,
+    logoLayers,
+    textLayers,
     tileAngle,
     tileDensity,
     tileGap,
@@ -4764,6 +5512,8 @@ async function canvasToPngBytes(canvas: HTMLCanvasElement) {
 }
 
 function paintWatermarkOnExportCanvas({
+  activeLogoLayerId,
+  activeTextLayerId,
   canvasHeight,
   canvasWidth,
   context,
@@ -4771,6 +5521,8 @@ function paintWatermarkOnExportCanvas({
   fontFamily,
   fontSizeScale,
   logoImage,
+  logoLayers,
+  textLayers,
   tileAngle,
   tileDensity,
   tileGap,
@@ -4780,6 +5532,8 @@ function paintWatermarkOnExportCanvas({
   watermarkText,
   watermarkType,
 }: {
+  activeLogoLayerId: string;
+  activeTextLayerId: string;
   canvasHeight: number;
   canvasWidth: number;
   context: CanvasRenderingContext2D;
@@ -4787,6 +5541,8 @@ function paintWatermarkOnExportCanvas({
   fontFamily: string;
   fontSizeScale: number;
   logoImage: HTMLImageElement | null;
+  logoLayers: LogoWatermarkLayer[];
+  textLayers: TextWatermarkLayer[];
   tileAngle: TileAngle;
   tileDensity: TileDensity;
   tileGap: number;
@@ -4798,77 +5554,49 @@ function paintWatermarkOnExportCanvas({
 }) {
   applyHighQualityCanvasDefaults(context);
 
-  const drawable = getDrawableWatermark({
+  paintWatermarkLayers({
+    activeLayerId:
+      watermarkType === "text"
+        ? activeTextLayerId
+        : watermarkType === "logo"
+          ? activeLogoLayerId
+          : activeTextLayerId,
+    canvasHeight,
+    canvasWidth,
     context,
-    fontFamily,
-    fontSizeScale,
+    imageHeight: canvasHeight,
     imageWidth: canvasWidth,
-    logoImage,
-    watermarkText,
+    imageX: 0,
+    imageY: 0,
+    logoLayers,
+    signatureCustomPosition: customPosition,
+    signatureFontSizeScale: fontSizeScale,
+    signatureImage: watermarkType === "signature" ? logoImage : null,
+    signatureOpacity: watermarkOpacity,
+    signaturePosition: watermarkPosition,
+    textLayers,
+    tileAngle,
+    tileDensity,
+    tileGap,
+    watermarkMode,
     watermarkType,
-  });
-
-  if (!drawable) {
-    return;
-  }
-
-  const alpha = watermarkOpacity / 100;
-
-  if (watermarkMode === "tile") {
-    drawTiledWatermark({
-      alpha,
-      angle: tileAngle,
-      context,
-      density: tileDensity,
-      drawable,
-      gap: tileGap,
-      imageHeight: canvasHeight,
-      imageWidth: canvasWidth,
-      imageX: 0,
-      imageY: 0,
-    });
-    return;
-  }
-
-  const padding = Math.max(24, drawable.height * 0.9);
-  const { x, y, textAlign, textBaseline } = customPosition
-    ? {
-        x: customPosition.xPercent * canvasWidth,
-        y: customPosition.yPercent * canvasHeight,
-        textAlign: "center" as CanvasTextAlign,
-        textBaseline: "middle" as CanvasTextBaseline,
-      }
-    : getWatermarkCoordinates({
-        fontSize: drawable.height,
-        imageHeight: canvasHeight,
-        imageWidth: canvasWidth,
-        imageX: 0,
-        imageY: 0,
-        padding,
-        position: watermarkPosition,
-      });
-
-  drawWatermarkDrawable({
-    alpha,
-    context,
-    drawable,
-    textAlign,
-    textBaseline,
-    x,
-    y,
   });
 }
 
 function renderExportCanvas({
+  activeLogoLayerId,
+  activeTextLayerId,
   customPosition,
   fontFamily,
   fontSizeScale,
   image,
   imageEffectSettings,
   logoImage,
+  logoLayers,
   resizeHeight,
   resizeWidth,
   rotationAngle,
+  textLayers,
   tileAngle,
   tileDensity,
   tileGap,
@@ -4918,12 +5646,16 @@ function renderExportCanvas({
   context.restore();
 
   const watermarkInput = {
+    activeLogoLayerId,
+    activeTextLayerId,
     canvasHeight: logicalHeight,
     canvasWidth: logicalWidth,
     customPosition,
     fontFamily,
     fontSizeScale,
     logoImage,
+    logoLayers,
+    textLayers,
     tileAngle,
     tileDensity,
     tileGap,
@@ -4975,13 +5707,17 @@ type PdfPageWatermarkOverlayInput = Omit<
 };
 
 function renderWatermarkOverlayForPdfPage({
+  activeLogoLayerId,
+  activeTextLayerId,
   canvasSize,
   customPosition,
   fontFamily,
   fontSizeScale,
   logoImage,
+  logoLayers,
   pageHeight,
   pageWidth,
+  textLayers,
   tileAngle,
   tileDensity,
   tileGap,
@@ -5018,66 +5754,40 @@ function renderWatermarkOverlayForPdfPage({
   const imageX = (canvasSize.width - imageWidth) / 2;
   const imageY = (canvasSize.height - imageHeight) / 2;
 
-  const drawable = getDrawableWatermark({
+  paintWatermarkLayers({
+    activeLayerId:
+      watermarkType === "text"
+        ? (activeTextLayerId ?? "")
+        : watermarkType === "logo"
+          ? (activeLogoLayerId ?? "")
+          : (activeTextLayerId ?? ""),
+    canvasHeight: canvasSize.height,
+    canvasWidth: canvasSize.width,
     context,
-    fontFamily,
-    fontSizeScale,
+    imageHeight: pageH,
     imageWidth: pageW,
-    logoImage,
-    watermarkText,
+    imageX: 0,
+    imageY: 0,
+    logoLayers: logoLayers ?? [],
+    resolveCustomPosition: (position) => ({
+      textAlign: "center" as CanvasTextAlign,
+      textBaseline: "middle" as CanvasTextBaseline,
+      x: ((position.xPercent * canvasSize.width - imageX) / imageWidth) * pageW,
+      y:
+        ((position.yPercent * canvasSize.height - imageY) / imageHeight) *
+        pageH,
+    }),
+    signatureCustomPosition: customPosition,
+    signatureFontSizeScale: fontSizeScale,
+    signatureImage: watermarkType === "signature" ? logoImage : null,
+    signatureOpacity: watermarkOpacity,
+    signaturePosition: watermarkPosition,
+    textLayers: textLayers ?? [],
+    tileAngle,
+    tileDensity,
+    tileGap,
+    watermarkMode,
     watermarkType,
-  });
-
-  if (!drawable) {
-    return canvas;
-  }
-
-  const alpha = watermarkOpacity / 100;
-
-  if (watermarkMode === "tile") {
-    drawTiledWatermark({
-      alpha,
-      angle: tileAngle,
-      context,
-      density: tileDensity,
-      drawable,
-      gap: tileGap,
-      imageHeight: pageH,
-      imageWidth: pageW,
-      imageX: 0,
-      imageY: 0,
-    });
-    return canvas;
-  }
-
-  const padding = Math.max(24, drawable.height * 0.9);
-  const { x, y, textAlign, textBaseline } = customPosition
-    ? {
-        x: ((customPosition.xPercent * canvasSize.width - imageX) / imageWidth) * pageW,
-        y:
-          ((customPosition.yPercent * canvasSize.height - imageY) / imageHeight) *
-          pageH,
-        textAlign: "center" as CanvasTextAlign,
-        textBaseline: "middle" as CanvasTextBaseline,
-      }
-    : getWatermarkCoordinates({
-        fontSize: drawable.height,
-        imageHeight: pageH,
-        imageWidth: pageW,
-        imageX: 0,
-        imageY: 0,
-        padding,
-        position: watermarkPosition,
-      });
-
-  drawWatermarkDrawable({
-    alpha,
-    context,
-    drawable,
-    textAlign,
-    textBaseline,
-    x,
-    y,
   });
 
   return canvas;
@@ -5098,6 +5808,8 @@ function areWatermarkSnapshotsEqual(
   second: WatermarkSettingsSnapshot,
 ) {
   return (
+    first.activeLogoLayerId === second.activeLogoLayerId &&
+    first.activeTextLayerId === second.activeTextLayerId &&
     first.backgroundRemovedLogoImage === second.backgroundRemovedLogoImage &&
     areCustomPositionsEqual(first.customPosition, second.customPosition) &&
     first.fontFamily === second.fontFamily &&
@@ -5105,7 +5817,15 @@ function areWatermarkSnapshotsEqual(
     first.isLogoBackgroundRemoved === second.isLogoBackgroundRemoved &&
     first.logoFileName === second.logoFileName &&
     first.logoImage === second.logoImage &&
+    areLogoLayersSnapshotEqual(
+      first.logoLayers ?? [],
+      second.logoLayers ?? [],
+    ) &&
     first.originalLogoImage === second.originalLogoImage &&
+    areTextLayersSnapshotEqual(
+      first.textLayers ?? [],
+      second.textLayers ?? [],
+    ) &&
     first.tileAngle === second.tileAngle &&
     first.tileDensity === second.tileDensity &&
     first.tileGap === second.tileGap &&
@@ -5115,6 +5835,55 @@ function areWatermarkSnapshotsEqual(
     first.watermarkText === second.watermarkText &&
     first.watermarkType === second.watermarkType
   );
+}
+
+function areTextLayersSnapshotEqual(
+  first: TextWatermarkLayer[],
+  second: TextWatermarkLayer[],
+) {
+  if (first.length !== second.length) {
+    return false;
+  }
+
+  return first.every((layer, index) => {
+    const other = second[index];
+
+    return (
+      layer.id === other.id &&
+      layer.text === other.text &&
+      layer.fontFamily === other.fontFamily &&
+      layer.fontSizeScale === other.fontSizeScale &&
+      layer.opacity === other.opacity &&
+      layer.watermarkPosition === other.watermarkPosition &&
+      areCustomPositionsEqual(layer.customPosition, other.customPosition)
+    );
+  });
+}
+
+function areLogoLayersSnapshotEqual(
+  first: LogoWatermarkLayer[],
+  second: LogoWatermarkLayer[],
+) {
+  if (first.length !== second.length) {
+    return false;
+  }
+
+  return first.every((layer, index) => {
+    const other = second[index];
+
+    return (
+      layer.id === other.id &&
+      layer.logoFileName === other.logoFileName &&
+      layer.fontSizeScale === other.fontSizeScale &&
+      layer.opacity === other.opacity &&
+      layer.watermarkPosition === other.watermarkPosition &&
+      layer.isLogoBackgroundRemoved === other.isLogoBackgroundRemoved &&
+      layer.logoImage === other.logoImage &&
+      layer.originalLogoImage === other.originalLogoImage &&
+      layer.backgroundRemovedLogoImage === other.backgroundRemovedLogoImage &&
+      areCustomPositionsEqual(layer.customPosition, other.customPosition)
+    );
+  });
 }
 
 function areCustomPositionsEqual(

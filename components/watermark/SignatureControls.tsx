@@ -287,11 +287,11 @@ export function SignatureControls({
       {savedSignatures.length ? (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-editor-muted">
+            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-beige-dim">
               Saved signatures
             </p>
             {hasDocument ? (
-              <p className="text-[10px] text-battleship/80">Drag to document</p>
+              <p className="text-[10px] text-beige-dim/80">Drag to document</p>
             ) : null}
           </div>
 
@@ -304,13 +304,13 @@ export function SignatureControls({
                   className={`group flex items-center gap-1 rounded-xl border px-1 py-1 transition ${
                     isActive
                       ? "border-signal bg-signal/10"
-                      : "border-white/70 bg-white/85 hover:border-signal/40"
+                      : "border-beige/10 bg-night-card hover:border-signal/40"
                   }`}
                   key={signature.id}
                 >
                   <span
                     aria-hidden
-                    className="px-0.5 text-editor-muted/70"
+                    className="px-0.5 text-beige-dim/70"
                     title="Drag onto the document"
                   >
                     <GripVertical className="h-3.5 w-3.5" strokeWidth={2} />
@@ -331,7 +331,7 @@ export function SignatureControls({
                     type="button"
                   >
                     <span
-                      className="flex h-9 w-16 shrink-0 cursor-grab items-center justify-center overflow-hidden rounded-md border border-editor-panel-border bg-white active:cursor-grabbing"
+                      className="flex h-9 w-16 shrink-0 cursor-grab items-center justify-center overflow-hidden rounded-md border border-beige/10 bg-night-card active:cursor-grabbing"
                       style={{
                         backgroundImage:
                           "linear-gradient(45deg, #DCDCDD 25%, transparent 25%), linear-gradient(-45deg, #DCDCDD 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #DCDCDD 75%), linear-gradient(-45deg, transparent 75%, #DCDCDD 75%)",
@@ -347,14 +347,14 @@ export function SignatureControls({
                         src={signature.previewSrc}
                       />
                     </span>
-                    <span className="min-w-0 truncate text-[11px] font-semibold text-editor-muted">
+                    <span className="min-w-0 truncate text-[11px] font-semibold text-beige-dim">
                       {signature.label}
                     </span>
                   </button>
 
                   <button
                     aria-label={`Place ${signature.label} on document`}
-                    className="rounded-md p-1 text-editor-muted transition hover:bg-white hover:text-signal disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-md p-1 text-beige-dim transition hover:bg-beige/5 hover:text-signal disabled:cursor-not-allowed disabled:opacity-40"
                     disabled={!hasDocument}
                     onClick={() => onPlaceSignature(signature, defaultPlacement)}
                     title={
@@ -369,7 +369,7 @@ export function SignatureControls({
 
                   <button
                     aria-label={`Remove ${signature.label}`}
-                    className="rounded-md p-1 text-editor-muted opacity-70 transition hover:bg-white hover:text-signal group-hover:opacity-100"
+                    className="rounded-md p-1 text-beige-dim opacity-70 transition hover:bg-beige/5 hover:text-signal group-hover:opacity-100"
                     onClick={() => deleteSignature(signature.id)}
                     type="button"
                   >
@@ -381,12 +381,12 @@ export function SignatureControls({
           </div>
 
           {hasDocument ? (
-            <p className="text-[11px] leading-4 text-battleship/80">
+            <p className="text-[11px] leading-4 text-beige-dim/80">
               Drag a saved signature onto the preview, click the place icon, or
               drag the signature on the canvas to reposition it.
             </p>
           ) : (
-            <p className="text-[11px] leading-4 text-battleship/80">
+            <p className="text-[11px] leading-4 text-beige-dim/80">
               Upload a document, then drag a signature onto it or use the place
               icon.
             </p>
@@ -400,7 +400,7 @@ export function SignatureControls({
           initial={{ opacity: 0, y: 8 }}
         >
           <EditorCard>
-            <div className="grid grid-cols-2 gap-2 rounded-xl bg-white/50 p-1">
+            <div className="grid grid-cols-2 gap-2 rounded-xl bg-night-card/60 p-1">
               <EditorSegment
                 active={inputMode === "draw"}
                 groupId="signature-input-mode"
@@ -431,7 +431,7 @@ export function SignatureControls({
 
             {inputMode === "draw" ? (
               <div className="mt-2 space-y-2">
-                <div className="overflow-hidden rounded-xl border border-editor-panel-border bg-white">
+                <div className="overflow-hidden rounded-xl border border-beige/10 bg-night-card">
                   <canvas
                     className="block h-[7.5rem] w-full touch-none cursor-crosshair"
                     onPointerCancel={handleDrawPointerUp}
@@ -450,13 +450,13 @@ export function SignatureControls({
             ) : (
               <div className="mt-2 space-y-2">
                 <label
-                  className="block text-[10px] font-bold uppercase tracking-[0.12em] text-editor-muted"
+                  className="block text-[10px] font-bold uppercase tracking-[0.12em] text-beige-dim"
                   htmlFor="signature-name"
                 >
                   Your name
                 </label>
                 <input
-                  className="w-full rounded-xl border border-editor-panel-border bg-white px-3 py-2.5 text-sm text-editor-ink outline-none transition placeholder:text-editor-muted/70 focus:border-signal focus:ring-2 focus:ring-signal/20"
+                  className="w-full rounded-xl border border-beige/10 bg-night-card px-3 py-2.5 text-sm text-beige outline-none transition placeholder:text-beige-dim/70 focus:border-signal focus:ring-2 focus:ring-signal/20"
                   id="signature-name"
                   onChange={(event) => setTypedName(event.target.value)}
                   placeholder="Type your signature"
@@ -464,14 +464,14 @@ export function SignatureControls({
                   value={typedName}
                 />
                 <div
-                  className="flex min-h-[4.5rem] items-center justify-center overflow-hidden rounded-xl border border-editor-panel-border bg-white px-3 py-2"
+                  className="flex min-h-[4.5rem] items-center justify-center overflow-hidden rounded-xl border border-beige/10 bg-night-card px-3 py-2"
                   style={{
                     fontFamily: SIGNATURE_SCRIPT_FONT,
                     fontSize: "2rem",
                     lineHeight: 1.1,
                   }}
                 >
-                  <span className="truncate text-ink">
+                  <span className="truncate text-beige">
                     {typedName.trim() || "Preview"}
                   </span>
                 </div>
@@ -484,14 +484,14 @@ export function SignatureControls({
 
             <div className="mt-3 grid grid-cols-2 gap-1.5">
               <button
-                className="rounded-lg bg-editor-accent px-2.5 py-1.5 text-xs font-semibold text-white transition hover:brightness-105"
+                className="rounded-lg bg-signal px-2.5 py-1.5 text-xs font-semibold text-white transition hover:brightness-105"
                 onClick={() => void saveSignature()}
                 type="button"
               >
                 Save signature
               </button>
               <button
-                className="rounded-lg border border-editor-panel-border px-2.5 py-1.5 text-xs font-semibold text-editor-muted transition hover:text-editor-ink"
+                className="rounded-lg border border-beige/10 px-2.5 py-1.5 text-xs font-semibold text-beige-dim transition hover:text-beige"
                 onClick={() => {
                   setIsAddingSignature(false);
                   setSignatureError("");
@@ -507,14 +507,14 @@ export function SignatureControls({
         </motion.div>
       ) : (
         <button
-          className="w-full rounded-xl border border-dashed border-battleship/50 bg-platinum/40 px-4 py-3 text-center transition hover:border-signal hover:bg-platinum/70"
+          className="w-full rounded-xl border border border-beige/20 bg-beige/5 px-4 py-3 text-center transition hover:border-sand hover:bg-beige/10"
           onClick={openAddSignature}
           type="button"
         >
-          <span className="block text-sm font-semibold text-ink">
+          <span className="block text-sm font-semibold text-beige">
             Add signature
           </span>
-          <span className="mt-1 block text-xs text-battleship">
+          <span className="mt-1 block text-xs text-beige-dim">
             Draw with mouse or touch, or type in script handwriting.
           </span>
         </button>

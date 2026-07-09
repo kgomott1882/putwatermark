@@ -22,11 +22,11 @@ export function EditorToolPanel({
   title,
 }: EditorToolPanelProps) {
   return (
-    <aside className="flex h-full w-[22rem] shrink-0 flex-col border-r border-editor-panel-border bg-editor-panel shadow-[inset_-1px_0_0_rgba(255,255,255,0.5)]">
-      <header className="flex items-center gap-2 border-b border-editor-panel-border bg-editor-panel-header px-3 py-2.5">
+    <aside className="flex h-full w-[22rem] shrink-0 flex-col border-r border-beige/10 bg-editor-panel">
+      <header className="flex items-center gap-2 border-b border-beige/10 bg-editor-panel-header px-3 py-2.5">
         <button
           aria-hidden
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-editor-muted transition hover:bg-white/60"
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-beige-dim transition hover:bg-beige/5"
           tabIndex={-1}
           type="button"
         >
@@ -34,15 +34,15 @@ export function EditorToolPanel({
         </button>
         <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
           {icon ? (
-            <span className="text-editor-ink/80">{icon}</span>
+            <span className="text-beige-dim">{icon}</span>
           ) : null}
-          <h2 className="truncate text-xs font-bold uppercase tracking-[0.18em] text-editor-ink">
+          <h2 className="truncate text-xs font-bold uppercase tracking-[0.18em] text-beige">
             {title}
           </h2>
         </div>
         <button
           aria-label={`Close ${title} panel`}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-editor-muted transition hover:bg-white/60 hover:text-editor-ink"
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-beige-dim transition hover:bg-beige/5 hover:text-beige"
           onClick={onClose}
           type="button"
         >
@@ -82,7 +82,7 @@ export function EditorPanelSection({
       transition={{ duration: 0.32, ease: panelEase }}
     >
       {title ? (
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-editor-muted">
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-beige-dim">
           {title}
         </p>
       ) : null}
@@ -100,7 +100,7 @@ export function EditorCard({ children, className = "" }: EditorCardProps) {
   return (
     <motion.div
       animate={{ opacity: 1, scale: 1 }}
-      className={`rounded-xl border border-white/70 bg-white/85 p-2.5 shadow-sm ${className}`}
+      className={`rounded-xl border border-beige/10 bg-night-card/80 p-2.5 ${className}`}
       initial={{ opacity: 0, scale: 0.98 }}
       transition={{ duration: 0.3, ease: panelEase }}
     >
@@ -128,7 +128,7 @@ export function EditorSegment({
     <motion.button
       aria-pressed={active}
       className={`relative rounded-xl px-3 py-2 text-xs font-semibold uppercase tracking-[0.06em] transition-colors ${
-        active ? "text-white" : "text-editor-muted hover:text-editor-ink"
+        active ? "text-white" : "text-beige-dim hover:text-beige"
       } ${className}`}
       onClick={onClick}
       type="button"
@@ -168,7 +168,7 @@ export function EditorPill({
       className={`relative rounded-full border px-2 py-1 text-xs font-medium transition-colors ${
         active
           ? "border-signal text-white"
-          : "border-platinum bg-paper text-battleship hover:border-signal hover:text-ink"
+          : "border-beige/10 bg-night-elevated text-beige-dim hover:border-sand/40 hover:text-beige"
       } ${className}`}
       onClick={onClick}
       type="button"
@@ -209,7 +209,7 @@ export function EditorGridChoice({
       className={`relative h-7 rounded-md border text-xs transition-colors ${
         active
           ? "border-signal text-white"
-          : "border-platinum bg-paper text-battleship hover:border-signal hover:text-ink"
+          : "border-beige/10 bg-night-elevated text-beige-dim hover:border-sand/40 hover:text-beige"
       } ${className}`}
       onClick={onClick}
       type="button"
@@ -241,7 +241,7 @@ export function EditorApplyButton({
 }: EditorApplyButtonProps) {
   return (
     <motion.button
-      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-editor-accent px-4 py-3 text-sm font-bold uppercase tracking-[0.12em] text-white shadow-md transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-signal px-4 py-3 text-sm font-bold uppercase tracking-[0.12em] text-white shadow-md transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
       disabled={disabled}
       onClick={onClick}
       type="button"
@@ -266,14 +266,14 @@ export function EditorToggleRow({
   onChange,
 }: EditorToggleRowProps) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-editor-panel-border/70 py-2 last:border-b-0">
-      <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-editor-muted">
+    <div className="flex items-center justify-between gap-3 border-b border-beige/10 py-2 last:border-b-0">
+      <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-beige-dim">
         {label}
       </span>
       <motion.button
         aria-pressed={checked}
         className={`relative h-6 w-11 rounded-full transition-colors ${
-          checked ? "bg-signal" : "bg-editor-panel-header"
+          checked ? "bg-signal" : "bg-night-card"
         }`}
         onClick={onChange}
         type="button"
@@ -282,7 +282,7 @@ export function EditorToggleRow({
       >
         <motion.span
           animate={{ left: checked ? "1.35rem" : "0.125rem" }}
-          className="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow"
+          className="absolute top-0.5 h-5 w-5 rounded-full bg-beige shadow"
           transition={selectionSpring}
         />
       </motion.button>

@@ -22,7 +22,8 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Footer } from "../Footer";
 import {
   BentoDotGrid,
@@ -190,8 +191,29 @@ const compatibilityComparison = {
   ],
 } as const;
 
+const featureTabIds = new Set<FeatureTabId>([
+  "watermarking",
+  "editing",
+  "file-support",
+  "compatibility",
+]);
+
+function isFeatureTabId(value: string | null): value is FeatureTabId {
+  return value !== null && featureTabIds.has(value as FeatureTabId);
+}
+
 export function FeaturesPageClient() {
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<FeatureTabId>("watermarking");
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+
+    if (isFeatureTabId(tab)) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
   const activeCards = tabContent[activeTab];
 
   return (

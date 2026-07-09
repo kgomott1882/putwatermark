@@ -36,9 +36,9 @@ export function EditorBottomBar({
   zoomLabel = "100%",
 }: EditorBottomBarProps) {
   return (
-    <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-editor-panel-border bg-editor-panel-header px-3 py-2">
+    <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-beige/10 bg-night-card px-3 py-2">
       <button
-        className="inline-flex items-center gap-2 rounded-xl bg-editor-exit px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white shadow-sm transition hover:brightness-105"
+        className="inline-flex items-center gap-2 rounded-xl border border-beige/10 bg-night-elevated px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-beige-dim transition hover:border-sand/40 hover:text-beige"
         onClick={onExit}
         type="button"
       >
@@ -49,7 +49,7 @@ export function EditorBottomBar({
       <div className="flex items-center gap-1">
         <button
           aria-label="Undo"
-          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-[0.1em] text-editor-muted transition hover:bg-white/60 hover:text-editor-ink disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-[0.1em] text-beige-dim transition hover:bg-beige/5 hover:text-beige disabled:cursor-not-allowed disabled:opacity-40"
           disabled={!canUndo}
           onClick={onUndo}
           type="button"
@@ -59,7 +59,7 @@ export function EditorBottomBar({
         </button>
         <button
           aria-label="Redo"
-          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-[0.1em] text-editor-muted transition hover:bg-white/60 hover:text-editor-ink disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-[0.1em] text-beige-dim transition hover:bg-beige/5 hover:text-beige disabled:cursor-not-allowed disabled:opacity-40"
           disabled={!canRedo}
           onClick={onRedo}
           type="button"
@@ -69,7 +69,7 @@ export function EditorBottomBar({
         </button>
         <button
           aria-label="History"
-          className="rounded-lg p-2 text-editor-muted transition hover:bg-white/60 hover:text-editor-ink"
+          className="rounded-lg p-2 text-beige-dim transition hover:bg-beige/5 hover:text-beige"
           type="button"
         >
           <History className="h-4 w-4" />
@@ -77,20 +77,20 @@ export function EditorBottomBar({
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="hidden items-center gap-1 rounded-lg bg-white/70 px-2 py-1 text-editor-muted sm:flex">
+        <div className="hidden items-center gap-1 rounded-lg border border-beige/10 bg-night-elevated px-2 py-1 text-beige-dim sm:flex">
           <button
             aria-label="Zoom out"
-            className="rounded p-1 transition hover:bg-white hover:text-editor-ink"
+            className="rounded p-1 transition hover:bg-beige/5 hover:text-beige"
             type="button"
           >
             <Minus className="h-3.5 w-3.5" />
           </button>
-          <span className="min-w-[3rem] text-center text-[11px] font-semibold text-editor-ink">
+          <span className="min-w-[3rem] text-center text-[11px] font-semibold text-beige">
             {zoomLabel}
           </span>
           <button
             aria-label="Zoom in"
-            className="rounded p-1 transition hover:bg-white hover:text-editor-ink"
+            className="rounded p-1 transition hover:bg-beige/5 hover:text-beige"
             type="button"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -98,7 +98,7 @@ export function EditorBottomBar({
         </div>
 
         <button
-          className="inline-flex items-center gap-2 rounded-xl bg-editor-finish px-5 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-xl bg-signal px-5 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
           disabled={exportDisabled}
           onClick={onExport}
           title={exportTitle}

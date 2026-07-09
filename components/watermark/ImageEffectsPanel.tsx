@@ -72,7 +72,7 @@ export function ImageEffectsPanel({
   if (!image) {
     return (
       <EditorCard>
-        <p className="text-sm text-editor-muted">
+        <p className="text-sm text-beige-dim">
           Upload an image to preview effects.
         </p>
       </EditorCard>
@@ -92,7 +92,7 @@ export function ImageEffectsPanel({
                 className={`relative w-full overflow-hidden rounded-xl border text-left transition-colors ${
                   isSelected
                     ? "border-signal text-white"
-                    : "border-white/70 bg-white/85 text-editor-muted hover:border-signal hover:text-editor-ink"
+                    : "border-beige/10 bg-night-card text-beige-dim hover:border-signal hover:text-beige"
                 }`}
                 key={id}
                 onClick={() => onEffectChange(id)}
@@ -112,7 +112,7 @@ export function ImageEffectsPanel({
                   />
                 ) : null}
                 <div className="relative z-10 flex items-stretch gap-0">
-                  <div className="h-16 w-20 shrink-0 overflow-hidden bg-platinum">
+                  <div className="h-16 w-20 shrink-0 overflow-hidden bg-night-elevated">
                     {thumbnails[id] ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -155,7 +155,7 @@ export function ImageEffectsPanel({
             </div>
           </EditorPanelSection>
           <EditorPanelSection title="Border color">
-            <div className="grid grid-cols-2 gap-2 rounded-xl bg-white/50 p-1">
+            <div className="grid grid-cols-2 gap-2 rounded-xl bg-night-card/60 p-1">
               <EditorSegment
                 active={borderColor === "ink"}
                 groupId="effect-border-color"
@@ -183,7 +183,7 @@ export function ImageEffectsPanel({
         >
           <EditorPanelSection title="Exposure">
             <div className="flex items-center justify-between gap-4">
-              <span className="text-xs font-semibold text-editor-ink">
+              <span className="text-xs font-semibold text-beige">
                 {exposure > 0 ? `+${exposure}%` : `${exposure}%`}
               </span>
             </div>

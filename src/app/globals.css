@@ -44,6 +44,14 @@ body.landing-cursor-none * {
     @apply border-beige/10;
   }
 
+  .landing-subseparator-accent {
+    @apply h-0.5 w-10 shrink-0 bg-signal sm:w-12;
+  }
+
+  .landing-subseparator-line {
+    @apply h-px flex-1 bg-beige/10;
+  }
+
   .landing-surface {
     @apply border border-beige/10 bg-night-card/80;
   }
@@ -63,16 +71,20 @@ body.landing-cursor-none * {
   .landing-cta-label {
     @apply text-beige-dim transition hover:text-sand;
   }
+
+  .editor-theme {
+    @apply bg-night text-beige;
+  }
 }
 
 @layer utilities {
   .editor-checkerboard {
-    background-color: #e8ebef;
+    background-color: #121212;
     background-image:
-      linear-gradient(45deg, #d5d9df 25%, transparent 25%),
-      linear-gradient(-45deg, #d5d9df 25%, transparent 25%),
-      linear-gradient(45deg, transparent 75%, #d5d9df 75%),
-      linear-gradient(-45deg, transparent 75%, #d5d9df 75%);
+      linear-gradient(45deg, #1a1a1a 25%, transparent 25%),
+      linear-gradient(-45deg, #1a1a1a 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #1a1a1a 75%),
+      linear-gradient(-45deg, transparent 75%, #1a1a1a 75%);
     background-position:
       0 0,
       0 12px,

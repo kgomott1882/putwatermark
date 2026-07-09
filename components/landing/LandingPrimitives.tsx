@@ -8,6 +8,19 @@ export function LandingHighlight({ children }: { children: ReactNode }) {
   return <span className="text-sand">{children}</span>;
 }
 
+export function LandingSubSeparator({ className = "" }: { className?: string }) {
+  return (
+    <div
+      aria-hidden
+      className={`flex w-full items-center ${className}`}
+      role="presentation"
+    >
+      <span className="landing-subseparator-accent" />
+      <span className="landing-subseparator-line" />
+    </div>
+  );
+}
+
 export function LandingStarfield() {
   return (
     <div

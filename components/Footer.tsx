@@ -9,6 +9,7 @@ import { pageContainerClass } from "./pageContainer";
 const navigationLinks = [
   { label: "Home", href: "/" },
   { label: "Watermark Tool", href: "/watermark" },
+  { label: "Blog", href: "/blog" },
   { label: "Pricing", href: "/pricing" },
   { label: "Account", href: "/account" },
   { label: "Contact", href: "mailto:hello@putwatermark.com" },

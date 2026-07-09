@@ -32,7 +32,7 @@ export function WatermarkStyleControls({
     <div className="space-y-2">
       <EditorPanelSection title="Opacity">
         <div className="flex items-center justify-between gap-4">
-          <span className="text-xs font-semibold text-ink">{watermarkOpacity}%</span>
+          <span className="text-xs font-semibold text-beige">{watermarkOpacity}%</span>
         </div>
         <input
           className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-signal"
@@ -56,7 +56,7 @@ export function WatermarkStyleControls({
         }
       >
         <div className="flex items-center justify-between gap-4">
-          <span className="text-xs font-semibold text-ink">{fontSizeScale}%</span>
+          <span className="text-xs font-semibold text-beige">{fontSizeScale}%</span>
         </div>
         <input
           className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-signal"
@@ -73,7 +73,7 @@ export function WatermarkStyleControls({
       {watermarkType === "text" ? (
         <EditorPanelSection title="Font family">
           <select
-            className="w-full rounded-xl border border-editor-panel-border bg-white px-2.5 py-2 text-sm text-editor-ink outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
+            className="w-full rounded-xl border border-beige/10 bg-night-card px-2.5 py-2 text-sm text-beige outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
             id="font-family"
             onChange={(event) => onFontFamilyChange(event.target.value)}
             value={fontFamily}
