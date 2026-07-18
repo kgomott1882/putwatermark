@@ -163,9 +163,10 @@ export async function countRecentExportAuthorizations({
     .select("id", { count: "exact", head: true })
     .gt("created_at", windowStart);
 
-  if (userId && ipAddress) {
-    query = query.or(`user_id.eq.${userId},ip_address.eq.${ipAddress}`);
-  } else if (userId) {
+  // Authenticated: count by user_id only. Anonymous: count by ip_address only.
+  // Do not use PostgREST `.or()` string filters with raw UUIDs/IPs — hyphens and
+  // dots break parsing and can silently return count 0.
+  if (userId) {
     query = query.eq("user_id", userId);
   } else if (ipAddress) {
     query = query.eq("ip_address", ipAddress);
@@ -236,18 +237,27 @@ async function logExportAuthorization({
   userId: string | null;
 }) {
   const supabase = createAdminClient();
-  const { error } = await supabase.from("export_authorizations").insert({
-    balance_at_check: balanceAtCheck,
-    cost,
-    decision,
-    export_id: exportId,
-    file_type: fileType,
-    ip_address: ipAddress,
-    reason,
-    user_id: userId,
+  const { error } = await supabase.rpc("try_insert_export_authorization", {
+    p_balance_at_check: balanceAtCheck,
+    p_cost: cost,
+    p_decision: decision,
+    p_export_id: exportId,
+    p_file_type: fileType,
+    p_ip_address: ipAddress,
+    p_limit: EXPORT_AUTHORIZE_RATE_LIMIT,
+    p_reason: reason,
+    p_user_id: userId,
+    p_window_seconds: EXPORT_AUTHORIZE_RATE_WINDOW_MS / 1000,
   });
 
   if (error) {
+    if (error.message?.includes("export_authorize_rate_limited")) {
+      throw new ExportAuthorizeError(
+        "Too many export authorization requests. Please wait a moment and try again.",
+        429,
+      );
+    }
+
     throw new ExportAuthorizeError(
       "Could not record export authorization.",
       503,
