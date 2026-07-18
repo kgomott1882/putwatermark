@@ -56,7 +56,7 @@ const faqItems: FaqItem[] = [
   {
     question: "What happens to large videos?",
     answer:
-      "Videos under 60 seconds and 1080p process instantly in your browser. Larger files are automatically routed to server-side processing with no extra steps needed from you.",
+      "Videos under 60 seconds and 1080p process instantly in your browser. Most larger files are processed automatically on our servers; very large files may need to be split for now.",
   },
 ];
 

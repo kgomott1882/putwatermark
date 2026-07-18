@@ -5,6 +5,9 @@ export const CLIENT_VIDEO_MAX_SHORT_EDGE = 1080;
 export const SERVER_VIDEO_MAX_DURATION_SECONDS = 600;
 export const SERVER_VIDEO_MAX_FILE_BYTES = 250 * 1024 * 1024;
 
+/** Current Supabase simple-upload cap for server-side video (below bucket limit). */
+export const SERVER_VIDEO_UPLOAD_MAX_FILE_BYTES = 50 * 1024 * 1024;
+
 export type VideoExportRoute = "client" | "server" | "reject";
 
 export function isClientVideoExportEligible(
@@ -84,10 +87,11 @@ export function getVideoExportRoute(
 }
 
 export function getVideoExportRejectionMessage() {
-  const maxFileSizeMb = Math.floor(SERVER_VIDEO_MAX_FILE_BYTES / (1024 * 1024));
-  const maxDurationMinutes = Math.floor(SERVER_VIDEO_MAX_DURATION_SECONDS / 60);
+  const maxUploadMb = Math.floor(
+    SERVER_VIDEO_UPLOAD_MAX_FILE_BYTES / (1024 * 1024),
+  );
 
-  return `This video exceeds our processing limits (${maxFileSizeMb}MB max file size, ${maxDurationMinutes} minutes max duration). Try a shorter or smaller clip.`;
+  return `This video exceeds our current processing limits (~${maxUploadMb}MB max upload for server-side video). Try a shorter or smaller clip. Support for longer/larger files is coming soon.`;
 }
 
 export function getVideoExportDisabledReason(

@@ -60,7 +60,7 @@ const PHOTOS_PDFS_LINE = "Covered by your credit balance";
 const SIGNATURE_LINE = "Unlimited — always free";
 const CREDITS_EXPIRY_LINE = "Credits don't expire for 90 days";
 const VIDEO_FOOTNOTE =
-  "Longer or larger videos are processed on our servers and may use additional credits";
+  "Videos that can't run in your browser are processed on our servers and may use additional credits";
 
 const pricingHighlights = [
   "No subscription",

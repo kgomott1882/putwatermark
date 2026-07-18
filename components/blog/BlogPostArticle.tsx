@@ -258,7 +258,7 @@ export function BlogPostArticle({ post }: BlogPostArticleProps) {
                 items={[
                   "Upload your video. MP4, MOV, and WebM formats are supported.",
                   "Design your watermark exactly as you would for a photo — text, logo, position, opacity, and tiling all work the same way, live over your video preview.",
-                  "Export. Short clips (under 60 seconds, up to 1080p) process instantly, right in your browser. Longer or larger videos are automatically processed on our servers — no extra steps, no size-limit dead ends, and nothing is stored afterward.",
+                  "Export. Short clips (under 60 seconds, up to 1080p) process instantly, right in your browser. Most larger videos are processed automatically on our servers; very large files may need to be split for now. Nothing is stored afterward.",
                 ]}
               />
             </ArticleSection>

@@ -136,7 +136,7 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "Video",
       description:
-        "MP4, MOV, and WebM clips under 60 seconds and 1080p process instantly in your browser. Larger or longer videos (up to 250MB, 10 minutes) are automatically processed on our servers with no extra steps needed.",
+        "MP4, MOV, and WebM clips under 60 seconds and 1080p process instantly in your browser. Larger videos (up to 50MB) are automatically processed on our servers — support for longer/larger files is coming soon.",
       Icon: Video,
     },
     {
@@ -162,7 +162,7 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "Client-Side Processing",
       description:
-        "Most operations — images, PDFs, and short videos — run entirely on your device for speed and privacy. Larger videos are automatically processed on our servers when needed, with files deleted immediately afterward.",
+        "Most operations — images, PDFs, and short videos — run entirely on your device for speed and privacy. Larger videos are processed on our servers when possible; very large files may need to be split for now. Files are deleted immediately afterward.",
       Icon: ShieldCheck,
     },
   ],
