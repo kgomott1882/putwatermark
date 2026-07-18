@@ -20,9 +20,13 @@ export function createAdminClient() {
   });
 }
 
-export function isServerVideoExportConfigured() {
+export function isSupabaseAdminConfigured() {
   return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
       process.env.SUPABASE_SERVICE_ROLE_KEY,
   );
+}
+
+export function isServerVideoExportConfigured() {
+  return isSupabaseAdminConfigured();
 }
