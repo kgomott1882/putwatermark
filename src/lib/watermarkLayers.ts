@@ -16,13 +16,23 @@ export type CustomPosition = {
   yPercent: number;
 };
 
+import {
+  DEFAULT_TEXT_SHADOW_ENABLED,
+  DEFAULT_TEXT_WATERMARK_COLOR,
+  DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
+  type TextWatermarkFontWeight,
+} from "./watermarkTextStyle";
+
 export type TextWatermarkLayer = {
   customPosition: CustomPosition | null;
   fontFamily: string;
   fontSizeScale: number;
+  fontWeight: TextWatermarkFontWeight;
   id: string;
   opacity: number;
   text: string;
+  textColor: string;
+  textShadowEnabled: boolean;
   type: "text";
   watermarkPosition: WatermarkPosition;
 };
@@ -49,10 +59,13 @@ export type WatermarkLayerSnapshot =
       customPosition: CustomPosition | null;
       fontFamily: string;
       fontSizeScale: number;
+      fontWeight?: TextWatermarkFontWeight;
       id: string;
       logoDataUrl: null;
       opacity: number;
       text: string;
+      textColor?: string;
+      textShadowEnabled?: boolean;
       type: "text";
       watermarkPosition: WatermarkPosition;
     }
@@ -84,11 +97,14 @@ export function createDefaultTextLayer(
     customPosition: null,
     fontFamily: defaultFontFamily,
     fontSizeScale: 100,
+    fontWeight: DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
     id: createWatermarkLayerId(),
     opacity: 70,
     text: partial?.text ?? "",
+    textColor: DEFAULT_TEXT_WATERMARK_COLOR,
+    textShadowEnabled: DEFAULT_TEXT_SHADOW_ENABLED,
     type: "text",
-    watermarkPosition: "bottom-right",
+    watermarkPosition: "top-left",
   };
 }
 
@@ -105,7 +121,7 @@ export function createDefaultLogoLayer(): LogoWatermarkLayer {
     opacity: 70,
     originalLogoImage: null,
     type: "logo",
-    watermarkPosition: "bottom-right",
+    watermarkPosition: "top-left",
   };
 }
 
@@ -160,10 +176,13 @@ export async function serializeTextLayer(
     customPosition: layer.customPosition ? { ...layer.customPosition } : null,
     fontFamily: layer.fontFamily,
     fontSizeScale: layer.fontSizeScale,
+    fontWeight: layer.fontWeight,
     id: layer.id,
     logoDataUrl: null,
     opacity: layer.opacity,
     text: layer.text,
+    textColor: layer.textColor,
+    textShadowEnabled: layer.textShadowEnabled,
     type: "text",
     watermarkPosition: layer.watermarkPosition,
   };
@@ -196,9 +215,12 @@ export async function deserializeTextLayer(
     customPosition: snapshot.customPosition ? { ...snapshot.customPosition } : null,
     fontFamily: snapshot.fontFamily,
     fontSizeScale: snapshot.fontSizeScale,
+    fontWeight: snapshot.fontWeight ?? DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
     id: snapshot.id,
     opacity: snapshot.opacity,
     text: snapshot.text,
+    textColor: snapshot.textColor ?? DEFAULT_TEXT_WATERMARK_COLOR,
+    textShadowEnabled: snapshot.textShadowEnabled ?? DEFAULT_TEXT_SHADOW_ENABLED,
     type: "text",
     watermarkPosition: snapshot.watermarkPosition,
   };
@@ -239,6 +261,9 @@ export function legacySnapshotToTextLayer(snapshot: {
   customPosition: CustomPosition | null;
   fontFamily: string;
   fontSizeScale: number;
+  fontWeight?: TextWatermarkFontWeight;
+  textColor?: string;
+  textShadowEnabled?: boolean;
   watermarkOpacity: number;
   watermarkPosition: WatermarkPosition;
   watermarkText: string;
@@ -247,9 +272,12 @@ export function legacySnapshotToTextLayer(snapshot: {
     customPosition: snapshot.customPosition ? { ...snapshot.customPosition } : null,
     fontFamily: snapshot.fontFamily,
     fontSizeScale: snapshot.fontSizeScale,
+    fontWeight: snapshot.fontWeight ?? DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
     id: createWatermarkLayerId(),
     opacity: snapshot.watermarkOpacity,
     text: snapshot.watermarkText,
+    textColor: snapshot.textColor ?? DEFAULT_TEXT_WATERMARK_COLOR,
+    textShadowEnabled: snapshot.textShadowEnabled ?? DEFAULT_TEXT_SHADOW_ENABLED,
     type: "text",
     watermarkPosition: snapshot.watermarkPosition,
   };

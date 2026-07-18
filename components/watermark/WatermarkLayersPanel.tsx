@@ -1,14 +1,14 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
+import type { FontFamilyGroup } from "@/lib/watermarkFonts";
 import type {
   LogoWatermarkLayer,
   TextWatermarkLayer,
-  WatermarkPosition,
 } from "@/lib/watermarkLayers";
+import type { TextWatermarkFontWeight } from "@/lib/watermarkTextStyle";
 import {
   EditorCard,
-  EditorGridChoice,
   EditorPanelSection,
   EditorPill,
 } from "./EditorToolPanel";
@@ -17,23 +17,6 @@ import { WatermarkStyleControls } from "./WatermarkStyleControls";
 type WatermarkMode = "single" | "tile";
 type TileAngle = 0 | 45 | 90 | 180;
 type TileDensity = "sparse" | "medium" | "dense";
-
-type FontFamilyOption = {
-  label: string;
-  value: string;
-};
-
-const watermarkPositions: { label: string; value: WatermarkPosition }[] = [
-  { label: "Top left", value: "top-left" },
-  { label: "Top center", value: "top-center" },
-  { label: "Top right", value: "top-right" },
-  { label: "Center left", value: "center-left" },
-  { label: "Center", value: "center" },
-  { label: "Center right", value: "center-right" },
-  { label: "Bottom left", value: "bottom-left" },
-  { label: "Bottom center", value: "bottom-center" },
-  { label: "Bottom right", value: "bottom-right" },
-];
 
 const tileDensities: { label: string; value: TileDensity }[] = [
   { label: "Sparse", value: "sparse" },
@@ -50,8 +33,7 @@ const tileAngles: { label: string; value: TileAngle }[] = [
 
 type WatermarkLayersPanelProps = {
   activeLayerId: string;
-  fontFamilies: readonly FontFamilyOption[];
-  hasMedia: boolean;
+  fontFamilyGroups: readonly FontFamilyGroup[];
   layer: TextWatermarkLayer | LogoWatermarkLayer;
   layerCount: number;
   layerIds: readonly string[];
@@ -61,13 +43,14 @@ type WatermarkLayersPanelProps = {
   onAddLayer: () => void;
   onFontFamilyChange: (value: string) => void;
   onFontSizeScaleChange: (value: number) => void;
+  onFontWeightChange?: (value: TextWatermarkFontWeight) => void;
   onLayerSelect: (id: string) => void;
   onLogoBackgroundToggle?: () => void;
   onLogoPick?: () => void;
   onLogoRemove?: () => void;
-  onPositionChange: (position: WatermarkPosition) => void;
   onRemoveLayer: (id: string) => void;
   onTextChange: (value: string) => void;
+  onTextColorChange?: (value: string) => void;
   onTileAngleChange: (value: TileAngle) => void;
   onTileDensityChange: (value: TileDensity) => void;
   onTileGapChange: (value: number) => void;
@@ -76,13 +59,11 @@ type WatermarkLayersPanelProps = {
   tileDensity: TileDensity;
   tileGap: number;
   type: "text" | "logo";
-  watermarkPosition: WatermarkPosition;
 };
 
 export function WatermarkLayersPanel({
   activeLayerId,
-  fontFamilies,
-  hasMedia,
+  fontFamilyGroups,
   layer,
   layerCount,
   layerIds,
@@ -92,13 +73,14 @@ export function WatermarkLayersPanel({
   onAddLayer,
   onFontFamilyChange,
   onFontSizeScaleChange,
+  onFontWeightChange,
   onLayerSelect,
   onLogoBackgroundToggle,
   onLogoPick,
   onLogoRemove,
-  onPositionChange,
   onRemoveLayer,
   onTextChange,
+  onTextColorChange,
   onTileAngleChange,
   onTileDensityChange,
   onTileGapChange,
@@ -107,7 +89,6 @@ export function WatermarkLayersPanel({
   tileDensity,
   tileGap,
   type,
-  watermarkPosition,
 }: WatermarkLayersPanelProps) {
   const canAddLayer = mode === "single";
   const activeIndex = Math.max(0, layerIds.indexOf(activeLayerId));
@@ -200,7 +181,7 @@ export function WatermarkLayersPanel({
                     Change logo
                   </button>
                   <button
-                    className="rounded-lg border border-beige/10 px-3 py-1.5 text-xs font-medium text-signal transition hover:brightness-110"
+                    className="rounded-lg border border-dashed border-beige/20 bg-beige/5 px-3 py-1.5 text-xs font-medium text-signal transition hover:brightness-110"
                     onClick={onLogoRemove}
                     type="button"
                   >
@@ -268,25 +249,6 @@ export function WatermarkLayersPanel({
         ) : null}
       </EditorPanelSection>
 
-      {mode === "single" && hasMedia ? (
-        <EditorPanelSection title="Position">
-          <div className="grid grid-cols-3 gap-1">
-            {watermarkPositions.map(({ label, value }) => (
-              <EditorGridChoice
-                active={watermarkPosition === value}
-                ariaLabel={label}
-                groupId={`watermark-position-${activeLayerId}`}
-                key={value}
-                onClick={() => onPositionChange(value)}
-              />
-            ))}
-          </div>
-          <p className="text-[11px] leading-4 text-beige-dim/80">
-            Or drag the watermark on the preview to place it freely.
-          </p>
-        </EditorPanelSection>
-      ) : null}
-
       {mode === "tile" ? (
         <div className="space-y-2">
           <EditorPanelSection title="Density">
@@ -337,12 +299,18 @@ export function WatermarkLayersPanel({
       ) : null}
 
       <WatermarkStyleControls
-        fontFamilies={fontFamilies}
-        fontFamily={textLayer?.fontFamily ?? fontFamilies[0].value}
+        fontFamily={
+          textLayer?.fontFamily ?? fontFamilyGroups[0]?.fonts[0]?.value ?? ""
+        }
+        fontFamilyGroups={fontFamilyGroups}
         fontSizeScale={layer.fontSizeScale}
+        fontWeight={textLayer?.fontWeight}
         onFontFamilyChange={onFontFamilyChange}
         onFontSizeScaleChange={onFontSizeScaleChange}
+        onFontWeightChange={onFontWeightChange}
+        onTextColorChange={onTextColorChange}
         onWatermarkOpacityChange={onWatermarkOpacityChange}
+        textColor={textLayer?.textColor}
         watermarkOpacity={layer.opacity}
         watermarkType={type}
       />
