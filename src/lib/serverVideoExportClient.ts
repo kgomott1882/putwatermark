@@ -6,6 +6,72 @@ export type ServerVideoExportStage =
   | "processing"
   | "uploading";
 
+const ALLOWED_VIDEO_UPLOAD_MIME_TYPES = new Set([
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+]);
+
+export function resolveVideoUploadContentType(
+  fileName: string,
+  blobType = "",
+) {
+  const normalizedBlobType = blobType.trim().toLowerCase();
+
+  if (ALLOWED_VIDEO_UPLOAD_MIME_TYPES.has(normalizedBlobType)) {
+    return normalizedBlobType;
+  }
+
+  const extension = fileName.split(".").pop()?.toLowerCase();
+
+  switch (extension) {
+    case "mov":
+      return "video/quicktime";
+    case "webm":
+      return "video/webm";
+    case "mp4":
+    default:
+      return "video/mp4";
+  }
+}
+
+function getVideoUploadErrorMessage(responseText: string, status: number) {
+  let payload: {
+    error?: string;
+    message?: string;
+    statusCode?: number | string;
+  } | null = null;
+
+  if (responseText.trim()) {
+    try {
+      payload = JSON.parse(responseText) as {
+        error?: string;
+        message?: string;
+        statusCode?: number | string;
+      };
+    } catch {
+      payload = null;
+    }
+  }
+
+  const statusCode = Number(payload?.statusCode ?? status);
+  const errorCode = payload?.error?.toLowerCase() ?? "";
+
+  if (statusCode === 413 || errorCode === "payload too large") {
+    return "Video too large — video uploads are currently limited to ~50MB. Larger video support is coming soon.";
+  }
+
+  if (payload?.message) {
+    return `Video upload failed: ${payload.message}`;
+  }
+
+  if (payload?.error) {
+    return `Video upload failed: ${payload.error}`;
+  }
+
+  return `Video upload failed (HTTP ${status}). Please try again.`;
+}
+
 type ExportVideoOnServerInput = {
   abortSignal?: AbortSignal;
   duration: number;
@@ -40,11 +106,13 @@ function uint8ArrayToBase64(bytes: Uint8Array) {
 function uploadBlobWithProgress({
   abortSignal,
   blob,
+  contentType,
   onProgress,
   uploadUrl,
 }: {
   abortSignal?: AbortSignal;
   blob: Blob;
+  contentType: string;
   onProgress: (progress: number) => void;
   uploadUrl: string;
 }) {
@@ -52,7 +120,7 @@ function uploadBlobWithProgress({
     const xhr = new XMLHttpRequest();
 
     xhr.open("PUT", uploadUrl);
-    xhr.setRequestHeader("Content-Type", blob.type || "application/octet-stream");
+    xhr.setRequestHeader("Content-Type", contentType);
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && event.total > 0) {
@@ -68,7 +136,7 @@ function uploadBlobWithProgress({
 
       reject(
         new VideoExportFailedError(
-          "Video upload failed. Please try again with a smaller clip.",
+          getVideoUploadErrorMessage(xhr.responseText, xhr.status),
         ),
       );
     };
@@ -178,9 +246,19 @@ export async function exportVideoOnServer({
   onStageChange("uploading");
   onProgress(5);
 
+  const uploadContentType = resolveVideoUploadContentType(
+    inputFileName,
+    videoBlob.type,
+  );
+  const uploadBlob =
+    videoBlob.type === uploadContentType
+      ? videoBlob
+      : new Blob([videoBlob], { type: uploadContentType });
+
   await uploadBlobWithProgress({
     abortSignal,
-    blob: videoBlob,
+    blob: uploadBlob,
+    contentType: uploadContentType,
     onProgress,
     uploadUrl: uploadTarget.uploadUrl,
   });

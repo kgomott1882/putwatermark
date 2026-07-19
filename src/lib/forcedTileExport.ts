@@ -21,9 +21,56 @@ export const FORCED_TILE_SETTINGS = {
   tileDensity: "sparse",
   tileGap: 130,
   watermarkMode: "tile",
-  watermarkOpacity: 34,
+  watermarkOpacity: 44,
   watermarkType: "logo",
 } as const;
+
+const FORCED_TILE_TEXT_COLOR = "#5c5c5c";
+const FORCED_TILE_TEXT_STROKE = "rgba(255, 255, 255, 0.45)";
+const FORCED_TILE_ICON_LIGHT_HALO = "rgba(255, 255, 255, 0.85)";
+const FORCED_TILE_ICON_DARK_EDGE = "rgba(0, 0, 0, 0.35)";
+
+function drawForcedTileIconWithOutline(
+  context: CanvasRenderingContext2D,
+  logoImage: HTMLImageElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const strokeWidth = Math.max(1, Math.round(width * 0.04));
+
+  context.save();
+  context.shadowColor = FORCED_TILE_ICON_LIGHT_HALO;
+  context.shadowBlur = strokeWidth * 1.5;
+  context.drawImage(logoImage, x, y, width, height);
+  context.restore();
+
+  context.save();
+  context.shadowColor = FORCED_TILE_ICON_DARK_EDGE;
+  context.shadowBlur = strokeWidth;
+  context.drawImage(logoImage, x, y, width, height);
+  context.restore();
+
+  context.drawImage(logoImage, x, y, width, height);
+}
+
+function drawForcedTileSiteText(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  fontSize: number,
+) {
+  context.font = `600 ${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  context.textAlign = "center";
+  context.textBaseline = "top";
+  context.lineJoin = "round";
+  context.lineWidth = Math.max(1.5, fontSize / 10);
+  context.strokeStyle = FORCED_TILE_TEXT_STROKE;
+  context.fillStyle = FORCED_TILE_TEXT_COLOR;
+  context.strokeText(FORCED_TILE_SITE_TEXT, x, y);
+  context.fillText(FORCED_TILE_SITE_TEXT, x, y);
+}
 
 const FORCED_TILE_OPACITY = FORCED_TILE_SETTINGS.watermarkOpacity;
 const FORCED_TILE_ANGLE = FORCED_TILE_SETTINGS.tileAngle;
@@ -124,22 +171,21 @@ export function createForcedTileCompositeImage(logoImage: HTMLImageElement) {
       context.imageSmoothingQuality = "high";
 
       const iconX = (unitWidth - iconBaseWidth) / 2;
-      context.drawImage(
+      const iconY = padding / 2;
+      drawForcedTileIconWithOutline(
+        context,
         logoImage,
         iconX,
-        padding / 2,
+        iconY,
         iconBaseWidth,
         iconHeight,
       );
 
-      context.font = `600 ${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-      context.fillStyle = "#5c5c5c";
-      context.textAlign = "center";
-      context.textBaseline = "top";
-      context.fillText(
-        FORCED_TILE_SITE_TEXT,
+      drawForcedTileSiteText(
+        context,
         unitWidth / 2,
-        padding / 2 + iconHeight + textGap,
+        iconY + iconHeight + textGap,
+        fontSize,
       );
 
       const compositeImage = await canvasToImage(canvas);
