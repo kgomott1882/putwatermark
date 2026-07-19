@@ -11,6 +11,8 @@ import {
   LandingSubSeparator,
 } from "../../../components/landing/LandingPrimitives";
 import { pageContainerClass } from "../../../components/pageContainer";
+import { PricingPayPalCheckout } from "../../../components/pricing/PricingPayPalCheckout";
+import type { PurchaseTierId } from "@/lib/purchasePricing";
 
 type PricingTier = {
   credits: number;
@@ -18,11 +20,13 @@ type PricingTier = {
   popular?: boolean;
   price: number;
   tagline: string;
+  tierId: PurchaseTierId;
   videoLine: string;
 };
 
 type PricingSelectorProps = {
   isLoggedIn: boolean;
+  paypalClientId: string;
 };
 
 const pricingTiers: PricingTier[] = [
@@ -31,6 +35,7 @@ const pricingTiers: PricingTier[] = [
     label: "Grow",
     price: 8.99,
     tagline: "Personal projects & occasional exports",
+    tierId: "grow",
     videoLine: "Covered by your credit balance",
   },
   {
@@ -39,6 +44,7 @@ const pricingTiers: PricingTier[] = [
     popular: true,
     price: 19.99,
     tagline: "Regular creative work",
+    tierId: "premium",
     videoLine: "Covered by your credit balance",
   },
 ];
@@ -113,7 +119,7 @@ function getTierFeatures(tier: PricingTier) {
   ] as const;
 }
 
-export function PricingSelector({ isLoggedIn }: PricingSelectorProps) {
+export function PricingSelector({ isLoggedIn, paypalClientId }: PricingSelectorProps) {
   const router = useRouter();
   const [selectedTierIndex, setSelectedTierIndex] = useState(1);
   const [selectionMode, setSelectionMode] = useState<SelectionMode>("tier");
@@ -134,22 +140,18 @@ export function PricingSelector({ isLoggedIn }: PricingSelectorProps) {
     setStandaloneCredits(value);
   }
 
-  function handleContinue() {
-    if (!isLoggedIn) {
-      router.push("/login?next=/pricing");
-      return;
-    }
-
-    if (selectionMode === "extra") {
-      console.log("Selected custom credit pack", {
-        credits: standaloneCredits,
-        price: standalonePrice,
-      });
-      return;
-    }
-
-    console.log("Selected pricing tier", selectedTier);
-  }
+  const checkoutSelection =
+    selectionMode === "extra"
+      ? {
+          credits: standaloneCredits,
+          kind: "custom" as const,
+          key: `extra-${standaloneCredits}`,
+        }
+      : {
+          kind: "tier" as const,
+          key: selectedTier.label,
+          tierId: selectedTier.tierId,
+        };
 
   const actionSummary =
     selectionMode === "extra"
@@ -367,14 +369,22 @@ export function PricingSelector({ isLoggedIn }: PricingSelectorProps) {
           </div>
 
           <div className="flex flex-col items-stretch justify-center gap-3 bg-night-card px-6 py-5 sm:min-w-[16rem] sm:px-8">
-            <button
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-signal px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-signal/25 transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-signal focus:ring-offset-2 focus:ring-offset-night-card"
-              onClick={handleContinue}
-              type="button"
-            >
-              {isLoggedIn ? "Continue to payment" : "Log in to continue"}
-              <ArrowRight className="h-4 w-4" strokeWidth={2.2} />
-            </button>
+            {isLoggedIn ? (
+              <PricingPayPalCheckout
+                checkoutKey={checkoutSelection.key}
+                paypalClientId={paypalClientId}
+                selection={checkoutSelection}
+              />
+            ) : (
+              <button
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-signal px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-signal/25 transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-signal focus:ring-offset-2 focus:ring-offset-night-card"
+                onClick={() => router.push("/login?next=/pricing")}
+                type="button"
+              >
+                Log in to continue
+                <ArrowRight className="h-4 w-4" strokeWidth={2.2} />
+              </button>
+            )}
 
             {!isLoggedIn ? (
               <p className="text-center text-xs text-beige-dim">

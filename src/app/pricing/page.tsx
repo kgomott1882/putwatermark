@@ -7,10 +7,14 @@ export default async function PricingPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const paypalClientId = process.env.PAYPAL_CLIENT_ID?.trim() ?? "";
 
   return (
     <main className="landing-theme">
-      <PricingSelector isLoggedIn={Boolean(user)} />
+      <PricingSelector
+        isLoggedIn={Boolean(user)}
+        paypalClientId={paypalClientId}
+      />
       <Footer />
     </main>
   );
