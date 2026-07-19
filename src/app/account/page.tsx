@@ -1,4 +1,9 @@
 import { redirect } from "next/navigation";
+import { Button } from "../../../components/Button";
+import {
+  fetchUserCreditBalance,
+  formatCreditBalance,
+} from "../../lib/creditBalance";
 import { createClient } from "../../../utils/supabase/server";
 import { DeleteAccountSection } from "./DeleteAccountSection";
 import { LogoutButton } from "./LogoutButton";
@@ -13,20 +18,24 @@ export default async function AccountPage() {
     redirect("/login");
   }
 
-  const [{ data: profile }, { data: pendingDeletionRequest }] =
-    await Promise.all([
-      supabase
-        .from("profiles")
-        .select("name, surname")
-        .eq("id", user.id)
-        .single(),
-      supabase
-        .from("deletion_requests")
-        .select("id, requested_at, sla_due_at, status")
-        .eq("user_id", user.id)
-        .eq("status", "pending")
-        .maybeSingle(),
-    ]);
+  const [
+    { data: profile },
+    { data: pendingDeletionRequest },
+    creditBalance,
+  ] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("name, surname")
+      .eq("id", user.id)
+      .single(),
+    supabase
+      .from("deletion_requests")
+      .select("id, requested_at, sla_due_at, status")
+      .eq("user_id", user.id)
+      .eq("status", "pending")
+      .maybeSingle(),
+    fetchUserCreditBalance(supabase, user.id),
+  ]);
 
   const name = profile?.name ?? user.email ?? "there";
 
@@ -41,9 +50,13 @@ export default async function AccountPage() {
         </h1>
         <p className="mt-4 text-sm leading-6 text-battleship">{user.email}</p>
         <p className="mt-8 rounded-2xl border border-platinum bg-platinum/60 px-4 py-3 text-sm font-medium text-ink">
-          Credits: 0
+          Credits: {formatCreditBalance(creditBalance)}
         </p>
-        <div className="mt-8 flex justify-center">
+
+        <div className="mt-6 flex flex-col items-center gap-3">
+          <Button className="w-full justify-center px-6 py-3.5 text-sm" href="/watermark">
+            Go to Watermark Tool
+          </Button>
           <LogoutButton />
         </div>
 

@@ -97,8 +97,8 @@ export function DeleteAccountSection({
   }
 
   return (
-    <div className="mt-10 border-t border-platinum pt-8 text-left">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-battleship">
+    <div className="mt-14 border-t border-platinum/40 pt-6 text-left">
+      <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-battleship/60">
         Danger zone
       </p>
 
@@ -115,8 +115,8 @@ export function DeleteAccountSection({
       ) : null}
 
       {pendingRequest ? (
-        <div className="mt-4 space-y-4">
-          <p className="text-sm leading-6 text-battleship">
+        <div className="mt-3 space-y-3">
+          <p className="text-xs leading-5 text-battleship/80">
             Account deletion requested on{" "}
             <span className="font-medium text-ink">
               {formatDate(pendingRequest.requested_at)}
@@ -128,7 +128,7 @@ export function DeleteAccountSection({
             .
           </p>
           <button
-            className="text-sm font-medium text-battleship underline decoration-platinum underline-offset-4 transition hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+            className="text-xs font-medium text-battleship/70 underline decoration-platinum/80 underline-offset-4 transition hover:text-battleship disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isSubmitting}
             onClick={handleCancelRequest}
             type="button"
@@ -137,10 +137,10 @@ export function DeleteAccountSection({
           </button>
         </div>
       ) : (
-        <div className="mt-4">
+        <div className="mt-3">
           {!showConfirmation ? (
             <button
-              className="text-sm font-medium text-battleship underline decoration-platinum underline-offset-4 transition hover:text-ink"
+              className="text-xs font-medium text-battleship/70 underline decoration-platinum/80 underline-offset-4 transition hover:text-battleship"
               onClick={() => {
                 setError("");
                 setSuccessMessage("");
@@ -151,14 +151,14 @@ export function DeleteAccountSection({
               Delete my account
             </button>
           ) : (
-            <div className="rounded-2xl border border-platinum bg-platinum/40 px-4 py-4">
-              <p className="text-sm leading-6 text-battleship">
+            <div className="rounded-xl border border-platinum/60 bg-platinum/30 px-4 py-3">
+              <p className="text-xs leading-5 text-battleship/80">
                 Are you sure? This will permanently delete your account and data
                 within 30 days. This cannot be undone.
               </p>
-              <div className="mt-4 flex flex-wrap gap-3">
+              <div className="mt-3 flex flex-wrap gap-2">
                 <button
-                  className="rounded-full border border-battleship/40 bg-paper px-4 py-2 text-sm font-semibold text-battleship transition hover:border-battleship hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-full border border-battleship/30 bg-paper px-3 py-1.5 text-xs font-semibold text-battleship transition hover:border-battleship/50 hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={isSubmitting}
                   onClick={handleConfirmDeletion}
                   type="button"
@@ -166,7 +166,7 @@ export function DeleteAccountSection({
                   {isSubmitting ? "Submitting..." : "Yes, delete my account"}
                 </button>
                 <button
-                  className="rounded-full px-4 py-2 text-sm font-medium text-battleship transition hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-full px-3 py-1.5 text-xs font-medium text-battleship/70 transition hover:text-battleship disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={isSubmitting}
                   onClick={() => setShowConfirmation(false)}
                   type="button"
