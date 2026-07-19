@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, type FormEvent, useMemo, useState } from "react";
 import { Button } from "../../../components/Button";
+import { getAuthCallbackUrl } from "../../lib/authRedirect";
 import { createClient } from "../../../utils/supabase/client";
 
 type FormValues = {
@@ -56,6 +57,9 @@ function LoginPageContent() {
   const [values, setValues] = useState<FormValues>(initialValues);
   const [formError, setFormError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showResendConfirmation, setShowResendConfirmation] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState("");
   const isConfirmed = searchParams.get("confirmed") === "true";
   const hasConfirmationError = searchParams.get("error") === "confirmation_failed";
   const hasExpiredLinkError = searchParams.get("error") === "link_expired";
@@ -67,14 +71,50 @@ function LoginPageContent() {
       [key]: value,
     }));
     setFormError("");
+    setResendMessage("");
+    setShowResendConfirmation(false);
+  }
+
+  async function handleResendConfirmation() {
+    const email = values.email.trim();
+
+    if (!email) {
+      setResendMessage("Enter your email address above, then resend confirmation.");
+      return;
+    }
+
+    setIsResending(true);
+    setResendMessage("");
+
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email,
+      options: {
+        emailRedirectTo: getAuthCallbackUrl(),
+      },
+    });
+
+    setIsResending(false);
+
+    if (error) {
+      setResendMessage(
+        "Could not resend the confirmation email. Wait a minute and try again.",
+      );
+      return;
+    }
+
+    setResendMessage("Confirmation email sent. Check your inbox and spam folder.");
   }
 
   function getLoginErrorMessage(message: string) {
     const normalizedMessage = message.toLowerCase();
 
     if (normalizedMessage.includes("email not confirmed")) {
-      return "Email not confirmed. Please click the confirmation link we sent before logging in.";
+      setShowResendConfirmation(true);
+      return "Email not confirmed. Click the confirmation link we sent, or resend it below.";
     }
+
+    setShowResendConfirmation(false);
 
     if (normalizedMessage.includes("invalid login credentials")) {
       return "Invalid login credentials. Check your email and password, then try again.";
@@ -143,6 +183,25 @@ function LoginPageContent() {
         {formError ? (
           <div className="mt-8 rounded-2xl border border-signal/30 bg-signal/10 px-4 py-3 text-sm text-ink">
             {formError}
+          </div>
+        ) : null}
+
+        {resendMessage ? (
+          <div className="mt-4 rounded-2xl border border-platinum bg-platinum/60 px-4 py-3 text-sm text-ink">
+            {resendMessage}
+          </div>
+        ) : null}
+
+        {showResendConfirmation || hasExpiredLinkError ? (
+          <div className="mt-4 text-center">
+            <button
+              className="text-sm font-medium text-ink underline decoration-platinum underline-offset-4 transition hover:text-signal hover:decoration-signal disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isResending}
+              onClick={handleResendConfirmation}
+              type="button"
+            >
+              {isResending ? "Sending..." : "Resend confirmation email"}
+            </button>
           </div>
         ) : null}
 

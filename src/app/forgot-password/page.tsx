@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { type FormEvent, useMemo, useState } from "react";
 import { Button } from "../../../components/Button";
+import { getPasswordResetRedirectUrl } from "../../lib/authRedirect";
 import { createClient } from "../../../utils/supabase/client";
 
 const successMessage = "Check your email for a password reset link";
@@ -21,7 +22,7 @@ export default function ForgotPasswordPage() {
     setIsSubmitting(true);
 
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+      redirectTo: getPasswordResetRedirectUrl(),
     });
 
     setIsSubmitting(false);
