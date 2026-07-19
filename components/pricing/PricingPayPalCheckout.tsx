@@ -7,7 +7,7 @@ import { fetchUserCreditBalance, formatCreditBalance } from "@/lib/creditBalance
 import { capturePurchaseOrder, createPurchaseOrder } from "@/lib/purchaseClient";
 import type { PurchaseTierId } from "@/lib/purchasePricing";
 
-type CheckoutSelection =
+export type CheckoutSelection =
   | {
       credits: number;
       kind: "custom";

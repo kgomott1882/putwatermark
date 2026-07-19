@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { ArrowRight, Check } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -11,7 +10,7 @@ import {
   LandingSubSeparator,
 } from "../../../components/landing/LandingPrimitives";
 import { pageContainerClass } from "../../../components/pageContainer";
-import { PricingPayPalCheckout } from "../../../components/pricing/PricingPayPalCheckout";
+import { PricingCheckoutModal } from "../../../components/pricing/PricingCheckoutModal";
 import type { PurchaseTierId } from "@/lib/purchasePricing";
 
 type PricingTier = {
@@ -126,13 +125,34 @@ export function PricingSelector({ isLoggedIn, paypalClientId }: PricingSelectorP
   const [standaloneCredits, setStandaloneCredits] = useState(
     STANDALONE_CREDITS_DEFAULT,
   );
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
 
   const selectedTier = pricingTiers[selectedTierIndex];
   const standalonePrice = standaloneCredits * STANDALONE_PRICE_PER_CREDIT;
 
-  function handleTierSelect(index: number) {
+  function redirectToLogin() {
+    router.push("/login?next=/pricing");
+  }
+
+  function openTierCheckout(index: number) {
+    if (!isLoggedIn) {
+      redirectToLogin();
+      return;
+    }
+
     setSelectionMode("tier");
     setSelectedTierIndex(index);
+    setIsCheckoutModalOpen(true);
+  }
+
+  function openCustomCheckout() {
+    if (!isLoggedIn) {
+      redirectToLogin();
+      return;
+    }
+
+    setSelectionMode("extra");
+    setIsCheckoutModalOpen(true);
   }
 
   function handleStandaloneCreditsChange(value: number) {
@@ -153,7 +173,7 @@ export function PricingSelector({ isLoggedIn, paypalClientId }: PricingSelectorP
           tierId: selectedTier.tierId,
         };
 
-  const actionSummary =
+  const orderSummary =
     selectionMode === "extra"
       ? {
           detail: `${formatCredits(standaloneCredits)} credits · ${formatPrice(PRICE_PER_THOUSAND_CREDITS)} per 1,000`,
@@ -258,7 +278,7 @@ export function PricingSelector({ isLoggedIn, paypalClientId }: PricingSelectorP
                           ? "border border-signal/50 bg-signal/10 text-beige"
                           : "border border-beige/15 bg-night-elevated text-beige hover:border-beige/25 hover:bg-night-elevated/80"
                     }`}
-                    onClick={() => handleTierSelect(index)}
+                    onClick={() => openTierCheckout(index)}
                     type="button"
                   >
                     {isSelected ? `Selected · ${tier.label}` : `Start with ${tier.label}`}
@@ -315,7 +335,7 @@ export function PricingSelector({ isLoggedIn, paypalClientId }: PricingSelectorP
             className={`mt-5 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] transition ${
               selectionMode === "extra" ? "text-signal" : "text-beige-dim hover:text-beige"
             }`}
-            onClick={() => setSelectionMode("extra")}
+            onClick={openCustomCheckout}
             type="button"
           >
             {selectionMode === "extra" ? "Selected for checkout" : "Use this amount"}
@@ -349,56 +369,25 @@ export function PricingSelector({ isLoggedIn, paypalClientId }: PricingSelectorP
           </ul>
         </div>
 
-        <motion.div
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-6 grid gap-px landing-border border bg-beige/10 md:grid-cols-[minmax(0,1fr)_auto]"
-          initial={{ opacity: 0, y: 12 }}
-          key={actionSummary.key}
-          transition={{ duration: 0.25, ease: "easeOut" }}
-        >
-          <div className="flex flex-col justify-center gap-1 bg-night-card px-6 py-5 sm:px-8">
-            <p className="text-sm font-semibold text-beige">
-              {actionSummary.title} · {actionSummary.price}
-            </p>
-            <p className="text-sm text-beige-dim">{actionSummary.detail}</p>
-            <p className="landing-soft mt-2 max-w-xl text-xs leading-6">
-              Preview and watermark for free in the editor.{" "}
-              <LandingHighlight>Credits apply on export</LandingHighlight> when you need
-              more volume. {VIDEO_FOOTNOTE}.
-            </p>
-          </div>
-
-          <div className="flex flex-col items-stretch justify-center gap-3 bg-night-card px-6 py-5 sm:min-w-[16rem] sm:px-8">
-            {isLoggedIn ? (
-              <PricingPayPalCheckout
-                checkoutKey={checkoutSelection.key}
-                paypalClientId={paypalClientId}
-                selection={checkoutSelection}
-              />
-            ) : (
-              <button
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-signal px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-signal/25 transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-signal focus:ring-offset-2 focus:ring-offset-night-card"
-                onClick={() => router.push("/login?next=/pricing")}
-                type="button"
-              >
-                Log in to continue
-                <ArrowRight className="h-4 w-4" strokeWidth={2.2} />
-              </button>
-            )}
-
-            {!isLoggedIn ? (
-              <p className="text-center text-xs text-beige-dim">
-                New here?{" "}
-                <Link
-                  className="font-semibold text-sand transition hover:text-beige"
-                  href="/signup"
-                >
-                  Sign up free
-                </Link>
-              </p>
-            ) : null}
-          </div>
-        </motion.div>
+        {!isLoggedIn ? (
+          <p className="mt-8 text-center text-sm text-beige-dim">
+            Log in to buy credits.{" "}
+            <Link
+              className="inline-flex items-center gap-1.5 font-semibold text-sand transition hover:text-beige"
+              href="/login?next=/pricing"
+            >
+              Log in
+              <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.2} />
+            </Link>
+            {" · "}
+            <Link
+              className="font-semibold text-sand transition hover:text-beige"
+              href="/signup"
+            >
+              Sign up free
+            </Link>
+          </p>
+        ) : null}
 
         <LandingSubSeparator className="mt-10" />
 
@@ -426,6 +415,15 @@ export function PricingSelector({ isLoggedIn, paypalClientId }: PricingSelectorP
           </div>
         </div>
       </div>
+
+      <PricingCheckoutModal
+        checkoutKey={checkoutSelection.key}
+        isOpen={isCheckoutModalOpen}
+        onClose={() => setIsCheckoutModalOpen(false)}
+        orderSummary={orderSummary}
+        paypalClientId={paypalClientId}
+        selection={checkoutSelection}
+      />
     </section>
   );
 }
