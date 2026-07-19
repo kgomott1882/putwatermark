@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { fetchUserCreditBalance } from "../src/lib/creditBalance";
+import { fetchUserCreditBalance, formatCreditBalance } from "../src/lib/creditBalance";
 import { createClient } from "../utils/supabase/client";
 import { pageContainerClass } from "./pageContainer";
 import { SiteNavAccountMenu } from "./SiteNavAccountMenu";
@@ -182,6 +182,10 @@ export function SiteNavClient({
     "text-[11px] font-semibold uppercase tracking-[0.2em] transition";
   const logInClass = `${authLinkClass} text-beige-dim hover:text-beige`;
   const signUpClass = `${authLinkClass} text-signal hover:text-sand`;
+  const editorCreditBalance =
+    showInEditor && resolvedAccountData?.creditBalance != null
+      ? resolvedAccountData.creditBalance
+      : null;
 
   return (
     <header className="sticky top-0 z-50 overflow-visible bg-night/95 backdrop-blur-md">
@@ -261,6 +265,14 @@ export function SiteNavClient({
                   </span>
                 )}
               </button>
+              {editorCreditBalance !== null ? (
+                <span
+                  aria-label={`${formatCreditBalance(editorCreditBalance)} credits available`}
+                  className="rounded-full border border-beige/10 bg-night-elevated px-3 py-1.5 text-[11px] font-semibold text-beige"
+                >
+                  {formatCreditBalance(editorCreditBalance)} credits
+                </span>
+              ) : null}
               <SiteNavAccountMenu
                 creditBalance={resolvedAccountData?.creditBalance ?? null}
                 showBackToEditor={!showInEditor}

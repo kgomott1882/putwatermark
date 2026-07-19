@@ -1,6 +1,7 @@
 "use client";
 
 import { PayPalButtons, PayPalScriptProvider } from "@paypal/react-paypal-js";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "../../utils/supabase/client";
 import { fetchUserCreditBalance, formatCreditBalance } from "@/lib/creditBalance";
@@ -90,115 +91,142 @@ export function PricingPayPalCheckout({
 
   return (
     <div className="flex w-full flex-col gap-3">
-      <PayPalScriptProvider
-        options={{
-          clientId: paypalClientId,
-          currency: "USD",
-          intent: "capture",
-        }}
-      >
-        <PayPalButtons
-          key={checkoutKey}
-          disabled={uiState === "processing"}
-          style={{
-            color: "gold",
-            height: 45,
-            label: "paypal",
-            layout: "vertical",
-            shape: "rect",
-          }}
-          createOrder={async () => {
-            setMessage(null);
-            setUpdatedBalance(null);
-            setUiState("idle");
-            pendingOrderRef.current = null;
-
-            const currentSelection = selectionRef.current;
-            const result =
-              currentSelection.kind === "tier"
-                ? await createPurchaseOrder({ tierId: currentSelection.tierId })
-                : await createPurchaseOrder({ credits: currentSelection.credits });
-
-            pendingOrderRef.current = {
-              expectedCredits: result.credits,
-              orderId: result.orderId,
-            };
-
-            return result.orderId;
-          }}
-          onApprove={async (data) => {
-            const orderId = data.orderID ?? pendingOrderRef.current?.orderId;
-
-            if (!orderId) {
-              setUiState("error");
-              setMessage("PayPal did not return an order ID. Please try again.");
-              return;
-            }
-
-            setUiState("processing");
-            setMessage(
-              "Payment approved — capturing on our server. Your credits will appear once PayPal confirms the payment.",
-            );
-
-            try {
-              const supabase = createClient();
-              const {
-                data: { user },
-              } = await supabase.auth.getUser();
-
-              if (!user) {
-                throw new Error("Your session expired. Please log in and try again.");
-              }
-
-              const startingBalance = await fetchUserCreditBalance(supabase, user.id);
-              const expectedCredits = pendingOrderRef.current?.expectedCredits ?? 0;
-
-              await capturePurchaseOrder(orderId);
-
-              setUiState("idle");
-              setMessage(
-                "Payment processing — your credits will appear shortly once PayPal confirms the capture.",
-              );
-
-              void pollForUpdatedCredits(expectedCredits, startingBalance);
-            } catch (error) {
-              setUiState("error");
-              setMessage(
-                error instanceof Error
-                  ? error.message
-                  : "Could not complete payment. Please try again.",
-              );
-            }
-          }}
-          onCancel={() => {
-            pendingOrderRef.current = null;
-            setUiState("idle");
-            setMessage("Payment cancelled. You can try again whenever you are ready.");
-          }}
-          onError={() => {
-            pendingOrderRef.current = null;
-            setUiState("error");
-            setMessage("PayPal ran into a problem. Please try again.");
-          }}
-        />
-      </PayPalScriptProvider>
-
-      {message ? (
-        <p
-          className={`text-center text-xs leading-6 ${
-            uiState === "error" ? "text-signal" : "text-beige-dim"
-          }`}
-          role="status"
-        >
-          {message}
-          {updatedBalance !== null ? (
-            <>
-              {" "}
-              New balance: {formatCreditBalance(updatedBalance)} credits.
-            </>
+      {uiState === "completed" ? (
+        <>
+          {message ? (
+            <p className="text-center text-xs leading-6 text-beige-dim" role="status">
+              {message}
+              {updatedBalance !== null ? (
+                <>
+                  {" "}
+                  New balance: {formatCreditBalance(updatedBalance)} credits.
+                </>
+              ) : null}
+            </p>
           ) : null}
-        </p>
-      ) : null}
+
+          <div className="flex flex-col gap-2.5">
+            <Link
+              className="inline-flex w-full items-center justify-center rounded-xl bg-signal px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-white shadow-sm transition hover:brightness-110"
+              href="/watermark"
+            >
+              Go to Watermark Tool
+            </Link>
+            <Link
+              className="inline-flex w-full items-center justify-center rounded-xl border border-beige/15 bg-night-elevated px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-beige transition hover:border-sand/40 hover:text-sand"
+              href="/account"
+            >
+              View My Account
+            </Link>
+          </div>
+        </>
+      ) : (
+        <>
+          <PayPalScriptProvider
+            options={{
+              clientId: paypalClientId,
+              currency: "USD",
+              intent: "capture",
+            }}
+          >
+            <PayPalButtons
+              key={checkoutKey}
+              disabled={uiState === "processing"}
+              style={{
+                color: "gold",
+                height: 45,
+                label: "paypal",
+                layout: "vertical",
+                shape: "rect",
+              }}
+              createOrder={async () => {
+                setMessage(null);
+                setUpdatedBalance(null);
+                setUiState("idle");
+                pendingOrderRef.current = null;
+
+                const currentSelection = selectionRef.current;
+                const result =
+                  currentSelection.kind === "tier"
+                    ? await createPurchaseOrder({ tierId: currentSelection.tierId })
+                    : await createPurchaseOrder({ credits: currentSelection.credits });
+
+                pendingOrderRef.current = {
+                  expectedCredits: result.credits,
+                  orderId: result.orderId,
+                };
+
+                return result.orderId;
+              }}
+              onApprove={async (data) => {
+                const orderId = data.orderID ?? pendingOrderRef.current?.orderId;
+
+                if (!orderId) {
+                  setUiState("error");
+                  setMessage("PayPal did not return an order ID. Please try again.");
+                  return;
+                }
+
+                setUiState("processing");
+                setMessage(
+                  "Payment approved — capturing on our server. Your credits will appear once PayPal confirms the payment.",
+                );
+
+                try {
+                  const supabase = createClient();
+                  const {
+                    data: { user },
+                  } = await supabase.auth.getUser();
+
+                  if (!user) {
+                    throw new Error("Your session expired. Please log in and try again.");
+                  }
+
+                  const startingBalance = await fetchUserCreditBalance(supabase, user.id);
+                  const expectedCredits = pendingOrderRef.current?.expectedCredits ?? 0;
+
+                  await capturePurchaseOrder(orderId);
+
+                  setUiState("idle");
+                  setMessage(
+                    "Payment processing — your credits will appear shortly once PayPal confirms the capture.",
+                  );
+
+                  void pollForUpdatedCredits(expectedCredits, startingBalance);
+                } catch (error) {
+                  setUiState("error");
+                  setMessage(
+                    error instanceof Error
+                      ? error.message
+                      : "Could not complete payment. Please try again.",
+                  );
+                }
+              }}
+              onCancel={() => {
+                pendingOrderRef.current = null;
+                setUiState("idle");
+                setMessage("Payment cancelled. You can try again whenever you are ready.");
+              }}
+              onError={() => {
+                pendingOrderRef.current = null;
+                setUiState("error");
+                setMessage("PayPal ran into a problem. Please try again.");
+              }}
+            />
+          </PayPalScriptProvider>
+
+          {message ? (
+            <p
+              className={`text-center text-xs leading-6 ${
+                uiState === "error" ? "text-signal" : "text-beige-dim"
+              }`}
+              role="status"
+            >
+              {message}
+            </p>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
