@@ -331,18 +331,20 @@ export function PricingSelector({ isLoggedIn, paypalClientId }: PricingSelectorP
             </div>
           </div>
 
-          <button
-            className={`mt-5 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] transition ${
-              selectionMode === "extra" ? "text-signal" : "text-beige-dim hover:text-beige"
-            }`}
-            onClick={openCustomCheckout}
-            type="button"
-          >
-            {selectionMode === "extra" ? "Selected for checkout" : "Use this amount"}
-            {selectionMode === "extra" ? (
-              <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-            ) : null}
-          </button>
+          <div className="mt-6">
+            <button
+              aria-pressed={selectionMode === "extra"}
+              className={`w-full rounded-xl px-4 py-3.5 text-sm font-semibold transition ${
+                selectionMode === "extra"
+                  ? "border border-signal/50 bg-signal/10 text-beige"
+                  : "border border-beige/15 bg-night-elevated text-beige hover:border-beige/25 hover:bg-night-elevated/80"
+              }`}
+              onClick={openCustomCheckout}
+              type="button"
+            >
+              Continue with {formatCredits(standaloneCredits)} credits
+            </button>
+          </div>
         </div>
 
         <div className="landing-surface mt-8 rounded-[1.75rem] p-6 sm:p-8">
