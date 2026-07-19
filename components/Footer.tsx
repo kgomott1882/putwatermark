@@ -3,6 +3,8 @@
 import { ArrowRight, Plus } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import type { IconType } from "react-icons";
+import { SiTiktok, SiX, SiYoutube } from "react-icons/si";
 import { LandingHighlight } from "./landing/LandingPrimitives";
 import { pageContainerClass } from "./pageContainer";
 
@@ -10,6 +12,8 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const navigationLinks = [
   { label: "Home", href: "/" },
+  { label: "Features", href: "/features" },
+  { label: "About", href: "/about" },
   { label: "Watermark Tool", href: "/watermark" },
   { label: "Blog", href: "/blog" },
   { label: "Pricing", href: "/pricing" },
@@ -18,18 +22,33 @@ const navigationLinks = [
 ] as const;
 
 const legalLinks = [
-  { label: "Privacy Policy", href: "#" },
-  { label: "Terms of Service", href: "#" },
-  { label: "Disclaimer", href: "#" },
-  { label: "404", href: "#" },
+  { label: "Privacy Policy", href: "/privacy" },
+  { label: "Terms of Service", href: "/terms" },
+  { label: "Refund Policy", href: "/refund-policy" },
+  { label: "Disclaimer", href: "/disclaimer" },
 ] as const;
 
-const socialLinks = [
-  { label: "X (Twitter)", href: "#" },
-  { label: "Youtube", href: "#" },
-  { label: "Linkedin", href: "#" },
-  { label: "Instagram", href: "#" },
-] as const;
+const socialLinks: readonly {
+  href: string;
+  Icon: IconType;
+  label: string;
+}[] = [
+  {
+    label: "TikTok",
+    href: "https://www.tiktok.com/@putwatermark",
+    Icon: SiTiktok,
+  },
+  {
+    label: "X (Twitter)",
+    href: "https://x.com/putwatermark",
+    Icon: SiX,
+  },
+  {
+    label: "YouTube",
+    href: "https://www.youtube.com/@putwatermark",
+    Icon: SiYoutube,
+  },
+];
 
 function FooterLinkColumn({
   links,
@@ -61,6 +80,31 @@ function FooterLinkColumn({
                 {label}
               </Link>
             )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function FooterSocialColumn() {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sand">
+        Social
+      </p>
+      <ul className="mt-5 space-y-3">
+        {socialLinks.map(({ label, href, Icon }) => (
+          <li key={label}>
+            <a
+              className="landing-muted inline-flex items-center gap-2.5 text-sm transition hover:text-beige"
+              href={href}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              <Icon aria-hidden className="h-4 w-4 shrink-0" />
+              <span>{label}</span>
+            </a>
           </li>
         ))}
       </ul>
@@ -233,7 +277,7 @@ export function Footer() {
 
           <FooterLinkColumn links={navigationLinks} title="Navigation" />
           <FooterLinkColumn links={legalLinks} title="Legal" />
-          <FooterLinkColumn links={socialLinks} title="Social" />
+          <FooterSocialColumn />
         </div>
 
         <div className="grid gap-10 pt-10 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-end">

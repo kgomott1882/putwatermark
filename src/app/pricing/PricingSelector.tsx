@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowRight, Check, Clock, ImageIcon, PenLine, Video } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -17,6 +17,7 @@ type PricingTier = {
   label: string;
   popular?: boolean;
   price: number;
+  tagline: string;
   videoLine: string;
 };
 
@@ -26,39 +27,33 @@ type PricingSelectorProps = {
 
 const pricingTiers: PricingTier[] = [
   {
-    credits: 2_500,
+    credits: 3_000,
     label: "Grow",
-    price: 7.99,
+    price: 8.99,
+    tagline: "Personal projects & occasional exports",
     videoLine: "Covered by your credit balance",
   },
   {
-    credits: 7_500,
+    credits: 9_000,
     label: "Premium",
     popular: true,
     price: 19.99,
+    tagline: "Regular creative work",
     videoLine: "Covered by your credit balance",
-  },
-  {
-    credits: 20_000,
-    label: "Elite",
-    price: 39.99,
-    videoLine: "Unlimited videos, credits only apply over 60 sec",
   },
 ];
 
-const ELITE_CREDITS = 20_000;
-const ELITE_PRICE = 39.99;
-const ELITE_PRICE_PER_CREDIT = ELITE_PRICE / ELITE_CREDITS;
-const PRICE_PER_THOUSAND_CREDITS = (ELITE_PRICE / ELITE_CREDITS) * 1_000;
+const PRICE_PER_THOUSAND_CREDITS = 2;
+const STANDALONE_PRICE_PER_CREDIT = PRICE_PER_THOUSAND_CREDITS / 1_000;
 
-const EXTRA_CREDITS_MIN = 1_000;
-const EXTRA_CREDITS_MAX = 25_000;
-const EXTRA_CREDITS_STEP = 500;
-const EXTRA_CREDITS_DEFAULT = 2_500;
+const STANDALONE_CREDITS_MIN = 3_000;
+const STANDALONE_CREDITS_MAX = 50_000;
+const STANDALONE_CREDITS_STEP = 500;
+const STANDALONE_CREDITS_DEFAULT = 3_000;
 
 const PHOTOS_PDFS_LINE = "Covered by your credit balance";
 const SIGNATURE_LINE = "Unlimited — always free";
-const CREDITS_EXPIRY_LINE = "Credits don't expire for 90 days";
+const CREDITS_EXPIRY_LINE = "Credits don't expire for 60 days";
 const VIDEO_FOOTNOTE =
   "Videos that can't run in your browser are processed on our servers and may use additional credits";
 
@@ -79,11 +74,11 @@ const creditUsageGuide = [
     value: "50 credits (e.g. a 20-page document = 1,000 credits)",
   },
   {
-    label: "Video, within your tier's included allowance",
+    label: "Video up to 60 seconds (in-browser)",
     value: "Included — no credits used",
   },
   {
-    label: "Video beyond your tier's allowance or over 60 seconds",
+    label: "Longer videos (server processing)",
     value: "Additional credits apply, based on length",
   },
   {
@@ -109,23 +104,34 @@ function formatCredits(amount: number) {
   return creditsFormatter.format(amount);
 }
 
+function getTierFeatures(tier: PricingTier) {
+  return [
+    `Photos & PDFs: ${PHOTOS_PDFS_LINE}`,
+    `Video: ${tier.videoLine}`,
+    `Signatures: ${SIGNATURE_LINE}`,
+    CREDITS_EXPIRY_LINE,
+  ] as const;
+}
+
 export function PricingSelector({ isLoggedIn }: PricingSelectorProps) {
   const router = useRouter();
   const [selectedTierIndex, setSelectedTierIndex] = useState(1);
   const [selectionMode, setSelectionMode] = useState<SelectionMode>("tier");
-  const [extraCredits, setExtraCredits] = useState(EXTRA_CREDITS_DEFAULT);
+  const [standaloneCredits, setStandaloneCredits] = useState(
+    STANDALONE_CREDITS_DEFAULT,
+  );
 
   const selectedTier = pricingTiers[selectedTierIndex];
-  const extraPrice = extraCredits * ELITE_PRICE_PER_CREDIT;
+  const standalonePrice = standaloneCredits * STANDALONE_PRICE_PER_CREDIT;
 
   function handleTierSelect(index: number) {
     setSelectionMode("tier");
     setSelectedTierIndex(index);
   }
 
-  function handleExtraCreditsChange(value: number) {
+  function handleStandaloneCreditsChange(value: number) {
     setSelectionMode("extra");
-    setExtraCredits(value);
+    setStandaloneCredits(value);
   }
 
   function handleContinue() {
@@ -135,10 +141,9 @@ export function PricingSelector({ isLoggedIn }: PricingSelectorProps) {
     }
 
     if (selectionMode === "extra") {
-      console.log("Selected additional credit pack", {
-        additionalCredits: extraCredits,
-        price: extraPrice,
-        totalCredits: ELITE_CREDITS + extraCredits,
+      console.log("Selected custom credit pack", {
+        credits: standaloneCredits,
+        price: standalonePrice,
       });
       return;
     }
@@ -149,10 +154,10 @@ export function PricingSelector({ isLoggedIn }: PricingSelectorProps) {
   const actionSummary =
     selectionMode === "extra"
       ? {
-          detail: `${formatCredits(extraCredits)} additional credits beyond Elite`,
-          key: `extra-${extraCredits}`,
-          price: formatPrice(extraPrice),
-          title: "Additional credits",
+          detail: `${formatCredits(standaloneCredits)} credits · ${formatPrice(PRICE_PER_THOUSAND_CREDITS)} per 1,000`,
+          key: `extra-${standaloneCredits}`,
+          price: formatPrice(standalonePrice),
+          title: "Custom credit pack",
         }
       : {
           detail: `${formatCredits(selectedTier.credits)} credits · Video: ${selectedTier.videoLine} · Signatures: ${SIGNATURE_LINE}`,
@@ -165,7 +170,6 @@ export function PricingSelector({ isLoggedIn }: PricingSelectorProps) {
     <section className="landing-section border-b">
       <div className={pageContainerClass}>
         <LandingSectionHeader
-          aside="Credits power exports when you need more volume than the free tier."
           index="Pricing"
           lead={
             <>
@@ -190,97 +194,75 @@ export function PricingSelector({ isLoggedIn }: PricingSelectorProps) {
           ))}
         </ul>
 
-        <div className="mt-8 grid gap-px landing-border border bg-beige/10 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mx-auto mt-8 grid w-full max-w-3xl gap-4 sm:grid-cols-2 lg:gap-5">
           {pricingTiers.map((tier, index) => {
             const isSelected = selectionMode === "tier" && selectedTierIndex === index;
+            const features = getTierFeatures(tier);
 
             return (
-              <button
-                aria-pressed={isSelected}
-                className={`relative flex h-full flex-col bg-night-card p-5 text-left transition sm:p-6 ${
-                  isSelected
-                    ? "ring-2 ring-inset ring-signal"
-                    : "hover:bg-night-elevated/80"
-                }`}
+              <article
+                className={`flex h-full flex-col rounded-2xl border bg-night-card transition ${
+                  tier.popular
+                    ? "border-signal/35 shadow-[0_0_0_1px_rgba(217,119,87,0.12)]"
+                    : "landing-border"
+                } ${isSelected ? "ring-2 ring-signal/80 ring-offset-2 ring-offset-night" : ""}`}
                 key={tier.label}
-                onClick={() => handleTierSelect(index)}
-                type="button"
               >
-                {tier.popular ? (
-                  <span className="absolute right-4 top-4 rounded-full bg-signal px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white">
-                    Popular
-                  </span>
-                ) : null}
+                <div className="px-6 pb-5 pt-6">
+                  <h3 className="text-2xl font-bold tracking-[-0.04em] text-beige sm:text-[1.65rem]">
+                    {tier.label}
+                  </h3>
+                  <p className="mt-1.5 text-sm leading-6 text-beige-dim">{tier.tagline}</p>
+                </div>
 
-                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sand">
-                  {tier.label}
-                </p>
-                <p className="mt-3 text-3xl font-bold tracking-[-0.05em] text-beige lg:text-4xl">
-                  {formatPrice(tier.price)}
-                </p>
-                <p className="mt-4 text-xl font-bold tracking-[-0.03em] text-beige lg:text-2xl">
-                  {formatCredits(tier.credits)} credits
-                </p>
+                <div className="border-t border-beige/10" />
 
-                <ul className="mt-5 space-y-2.5">
-                  <li className="flex items-start gap-2.5 text-sm text-beige-dim">
-                    <ImageIcon
-                      aria-hidden
-                      className="mt-0.5 h-4 w-4 shrink-0 text-sand"
-                      strokeWidth={2}
-                    />
-                    <span>
-                      <span className="font-medium text-beige">Photos & PDFs:</span>{" "}
-                      {PHOTOS_PDFS_LINE}
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-2.5 text-sm text-beige">
-                    <Video
-                      aria-hidden
-                      className="mt-0.5 h-4 w-4 shrink-0 text-sand"
-                      strokeWidth={2}
-                    />
-                    <span>
-                      <span className="font-semibold text-beige">Video:</span>{" "}
-                      <span className="font-medium text-beige">{tier.videoLine}</span>
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-2.5 text-sm text-beige-dim">
-                    <PenLine
-                      aria-hidden
-                      className="mt-0.5 h-4 w-4 shrink-0 text-sand"
-                      strokeWidth={2}
-                    />
-                    <span>
-                      <span className="font-medium text-beige">Signatures:</span>{" "}
-                      {SIGNATURE_LINE}
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-2.5 text-sm text-beige-dim">
-                    <Clock
-                      aria-hidden
-                      className="mt-0.5 h-4 w-4 shrink-0 text-sand"
-                      strokeWidth={2}
-                    />
-                    <span>{CREDITS_EXPIRY_LINE}</span>
-                  </li>
+                <div className="px-6 py-5">
+                  <p className="text-3xl font-bold tracking-[-0.05em] text-beige lg:text-4xl">
+                    {formatPrice(tier.price)}
+                  </p>
+                  <p className="mt-1 text-sm text-beige-dim">one-time pack</p>
+                  <div className="mt-4 rounded-xl border border-beige/15 bg-night-elevated/60 px-4 py-3">
+                    <p className="text-sm font-semibold text-beige">
+                      {formatCredits(tier.credits)} credits
+                    </p>
+                  </div>
+                </div>
+
+                <div className="border-t border-beige/10" />
+
+                <ul className="flex flex-1 flex-col gap-3 px-6 py-5">
+                  {features.map((feature) => (
+                    <li className="flex items-start gap-3 text-sm leading-6 text-beige-dim" key={feature}>
+                      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-signal/15 text-signal">
+                        <Check className="h-2.5 w-2.5" strokeWidth={2.5} />
+                      </span>
+                      <span>{feature}</span>
+                    </li>
+                  ))}
                 </ul>
 
-                <p className="mt-3 text-[11px] leading-5 text-beige-dim/80">
+                <p className="px-6 pb-2 text-[11px] leading-5 text-beige-dim/80">
                   {VIDEO_FOOTNOTE}
                 </p>
 
-                <span
-                  className={`mt-5 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] ${
-                    isSelected ? "text-signal" : "text-beige-dim"
-                  }`}
-                >
-                  {isSelected ? "Selected" : "Select pack"}
-                  {isSelected ? (
-                    <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-                  ) : null}
-                </span>
-              </button>
+                <div className="px-6 pb-6 pt-2">
+                  <button
+                    aria-pressed={isSelected}
+                    className={`w-full rounded-xl px-4 py-3.5 text-sm font-semibold transition ${
+                      tier.popular
+                        ? "bg-signal text-white shadow-lg shadow-signal/20 hover:brightness-110"
+                        : isSelected
+                          ? "border border-signal/50 bg-signal/10 text-beige"
+                          : "border border-beige/15 bg-night-elevated text-beige hover:border-beige/25 hover:bg-night-elevated/80"
+                    }`}
+                    onClick={() => handleTierSelect(index)}
+                    type="button"
+                  >
+                    {isSelected ? `Selected · ${tier.label}` : `Start with ${tier.label}`}
+                  </button>
+                </div>
+              </article>
             );
           })}
         </div>
@@ -289,48 +271,43 @@ export function PricingSelector({ isLoggedIn }: PricingSelectorProps) {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sand">
-                Need more?
+                Custom pack
               </p>
               <p className="mt-2 max-w-xl text-sm leading-7 text-beige-dim">
-                Add credits beyond Elite at the same per-credit rate (
-                {formatPrice(PRICE_PER_THOUSAND_CREDITS)} per 1,000 credits).
+                Buy exactly the credits you need —{" "}
+                {formatPrice(PRICE_PER_THOUSAND_CREDITS)} per 1,000 credits, no base
+                tier required.
               </p>
             </div>
             <p className="text-2xl font-bold tracking-[-0.04em] text-beige">
-              {formatPrice(extraPrice)}
+              {formatPrice(standalonePrice)}
             </p>
           </div>
 
           <div className="mt-6">
             <div className="flex items-center justify-between gap-4 text-sm">
-              <span className="font-medium text-beige-dim">Additional credits</span>
+              <span className="font-medium text-beige-dim">Credits</span>
               <span className="font-semibold text-beige">
-                {formatCredits(extraCredits)}
+                {formatCredits(standaloneCredits)}
               </span>
             </div>
             <input
-              aria-label="Additional credits beyond Elite"
+              aria-label="Custom credit pack amount"
               className="mt-3 h-2 w-full cursor-pointer appearance-none rounded-full bg-beige/10 accent-signal"
-              max={EXTRA_CREDITS_MAX}
-              min={EXTRA_CREDITS_MIN}
-              onChange={(event) => handleExtraCreditsChange(Number(event.target.value))}
-              step={EXTRA_CREDITS_STEP}
+              max={STANDALONE_CREDITS_MAX}
+              min={STANDALONE_CREDITS_MIN}
+              onChange={(event) =>
+                handleStandaloneCreditsChange(Number(event.target.value))
+              }
+              step={STANDALONE_CREDITS_STEP}
               type="range"
-              value={extraCredits}
+              value={standaloneCredits}
             />
             <div className="mt-2 flex justify-between text-[11px] font-semibold uppercase tracking-[0.1em] text-beige-dim">
-              <span>{formatCredits(EXTRA_CREDITS_MIN)}</span>
-              <span>{formatCredits(EXTRA_CREDITS_MAX)}</span>
+              <span>{formatCredits(STANDALONE_CREDITS_MIN)}</span>
+              <span>{formatCredits(STANDALONE_CREDITS_MAX)}</span>
             </div>
           </div>
-
-          <p className="mt-4 text-sm text-beige-dim">
-            <span className="font-medium text-beige">
-              {formatCredits(ELITE_CREDITS + extraCredits)} credits total
-            </span>{" "}
-            if combined with Elite ({formatCredits(ELITE_CREDITS)}) +{" "}
-            {formatCredits(extraCredits)} additional
-          </p>
 
           <button
             className={`mt-5 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] transition ${
