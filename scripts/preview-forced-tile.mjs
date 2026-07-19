@@ -75,14 +75,18 @@ async function createCompositeUnit(logoImage) {
 
   const iconX = (unitWidth - iconBaseWidth) / 2;
   const iconY = padding / 2;
+  context.save();
+  context.translate(iconX + iconBaseWidth / 2, iconY + iconHeight / 2);
+  context.rotate((TILE_SETTINGS.angle * Math.PI) / 180);
   drawForcedTileIconWithOutline(
     context,
     logoImage,
-    iconX,
-    iconY,
+    -iconBaseWidth / 2,
+    -iconHeight / 2,
     iconBaseWidth,
     iconHeight,
   );
+  context.restore();
   drawForcedTileSiteText(
     context,
     unitWidth / 2,

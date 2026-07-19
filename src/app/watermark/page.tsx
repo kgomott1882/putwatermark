@@ -26,7 +26,9 @@ import {
   exportWatermarkedPdf,
   getPdfExportFileName,
   getPdfWatermarkExportScale,
+  type PdfTilePatternWatermark,
 } from "../../lib/pdfExport";
+import { computePdfTileCenters, getOrientedTileUnitBounds } from "../../lib/pdfTileWatermarkLayout";
 import {
   applyExportBillingToUi,
   completeCleanExportBilling,
@@ -2468,6 +2470,14 @@ export default function WatermarkPage() {
       const exportedBytes = await exportWatermarkedPdf(
         pdfBytesRef.current,
         async (_pageIndex, pageWidth, pageHeight) => {
+          if (watermarkInput.watermarkMode === "tile") {
+            return buildPdfTilePageWatermark(
+              pageWidth,
+              pageHeight,
+              watermarkInput,
+            );
+          }
+
           const overlayCanvas = renderWatermarkOverlayForPdfPage({
             canvasSize,
             pageHeight,
@@ -2475,7 +2485,10 @@ export default function WatermarkPage() {
             ...watermarkInput,
           });
 
-          return canvasToPngBytes(overlayCanvas);
+          return {
+            kind: "fullOverlay",
+            pngBytes: await canvasToPngBytes(overlayCanvas),
+          };
         },
         (current, total) => {
           setPdfExportProgress({ current, total });
@@ -6082,6 +6095,159 @@ async function canvasToPngBytes(canvas: HTMLCanvasElement) {
   }
 
   return new Uint8Array(await blob.arrayBuffer());
+}
+
+type PdfTilePageWatermarkInput = Omit<
+  PdfPageWatermarkOverlayInput,
+  "canvasSize" | "pageHeight" | "pageWidth"
+>;
+
+async function renderPdfOrientedTileUnitPng({
+  angleDegrees,
+  drawable,
+  exportScale,
+  tileHeight,
+  tileWidth,
+}: {
+  angleDegrees: TileAngle;
+  drawable: DrawableWatermark;
+  exportScale: number;
+  tileHeight: number;
+  tileWidth: number;
+}) {
+  const orientedBounds = getOrientedTileUnitBounds(
+    tileWidth,
+    tileHeight,
+    angleDegrees,
+  );
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(orientedBounds.width * exportScale));
+  canvas.height = Math.max(1, Math.round(orientedBounds.height * exportScale));
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Could not create tile unit canvas.");
+  }
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.scale(exportScale, exportScale);
+  context.translate(orientedBounds.width / 2, orientedBounds.height / 2);
+  context.rotate((-angleDegrees * Math.PI) / 180);
+  applyHighQualityCanvasDefaults(context);
+  drawWatermarkDrawable({
+    alpha: 1,
+    context,
+    drawable,
+    textAlign: "center",
+    textBaseline: "middle",
+    x: 0,
+    y: 0,
+  });
+
+  return {
+    pngBytes: await canvasToPngBytes(canvas),
+    unitHeightPoints: orientedBounds.height,
+    unitWidthPoints: orientedBounds.width,
+  };
+}
+
+async function buildPdfTilePageWatermark(
+  pageWidth: number,
+  pageHeight: number,
+  watermarkInput: PdfTilePageWatermarkInput,
+): Promise<PdfTilePatternWatermark> {
+  const pageW = Math.max(1, Math.floor(pageWidth));
+  const pageH = Math.max(1, Math.floor(pageHeight));
+  const exportScale = getPdfWatermarkExportScale(pageW, pageH);
+  const measureCanvas = document.createElement("canvas");
+  const measureContext = measureCanvas.getContext("2d");
+
+  if (!measureContext) {
+    throw new Error("Could not measure PDF tile watermark.");
+  }
+
+  let fontFamily = watermarkInput.fontFamily;
+  let fontSizeScale = watermarkInput.fontSizeScale;
+  let logoImage = watermarkInput.logoImage;
+  let opacity = watermarkInput.watermarkOpacity;
+  let textColor = DEFAULT_TEXT_WATERMARK_COLOR;
+  let textShadowEnabled = DEFAULT_TEXT_SHADOW_ENABLED;
+  let watermarkText = watermarkInput.watermarkText;
+  let fontWeight = DEFAULT_TEXT_WATERMARK_FONT_WEIGHT;
+  let drawableType = watermarkInput.watermarkType;
+
+  if (watermarkInput.watermarkType === "logo") {
+    const activeLayer = (watermarkInput.logoLayers ?? []).find(
+      (layer) => layer.id === watermarkInput.activeLogoLayerId,
+    );
+
+    if (activeLayer) {
+      fontSizeScale = activeLayer.fontSizeScale;
+      logoImage = activeLayer.logoImage;
+      opacity = activeLayer.opacity;
+    }
+  } else if (watermarkInput.watermarkType === "text") {
+    const activeLayer = (watermarkInput.textLayers ?? []).find(
+      (layer) => layer.id === watermarkInput.activeTextLayerId,
+    );
+
+    if (activeLayer) {
+      fontFamily = activeLayer.fontFamily;
+      fontSizeScale = activeLayer.fontSizeScale;
+      fontWeight = activeLayer.fontWeight ?? DEFAULT_TEXT_WATERMARK_FONT_WEIGHT;
+      opacity = activeLayer.opacity;
+      textColor = activeLayer.textColor ?? DEFAULT_TEXT_WATERMARK_COLOR;
+      textShadowEnabled =
+        activeLayer.textShadowEnabled ?? DEFAULT_TEXT_SHADOW_ENABLED;
+      watermarkText = activeLayer.text;
+    }
+  } else if (watermarkInput.watermarkType === "signature") {
+    drawableType = "logo";
+    logoImage = watermarkInput.logoImage;
+  }
+
+  const drawable = getDrawableWatermark({
+    context: measureContext,
+    fontFamily,
+    fontSizeScale,
+    fontWeight,
+    imageWidth: pageW,
+    logoImage,
+    textColor,
+    textShadowEnabled,
+    watermarkText,
+    watermarkType: drawableType,
+  });
+
+  if (!drawable) {
+    throw new Error("Could not build PDF tile watermark drawable.");
+  }
+
+  const orientedUnit = await renderPdfOrientedTileUnitPng({
+    angleDegrees: watermarkInput.tileAngle,
+    drawable,
+    exportScale,
+    tileHeight: drawable.height,
+    tileWidth: drawable.width,
+  });
+
+  return {
+    angleDegrees: watermarkInput.tileAngle,
+    centers: computePdfTileCenters({
+      angleDegrees: watermarkInput.tileAngle,
+      density: watermarkInput.tileDensity,
+      gapPercent: watermarkInput.tileGap,
+      pageHeight: pageH,
+      pageWidth: pageW,
+      tileHeight: drawable.height,
+      tileWidth: drawable.width,
+    }),
+    kind: "tilePattern",
+    opacity: opacity / 100,
+    unitHeightPoints: orientedUnit.unitHeightPoints,
+    unitPngBytes: orientedUnit.pngBytes,
+    unitWidthPoints: orientedUnit.unitWidthPoints,
+  };
 }
 
 function paintWatermarkOnExportCanvas({
