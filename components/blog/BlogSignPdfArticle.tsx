@@ -148,7 +148,7 @@ export function BlogSignPdfArticle({ post }: BlogSignPdfArticleProps) {
                 items={[
                   {
                     title: "Upload your PDF.",
-                    body: "Drag it into the tool or select it from your device. Multi-page documents are supported, and the file stays in your browser — it isn't uploaded anywhere to be signed.",
+                    body: "Drag it into the tool or select it from your device. Multi-page documents are supported, and the file stays in your browser while you edit and sign.",
                   },
                   {
                     title: "Create your signature.",
@@ -218,7 +218,9 @@ export function BlogSignPdfArticle({ post }: BlogSignPdfArticleProps) {
               <p className="landing-muted text-sm leading-7 md:text-base">
                 (This is general information, not legal advice. If a specific
                 document&apos;s validity matters a lot to you, it&apos;s worth confirming
-                with a lawyer for your situation.)
+                with a lawyer for your situation. See our{" "}
+                <BlogInlineLink href="/disclaimer">Disclaimer</BlogInlineLink> for more
+                detail.)
               </p>
             </ArticleSection>
 

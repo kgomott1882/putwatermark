@@ -1,0 +1,52 @@
+import type { Metadata } from "next";
+import { BlogRealEstateListingPhotoArticle } from "../../../../components/blog/BlogRealEstateListingPhotoArticle";
+import { JsonLd } from "../../../../components/blog/JsonLd";
+import {
+  buildBlogPostJsonLd,
+  getBlogPost,
+  realEstatePhotoFaqSchema,
+} from "@/lib/blog/posts";
+
+const slug = "real-estate-listing-photo-copyright-watermarking";
+const post = getBlogPost(slug)!;
+
+const canonicalUrl = `https://putwatermark.com/blog/${slug}`;
+
+export const metadata: Metadata = {
+  title: post.metaTitle,
+  description: post.metaDescription,
+  alternates: {
+    canonical: `/blog/${slug}`,
+  },
+  openGraph: {
+    title: post.metaTitle,
+    description: post.metaDescription,
+    type: "article",
+    publishedTime: post.datePublished,
+    url: canonicalUrl,
+  },
+};
+
+const faqJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: realEstatePhotoFaqSchema.map((item) => ({
+    "@type": "Question",
+    name: item.question,
+    acceptedAnswer: {
+      "@type": "Answer",
+      text: item.answer,
+    },
+  })),
+};
+
+const articleJsonLd = buildBlogPostJsonLd(post);
+
+export default function RealEstateListingPhotoCopyrightBlogPostPage() {
+  return (
+    <>
+      <JsonLd data={[faqJsonLd, articleJsonLd]} />
+      <BlogRealEstateListingPhotoArticle post={post} />
+    </>
+  );
+}
