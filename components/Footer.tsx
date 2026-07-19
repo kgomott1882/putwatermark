@@ -6,6 +6,8 @@ import { FormEvent, useState } from "react";
 import { LandingHighlight } from "./landing/LandingPrimitives";
 import { pageContainerClass } from "./pageContainer";
 
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const navigationLinks = [
   { label: "Home", href: "/" },
   { label: "Watermark Tool", href: "/watermark" },
@@ -69,9 +71,65 @@ function FooterLinkColumn({
 export function Footer() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleSubscribe(event: FormEvent<HTMLFormElement>) {
+  async function handleSubscribe(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setEmailError("");
+    setFormError("");
+    setSuccessMessage("");
+
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      setEmailError("Email is required.");
+      return;
+    }
+
+    if (!emailPattern.test(trimmedEmail)) {
+      setEmailError("Enter a valid email address.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/newsletter/subscribe", {
+        body: JSON.stringify({
+          email: trimmedEmail,
+          name: name.trim() || undefined,
+          source: "footer",
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+
+      const payload = (await response.json()) as {
+        error?: string;
+        message?: string;
+        ok?: boolean;
+      };
+
+      if (!response.ok || !payload.ok) {
+        setFormError(payload.error ?? "Could not save your subscription. Please try again.");
+        return;
+      }
+
+      setName("");
+      setEmail("");
+      setSuccessMessage(
+        payload.message ?? "Thanks for subscribing. We'll be in touch when it's worth your time.",
+      );
+    } catch {
+      setFormError("Could not save your subscription. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -104,9 +162,15 @@ export function Footer() {
                 <label className="block">
                   <span className="sr-only">Your name</span>
                   <input
-                    className="w-full border-b border-beige/15 bg-transparent py-3 text-sm text-beige outline-none transition placeholder:text-beige-dim/70 focus:border-signal"
+                    autoComplete="name"
+                    className="w-full border-b border-beige/15 bg-transparent py-3 text-sm text-beige outline-none transition placeholder:text-beige-dim/70 focus:border-signal disabled:opacity-60"
+                    disabled={isSubmitting}
                     name="name"
-                    onChange={(event) => setName(event.target.value)}
+                    onChange={(event) => {
+                      setName(event.target.value);
+                      setFormError("");
+                      setSuccessMessage("");
+                    }}
                     placeholder="Your Name"
                     type="text"
                     value={name}
@@ -115,22 +179,46 @@ export function Footer() {
                 <label className="block">
                   <span className="sr-only">Your email</span>
                   <input
-                    className="w-full border-b border-beige/15 bg-transparent py-3 text-sm text-beige outline-none transition placeholder:text-beige-dim/70 focus:border-signal"
+                    autoComplete="email"
+                    className="w-full border-b border-beige/15 bg-transparent py-3 text-sm text-beige outline-none transition placeholder:text-beige-dim/70 focus:border-signal disabled:opacity-60"
+                    disabled={isSubmitting}
                     name="email"
-                    onChange={(event) => setEmail(event.target.value)}
+                    onChange={(event) => {
+                      setEmail(event.target.value);
+                      setEmailError("");
+                      setFormError("");
+                      setSuccessMessage("");
+                    }}
                     placeholder="Your Email"
+                    required
                     type="email"
                     value={email}
                   />
+                  {emailError ? (
+                    <p className="mt-2 text-xs text-signal">{emailError}</p>
+                  ) : null}
                 </label>
               </div>
 
+              {formError ? (
+                <p className="text-sm text-signal" role="alert">
+                  {formError}
+                </p>
+              ) : null}
+
+              {successMessage ? (
+                <p className="text-sm text-sand" role="status">
+                  {successMessage}
+                </p>
+              ) : null}
+
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
                 <button
-                  className="group inline-flex items-center gap-3 text-sm font-semibold text-beige transition hover:text-sand"
+                  className="group inline-flex items-center gap-3 text-sm font-semibold text-beige transition hover:text-sand disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={isSubmitting}
                   type="submit"
                 >
-                  Subscribe
+                  {isSubmitting ? "Subscribing…" : "Subscribe"}
                   <ArrowRight
                     className="h-4 w-4 text-signal transition group-hover:translate-x-0.5"
                     strokeWidth={2.2}
