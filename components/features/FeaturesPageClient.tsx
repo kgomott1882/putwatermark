@@ -9,7 +9,6 @@ import {
   Files,
   Globe,
   Grid3x3,
-  History,
   ImageIcon,
   LayoutTemplate,
   MonitorSmartphone,
@@ -45,6 +44,8 @@ type CapabilityCard = {
   description: string;
   bullets?: string[];
   Icon: LucideIcon;
+  image?: string;
+  imageAlt?: string;
 };
 
 const tabs: FeatureTab[] = [
@@ -61,36 +62,48 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
       description:
         "Choose from System Sans, Geometric Sans, Serif, Monospace, Condensed, and Script. Drag into place or use the preset grid, then adjust opacity and size.",
       Icon: Type,
+      image: "/Custom watermaks.png",
+      imageAlt: "Custom text watermark on a photo",
     },
     {
       title: "Logo watermarks",
       description:
         "Upload your own logo and position it like text. Best-effort background removal helps plain-background logos — this is logo-only, not full photo background removal.",
       Icon: ImageIcon,
+      image: "/Logo watermaks.png",
+      imageAlt: "Logo watermark applied to an image",
     },
     {
       title: "Signatures",
       description:
         "Draw a signature or type your name in a script font. Save multiple signatures (e.g. full signature and initials) for reuse in the same session. Drag your signature onto any document, photo, or video.",
       Icon: PenLine,
+      image: "/Signatures.png",
+      imageAlt: "Signature placed on a document",
     },
     {
       title: "Tile watermarking",
       description:
         "Repeat your watermark across the image with adjustable density (sparse, medium, dense), angle (0°, 45°, 90°, 180°), and gap spacing.",
       Icon: Grid3x3,
+      image: "/Shoes.jpeg",
+      imageAlt: "Tiled watermark pattern across a product photo",
     },
     {
       title: "Templates",
       description:
         "Start fast with Subtle corner, Protect (dense), and Protect (light). Save your current settings as a named preset while you work in the editor.",
       Icon: LayoutTemplate,
+      image: "/Templates.png",
+      imageAlt: "Watermark template presets in the editor",
     },
     {
       title: "Batch watermarking",
       description:
         "Upload multiple images at once, apply the same watermark settings to every file, and export everything together as a ZIP.",
       Icon: Files,
+      image: "/batch.png",
+      imageAlt: "Batch watermarking multiple photos at once",
     },
   ],
   editing: [
@@ -99,6 +112,8 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
       description:
         "Adjust your photo before or after watermarking with built-in crop handles, resize controls, and rotation.",
       Icon: Crop,
+      image: "/Crop.png",
+      imageAlt: "Photo with crop and resize handles in the editor",
     },
     {
       title: "Photo effects",
@@ -112,18 +127,16 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
         "Vintage — Muted, warm-toned color with a soft vignette.",
       ],
       Icon: Sparkles,
+      image: "/Photo effects.png",
+      imageAlt: "Photo with a sepia-style effect applied",
     },
     {
-      title: "Full history",
+      title: "Live preview & full history",
       description:
-        "Undo and redo watermark setting changes from the editor bar. Step backward or forward through text, logo, position, opacity, tile, and related adjustments without losing your place.",
-      Icon: History,
-    },
-    {
-      title: "Live preview",
-      description:
-        "Every adjustment updates instantly on screen before you export — crop, resize, rotate, effects, and watermark settings — so you see exactly what you will get.",
+        "Every adjustment updates instantly on screen before you export — crop, resize, rotate, effects, and watermark settings — so you see exactly what you will get. Undo and redo changes from the editor bar, stepping backward or forward through text, logo, position, opacity, tile, and related adjustments without losing your place.",
       Icon: Eye,
+      image: "/White_man_working.jpeg",
+      imageAlt: "Person reviewing a photo on a laptop in the editor",
     },
   ],
   "file-support": [
@@ -132,18 +145,24 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
       description:
         "JPG, PNG, and WebP photos are supported in the editor. Watermark them, then crop, resize, rotate, and apply effects — all before export.",
       Icon: Upload,
+      image: "/Grid_collage_humans.jpg",
+      imageAlt: "Grid collage of portrait photos",
     },
     {
       title: "Video",
       description:
         "MP4, MOV, and WebM clips under 60 seconds and 1080p process instantly in your browser. Larger videos (up to 50MB) are automatically processed on our servers — support for longer/larger files is coming soon.",
       Icon: Video,
+      image: "/youtubers-watermarked.jpg",
+      imageAlt: "Video frame with a watermark overlay",
     },
     {
       title: "PDF",
       description:
         "Multi-page documents are supported with the same watermark placement on every page. Original text stays selectable and searchable — only the watermark itself is added as an overlay.",
       Icon: FileText,
+      image: "/Pics/feature-pdf-support.jpg",
+      imageAlt: "PDF document with watermark support",
     },
   ],
   compatibility: [
@@ -152,18 +171,24 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
       description:
         "PutWatermark runs in any modern browser. Open the editor and start working — no download or installation required.",
       Icon: Globe,
+      image: "/Browser Based.png",
+      imageAlt: "Watermarking tool running in a web browser",
     },
     {
       title: "Works on Any Device",
       description:
         "Use PutWatermark on desktop, tablet, or phone through your browser wherever you need it.",
       Icon: MonitorSmartphone,
+      image: "/Laptop,_tablet,_smartphone.jpeg",
+      imageAlt: "Laptop, tablet, and smartphone showing the editor",
     },
     {
       title: "Client-Side Processing",
       description:
         "Most operations — images, PDFs, and short videos — run entirely on your device for speed and privacy. Larger videos are processed on our servers when possible; very large files may need to be split for now. Files are deleted immediately afterward.",
       Icon: ShieldCheck,
+      image: "/Client-Side Processing.png",
+      imageAlt: "Files processed locally on the user's device",
     },
   ],
 };
@@ -221,7 +246,6 @@ export function FeaturesPageClient() {
       <section className="landing-section border-b">
         <div className={pageContainerClass}>
           <LandingSectionHeader
-            aside="Everything listed here is available in the editor today — no marketing fluff."
             index="Features"
             lead={
               <>
@@ -316,8 +340,22 @@ function CapabilityCard({
       transition={{ duration: 0.45, ease: "easeOut", delay: index * 0.06 }}
     >
       <div className="relative flex aspect-[16/10] items-center justify-center overflow-hidden bg-[linear-gradient(160deg,#1a1f24,#36454f)]">
-        <div className="absolute inset-0 opacity-30 [background-image:radial-gradient(rgba(255,255,255,0.45)_0.6px,transparent_0.6px)] [background-size:20px_20px]" />
-        <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl landing-border border bg-night-elevated text-sand">
+        {card.image ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            alt={card.imageAlt ?? card.title}
+            className="absolute inset-0 h-full w-full object-cover"
+            decoding="async"
+            src={card.image}
+          />
+        ) : (
+          <div className="absolute inset-0 opacity-30 [background-image:radial-gradient(rgba(255,255,255,0.45)_0.6px,transparent_0.6px)] [background-size:20px_20px]" />
+        )}
+        <div
+          className={`relative flex h-16 w-16 items-center justify-center rounded-2xl landing-border border bg-night-elevated/90 text-sand backdrop-blur-sm ${
+            card.image ? "shadow-[0_12px_32px_rgba(0,0,0,0.35)]" : ""
+          }`}
+        >
           <Icon aria-hidden className="h-7 w-7" strokeWidth={1.8} />
         </div>
       </div>
