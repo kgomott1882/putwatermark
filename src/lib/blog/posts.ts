@@ -133,11 +133,11 @@ export const blogPosts: BlogPost[] = [
     dateModified: "2026-07-09",
     datePublished: "2026-07-09",
     excerpt:
-      "Draw or type your signature, place it on any page, and download — no printer, no account, no software install.",
+      "Draw or type your signature, add fill-in text where needed, place everything on any page, and download — no printer, no account, no software install.",
     image: "/Tablet_signing.jpeg",
-    imageAlt: "Person signing a document on a tablet",
+    imageAlt: "Person signing and filling a document on a tablet",
     metaDescription:
-      "Sign a PDF online in seconds — draw or type your signature, place it anywhere on the document, and download. No software, no account, no subscription.",
+      "Sign and fill a PDF online in seconds — draw or type your signature, add fill-in text fields, place them anywhere on the document, and download. No software, no account, no subscription.",
     metaTitle:
       "How to Sign a PDF Online for Free (No Account Needed) | PutWatermark",
     slug: "how-to-sign-a-pdf-online-free",
@@ -264,7 +264,7 @@ export const blogFaqSchema = [
   {
     question: "Do I need to create an account to watermark a file?",
     answer:
-      "No. You can upload a file, design your watermark, and export it without signing up. An account is only needed if you want to remove the free preview watermark or use paid features.",
+      "No signup is required to try the editor — upload, watermark, and preview freely. Create a free account when you're ready to export; your draft is saved for 48 hours if you sign up mid-session.",
   },
   {
     question: "Does watermarking reduce file quality?",
@@ -313,13 +313,13 @@ export const howToPhotoSchema = [
 ] as const;
 
 export const SIGN_PDF_OPENING_DEFINITION =
-  "Signing a PDF online means adding your signature — drawn by hand, typed, or uploaded as an image — directly onto a digital document, without printing it, signing it on paper, and scanning it back in. Electronic signatures created this way are legally valid for most everyday agreements in the United States under the ESIGN Act and UETA. PutWatermark lets you do this for free, in your browser, with no account required to try it.";
+  "Signing a PDF online means adding your signature — drawn by hand, typed, or uploaded as an image — directly onto a digital document, without printing it, signing it on paper, and scanning it back in. PutWatermark's Sign & Fill tool also lets you place fill-in text fields on specific pages. Electronic signatures created this way are legally valid for most everyday agreements in the United States under the ESIGN Act and UETA. Exporting signed or filled PDF pages uses 50 credits per billable page, with an additional 5-credit surcharge per page that contains fill text. Try the editor in your browser with no account required.";
 
 export const signPdfFaqSchema = [
   {
     question: "Do I need to create an account to sign a PDF?",
     answer:
-      "No. You can upload a PDF, create your signature, place it, and download the signed document without signing up.",
+      "No signup is required to try the editor — upload, create your signature, and preview freely. Exporting signed or filled PDF pages uses credits (50 per billable page, plus 5 per fill-text page). Create a free account when you're ready to export.",
   },
   {
     question: "Is a typed signature as legally valid as a drawn one?",
@@ -340,6 +340,11 @@ export const signPdfFaqSchema = [
     question: "Can I save my signature for multiple documents?",
     answer:
       "Yes, for the current session. Draw or type your signature once and reuse it across multiple pages or documents without redoing it each time.",
+  },
+  {
+    question: "Can I add fill-in text fields to a PDF?",
+    answer:
+      "Yes. Use Add Text in the Sign & Fill tool to place typed fields on specific pages. Each page with fill text costs 55 credits total (50 for the page plus a 5-credit fill surcharge). Pages with signatures or initials only cost 50 credits per page.",
   },
   {
     question: "Is there a subscription to sign documents?",
@@ -366,8 +371,12 @@ export const signPdfHowToSchema = [
     text: "Drag it into position on the page and resize as needed.",
   },
   {
+    name: "Add fill-text fields (optional)",
+    text: "Use Add Text to place typed fields on pages that need them. Fill-text pages use additional export credits.",
+  },
+  {
     name: "Download your signed PDF",
-    text: "Export the document with your signature applied.",
+    text: "Export the document with your signatures, initials, and fill-text fields applied.",
   },
 ] as const;
 
@@ -388,7 +397,7 @@ export const batchWatermarkFaqSchema = [
   {
     question: "Do I need an account to batch watermark photos?",
     answer:
-      "No. Uploading multiple photos, setting up a watermark, and exporting the ZIP all work without signing up. An account is only needed for paid credits if exporting at a volume beyond the free tier.",
+      "No signup is required to try batch watermarking — upload photos, set up your mark, and preview freely. Create a free account when you're ready to export the ZIP.",
   },
   {
     question: "What file do I get after exporting a batch?",
@@ -457,7 +466,7 @@ export const realEstatePhotoFaqSchema = [
   {
     question: "Can I sign real estate documents in the same tool?",
     answer:
-      "Yes — drawing or typing a signature and placing it on a PDF works the same way as watermarking a photo, in the same editor.",
+      "Yes — use Sign & Fill to draw or type a signature, add initials, or place fill-in text fields on a PDF in the same editor you use for watermarking photos.",
   },
 ] as const;
 
@@ -516,7 +525,7 @@ export const watermarkComparisonFaqSchema = [
   {
     question: "Can I sign documents with any of these tools?",
     answer:
-      "PutWatermark currently includes document signing (drawing or typing a signature onto a PDF) alongside watermarking. This isn't a feature the other three tools in this comparison currently offer.",
+      "PutWatermark includes Sign & Fill for PDFs — draw or type signatures and initials, add fill-in text fields, and export from the same editor as watermarking. The other three tools in this comparison do not currently offer that workflow.",
   },
   {
     question: "Does switching between these tools require re-learning everything?",

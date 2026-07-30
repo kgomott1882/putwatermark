@@ -1,10 +1,11 @@
 /** Target pixel density multiplier for raster image watermark overlays. */
-export const IMAGE_WATERMARK_EXPORT_SCALE = 8;
+export const IMAGE_WATERMARK_EXPORT_SCALE = 3;
 
-/** High-DPI multiplier for the exported image when canvas limits allow. */
-export const IMAGE_EXPORT_OUTPUT_SCALE = 3;
+/** Output scale: 1 keeps export dimensions aligned with the source image. */
+export const IMAGE_EXPORT_OUTPUT_SCALE = 1;
 
-export const IMAGE_EXPORT_JPEG_QUALITY = 1;
+/** Balance visual quality and file size for JPEG exports and batch runs. */
+export const IMAGE_EXPORT_JPEG_QUALITY = 0.92;
 
 const IMAGE_EXPORT_MAX_CANVAS_DIMENSION = 8192;
 const IMAGE_EXPORT_MAX_CANVAS_PIXELS = 268_435_456;

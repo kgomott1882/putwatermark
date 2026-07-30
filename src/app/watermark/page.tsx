@@ -10,11 +10,22 @@ import {
   getVideoExportRejectionMessage,
   getVideoExportRoute,
   isAnyVideoExportEligible,
+  isServerSideVideoExportRoute,
+  type VideoOverlayPass,
 } from "../../lib/watermarkVideoExport";
 import {
+  exportLongVideoOnServer,
   exportVideoOnServer,
   type ServerVideoExportStage,
 } from "../../lib/serverVideoExportClient";
+import {
+  applyBlurStrokes,
+  areBlurStrokesEqual,
+  cloneBlurStrokes,
+  getBlurBrushRadius,
+  type BlurBrushSize,
+  type BlurStroke,
+} from "../../lib/blurBrush";
 import {
   clearStoredWatermarkSettings,
   getDefaultStoredWatermarkSettings,
@@ -33,23 +44,96 @@ import {
   applyExportBillingToUi,
   completeCleanExportBilling,
   createExportId,
-  createWatermarkedAuthorizationContext,
+  ExportAuthorizationRequiredError,
+  ExportCreditCheckError,
   isCleanExportTier,
-  PDF_UPLOAD_FAIL_SAFE_NOTICE,
   resolveExportAuthorization,
+  resolveExportAuthorizationStrict,
+  resolveVideoExportAuthorization,
   type ExportAuthorizationContext,
 } from "../../lib/exportClient";
+import {
+  buildAnonymousExportDraftState,
+  type BuildAnonymousExportDraftInput,
+  deserializeDraftWatermarkLayers,
+} from "../../lib/anonymousExportDraftEditor";
+import {
+  deleteAnonymousExportDraft,
+  downloadDraftFiles,
+  loadAnonymousExportDraft,
+  saveAnonymousExportDraft,
+} from "../../lib/anonymousExportDraftClient";
+import {
+  clearPendingExportAfterLogin,
+  getOrCreateAnonymousSessionId,
+  hasPendingExportAfterLogin,
+  markPendingExportAfterLogin,
+} from "../../lib/anonymousExportDraftSession";
+import type { AnonymousExportDraftState } from "../../lib/anonymousExportDraftState";
 import type { ExportFileMeta } from "../../lib/exportCost";
+import { getVideoServerCostEstimate } from "../../lib/exportCost";
+import { buildFillManifestDocument } from "../../lib/fillManifest";
+import {
+  getPdfBillingMode,
+  hasPdfWatermarkExportContent,
+} from "../../lib/pdfExportBilling";
+import { buildSignaturePlacementManifestDocument } from "../../lib/signaturePlacementManifest";
+import {
+  applyFillFieldResize,
+  getFillFieldRect,
+  getFillFrameActionAtPoint,
+  getFillResizeCursor,
+  getFillResizeHandleAtPoint,
+  paintFillFields,
+  paintFillFieldsForPdfExport,
+  type FillFieldBounds,
+  type FillFrameAction,
+  type FillResizeHandle,
+} from "../../lib/fillFieldRender";
+import {
+  applyCenteredPlacementResize,
+  drawPlacementFrameActions,
+  drawPlacementSelectionFrame,
+  getPlacementFrameActionAtPoint,
+  getPlacementResizeCursor,
+  getPlacementResizeHandleAtPoint,
+  type PlacementFrameAction,
+  type PlacementResizeHandle,
+} from "../../lib/placementSelectionFrame";
+import {
+  countFillPages,
+  createDefaultFillField,
+  createEmptyPdfPageFillMap,
+  deserializePdfPageFillMap,
+  hasAnyFillFields,
+  persistPdfPageFillFields,
+  serializePdfPageFillMap,
+  type PdfFillTextField,
+  type PdfPageFillMap,
+} from "../../lib/pdfPageFillFields";
+import { buildSignatureManifestFromSavedSignatures } from "../../lib/signatureManifestClient";
+import { normalizeSignatureKind } from "../../lib/signatureValidation";
 import {
   applyForcedTileWatermarkSettings,
+  FORCED_TILE_LAYER_ID,
   getExportFileType,
+  hasForcedWatermarkOverlay,
   loadForcedTileLogoImage,
+  uploadFillManifestForExportAuthorization,
   uploadPdfForExportAuthorization,
+  uploadSignaturePlacementManifestForExportAuthorization,
 } from "../../lib/forcedTileExport";
 import {
   estimateClientExportCost,
   shouldShowWatermarkedExportUpsell,
+  shouldRequireCreditsBeforeExport,
+  wouldReceiveWatermarkedExport,
+  type WatermarkedExportUpsellContext,
 } from "../../lib/exportUpsellEligibility";
+import {
+  loadClientVideoFreeExportStampImage,
+  paintClientVideoFreeExportStamp,
+} from "../../lib/clientVideoFreeExportStamp";
 import {
   fetchUserCreditBalance,
   formatCreditBalance,
@@ -67,7 +151,10 @@ import {
   IMAGE_EXPORT_JPEG_QUALITY,
 } from "../../lib/imageWatermarkExport";
 import {
+  acceptedImageInputTypes,
   acceptedMediaInputTypes,
+  acceptedPdfInputTypes,
+  acceptedVideoInputTypes,
   isImageFile,
   isPdfFile,
   isVideoFile,
@@ -92,6 +179,21 @@ import {
   type ImageEffectSettings,
 } from "../../lib/imageEffects";
 import {
+  appendPdfPageSignaturePlacement,
+  buildPdfPageId,
+  countSignedPdfPages,
+  createEmptyPdfPageSignatureMap,
+  createPdfPageSignaturePlacement,
+  deserializePdfPageSignatureMap,
+  PDF_SIGNATURE_DEFAULT_OPACITY,
+  removePdfPageSignaturePlacement,
+  removeSignatureFromPdfPageMap,
+  serializePdfPageSignatureMap,
+  upsertPdfPageSignaturePlacement,
+  type PdfPageSignatureMap,
+  type PdfPageSignaturePlacement,
+} from "../../lib/pdfPageSignatures";
+import {
   buildPdfPageThumbnails,
   loadPdfDocumentFromBytes,
   renderPdfPagePreview,
@@ -101,21 +203,33 @@ import JSZip from "jszip";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  BookmarkPlus,
   ChevronLeft,
   ChevronRight,
-  Crop,
-  Droplets,
+  FileText,
   Images,
-  Maximize2,
   RefreshCw,
-  RotateCw,
-  Sparkles,
-  Star,
   Trash2,
+  Video,
   X,
 } from "lucide-react";
+import { CropControlsPanel } from "../../../components/watermark/CropControlsPanel";
 import { EditorBottomBar } from "../../../components/watermark/EditorBottomBar";
+import {
+  clampPreviewZoom,
+  formatPreviewZoomLabel,
+  PREVIEW_ZOOM_DEFAULT,
+  PREVIEW_ZOOM_MAX,
+  PREVIEW_ZOOM_MIN,
+  PREVIEW_ZOOM_STEP,
+  PreviewZoomControls,
+} from "../../../components/watermark/PreviewZoomControls";
+import {
+  ResizeControlsPanel,
+  type ResizeScaleMode,
+  type ResizeUnit,
+} from "../../../components/watermark/ResizeControlsPanel";
+import { LoadingIndicator } from "../../../components/LoadingIndicator";
+import { ProcessingOverlay } from "../../../components/ProcessingOverlay";
 import { SiteNavClient } from "../../../components/SiteNavClient";
 import { ImageEffectsPanel } from "../../../components/watermark/ImageEffectsPanel";
 import {
@@ -127,14 +241,59 @@ import {
   EditorToggleRow,
   EditorToolPanel,
 } from "../../../components/watermark/EditorToolPanel";
+import { FillDocumentControls } from "../../../components/watermark/FillDocumentControls";
+import { SignFillCreditsRequiredModal } from "../../../components/watermark/SignFillCreditsRequiredModal";
 import {
   SignatureControls,
   type SavedSignature,
 } from "../../../components/watermark/SignatureControls";
 import { WatermarkLayersPanel } from "../../../components/watermark/WatermarkLayersPanel";
+import {
+  WatermarkToolRail,
+  type WatermarkToolId,
+} from "../../../components/watermark/WatermarkToolRail";
+import {
+  VideoToolRail,
+  type VideoToolId,
+} from "../../../components/watermark/VideoToolRail";
+import {
+  PhotosToolRail,
+  type PhotoToolId,
+} from "../../../components/watermark/PhotosToolRail";
+import {
+  PdfDocsToolRail,
+} from "../../../components/watermark/PdfDocsToolRail";
+import { PdfMergePanel } from "../../../components/watermark/PdfMergePanel";
+import {
+  PdfCompressPanel,
+  type PdfCompressStats,
+} from "../../../components/watermark/PdfCompressPanel";
+import type { PdfDocToolId } from "../../../components/watermark/pdfDocTools";
+import { VideoTrimPanel } from "../../../components/watermark/VideoTrimPanel";
+import { VideoMergePanel } from "../../../components/watermark/VideoMergePanel";
+import { VideoBlurPanel } from "../../../components/watermark/VideoBlurPanel";
+import { VideoOverviewPanel } from "../../../components/watermark/VideoOverviewPanel";
+import { VideoOverviewPlayer } from "../../../components/watermark/VideoOverviewPlayer";
+import { WatermarkAdjustSliders } from "../../../components/watermark/WatermarkAdjustSliders";
+import {
+  type QuickTemplateIcon,
+  WatermarkPresetControls,
+  WatermarkQuickTemplates,
+} from "../../../components/watermark/WatermarkTemplatesPresets";
+import { VideoVisibilityTimeline } from "../../../components/watermark/VideoVisibilityTimeline";
 import { WatermarkFontLoader } from "../../../components/watermark/WatermarkFontLoader";
 import { WatermarkStyleControls } from "../../../components/watermark/WatermarkStyleControls";
 import { WatermarkedExportUpsellModal } from "../../../components/watermark/WatermarkedExportUpsellModal";
+import { UnsignedPdfExportConfirmModal } from "../../../components/watermark/UnsignedPdfExportConfirmModal";
+import {
+  ExportLoginGateModal,
+  type ExportLoginGatePhase,
+} from "../../../components/watermark/ExportLoginGateModal";
+import { VideoServerProcessingPanel } from "../../../components/watermark/VideoServerProcessingPanel";
+import {
+  EditorFormatUploadModal,
+  type EditorFormatUploadKind,
+} from "../../../components/watermark/EditorFormatUploadModal";
 import {
   DEFAULT_WATERMARK_FONT_FAMILY,
   loadWatermarkFont,
@@ -157,7 +316,78 @@ import {
   resolveTextWatermarkPaint,
   type TextWatermarkFontWeight,
 } from "../../lib/watermarkTextStyle";
+import {
+  countVideoVisibilityRanges,
+  hasVideoVisibilityRange,
+  isElementVisibleAt,
+  resolveVideoVisibilityRange,
+} from "../../lib/videoWatermarkVisibility";
 import { createClient } from "../../../utils/supabase/client";
+import {
+  applyCaptionPreset,
+  createDefaultVideoCaptionLayer,
+  createInitialVideoCaptionLayers,
+  drawVideoCaption,
+  drawVideoCaptions,
+  getTimedCaptionLayers,
+  getUntimedCaptionLayers,
+  isCaptionLayerActive,
+  type CaptionPresetId,
+  type CaptionVerticalPosition,
+  type VideoCaptionLayer,
+} from "../../lib/videoCaptions";
+import {
+  appendVideoBlurRegionPasses,
+  createDefaultVideoBlurRegion,
+  drawVideoBlurPreview,
+  updateVideoBlurRegionTiming,
+  type VideoBlurRegion,
+} from "../../lib/videoBlurRegions";
+import {
+  getVideoDisplayFrame,
+  getVideoElementFrameInCanvas,
+  getVideoNaturalDimensions,
+  mapClientPointToVideoNatural,
+} from "../../lib/videoDisplayFrame";
+import {
+  clampVideoPreviewTimeToTrim,
+  getVideoTrimDuration,
+  areVideoTrimRangesEqual,
+  isVideoTrimActive,
+  resolveVideoTrimEnd,
+  resolveVideoTrimRange,
+  shiftTimedVisibilityAfterTrim,
+} from "../../lib/videoTrim";
+import {
+  mergeVideoBlobs,
+  trimVideoBlob,
+} from "../../lib/clientVideoEdit";
+import {
+  type BatchVideoEntry,
+  createBatchVideoEntryFromFile,
+  createVideoBatchId,
+  revokeBatchVideoObjectUrls,
+} from "../../lib/videoBatch";
+import {
+  buildMergedPdfFileName,
+  createPdfMergeEntryFromFile,
+  createPdfMergeEntryFromLoadedDocument,
+  LOADED_PDF_MERGE_ENTRY_ID,
+  mergePdfFiles,
+  type PdfMergeEntry,
+} from "../../lib/pdfMergeBatch";
+import {
+  buildCompressedPdfFileName,
+  compressPdfBytes,
+} from "../../lib/pdfCompress";
+import {
+  areVideoShortenSnapshotsEqual,
+  cloneVideoShortenSnapshot,
+  type VideoShortenSnapshot,
+} from "../../lib/videoShortenHistory";
+import { isClientVideoExportEligible } from "../../lib/videoExportLimits";
+import { VideoCaptionHeadlinePanel } from "../../../components/watermark/VideoCaptionHeadlinePanel";
+import { VideoCaptionPanel } from "../../../components/watermark/VideoCaptionPanel";
 import {
   type EditorPanelId,
   ToolIconRail,
@@ -170,9 +400,19 @@ import {
   useRef,
   useState,
 } from "react";
+import { usePathname } from "next/navigation";
 
 const imageExportMimeType = "image/jpeg";
 const imageExportQuality = IMAGE_EXPORT_JPEG_QUALITY;
+
+function traceEditorBootstrap(
+  message: string,
+  details?: Record<string, unknown>,
+) {
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("[editor-bootstrap]", message, details);
+  }
+}
 
 type WatermarkType = "text" | "logo" | "signature";
 
@@ -195,7 +435,7 @@ type TileDensity = "sparse" | "medium" | "dense";
 
 type TileAngle = 0 | 45 | 90 | 180;
 
-type ImageTool = "crop" | "resize" | "rotate";
+type ImageTool = "blur" | "crop" | "resize" | "rotate";
 
 type CropDragMode =
   | "move"
@@ -214,9 +454,20 @@ type WatermarkTemplateId =
   | "protect-light"
   | "subtle-corner";
 
+type LogoWatermarkTemplateId =
+  | "logo-corner"
+  | "logo-protect-dense"
+  | "logo-protect-light";
+
 type CanvasSize = {
-  width: number;
   height: number;
+  width: number;
+};
+
+type PreviewCanvasSize = {
+  height: number;
+  pixelRatio: number;
+  width: number;
 };
 
 type CustomPosition = {
@@ -246,6 +497,7 @@ type TextBounds = {
 };
 
 type BatchImageEntry = {
+  blurStrokes: BlurStroke[];
   fileName: string;
   id: string;
   image: HTMLImageElement;
@@ -267,6 +519,8 @@ type WatermarkSettingsSnapshot = {
   activeLogoLayerId?: string;
   activeTextLayerId?: string;
   backgroundRemovedLogoImage: HTMLImageElement | null;
+  blurBrushSize: BlurBrushSize;
+  blurStrokes: BlurStroke[];
   customPosition: CustomPosition | null;
   fontFamily: string;
   fontSizeScale: number;
@@ -287,6 +541,9 @@ type WatermarkSettingsSnapshot = {
   watermarkPosition: WatermarkPosition;
   watermarkText: string;
   watermarkType: WatermarkType;
+  pdfDocumentTool?: "signature" | "fill";
+  pdfPageFillMap?: ReturnType<typeof serializePdfPageFillMap>;
+  pdfPageSignatures?: ReturnType<typeof serializePdfPageSignatureMap>;
 };
 
 type SavedWatermarkPreset = {
@@ -301,6 +558,19 @@ type WatermarkTemplate = {
   fontSizeScale: number;
   icon: "center" | "corner" | "dense" | "signature" | "sparse";
   id: WatermarkTemplateId;
+  label: string;
+  mode: WatermarkMode;
+  opacity: number;
+  position: WatermarkPosition;
+  tileAngle: TileAngle;
+  tileGap: number;
+};
+
+type LogoWatermarkTemplate = {
+  density: TileDensity;
+  fontSizeScale: number;
+  icon: "center" | "corner" | "dense" | "signature" | "sparse";
+  id: LogoWatermarkTemplateId;
   label: string;
   mode: WatermarkMode;
   opacity: number;
@@ -336,6 +606,17 @@ const watermarkTypes: { label: string; value: WatermarkType }[] = [
 
 function isImageWatermarkType(watermarkType: WatermarkType) {
   return watermarkType === "logo" || watermarkType === "signature";
+}
+
+function getWatermarkTypeSegmentLabel(
+  value: WatermarkType,
+  mediaKind: MediaKind | null,
+) {
+  if (value === "signature" && mediaKind === "pdf") {
+    return "Sign & Fill";
+  }
+
+  return watermarkTypes.find((entry) => entry.value === value)?.label ?? value;
 }
 
 const watermarkPositions: { label: string; value: WatermarkPosition }[] = [
@@ -416,12 +697,295 @@ const watermarkTemplates: WatermarkTemplate[] = [
   },
 ];
 
+const logoWatermarkTemplates: LogoWatermarkTemplate[] = [
+  {
+    density: "medium",
+    fontSizeScale: 35,
+    icon: "corner",
+    id: "logo-corner",
+    label: "Subtle corner",
+    mode: "single",
+    opacity: 60,
+    position: "bottom-right",
+    tileAngle: 45,
+    tileGap: 120,
+  },
+  {
+    density: "dense",
+    fontSizeScale: 28,
+    icon: "dense",
+    id: "logo-protect-dense",
+    label: "Protect (dense)",
+    mode: "tile",
+    opacity: 45,
+    position: "bottom-right",
+    tileAngle: 45,
+    tileGap: 130,
+  },
+  {
+    density: "sparse",
+    fontSizeScale: 28,
+    icon: "sparse",
+    id: "logo-protect-light",
+    label: "Protect (light)",
+    mode: "tile",
+    opacity: 45,
+    position: "bottom-right",
+    tileAngle: 45,
+    tileGap: 130,
+  },
+];
+
+function isEditorToolsReady(input: {
+  image: HTMLImageElement | null;
+  isPdfLoading: boolean;
+  mediaKind: MediaKind | null;
+  pdfPageCount: number;
+  videoUrl: string;
+}) {
+  if (input.isPdfLoading) {
+    return false;
+  }
+
+  if (input.mediaKind === "video") {
+    return Boolean(input.videoUrl);
+  }
+
+  if (input.mediaKind === "pdf") {
+    return input.pdfPageCount > 0 && Boolean(input.image);
+  }
+
+  if (input.mediaKind === "image") {
+    return Boolean(input.image);
+  }
+
+  return false;
+}
+
+function isMainEditorTabAllowed(
+  panel: EditorPanelId,
+  kind: MediaKind | null,
+) {
+  if (!kind) {
+    return true;
+  }
+
+  if (panel === "video") {
+    return kind === "video";
+  }
+
+  if (panel === "pdfDocs" || panel === "signFill") {
+    return kind === "pdf";
+  }
+
+  if (
+    panel === "photos" ||
+    panel === "watermark" ||
+    panel === "effects" ||
+    panel === "blur" ||
+    panel === "crop" ||
+    panel === "resize" ||
+    panel === "rotate"
+  ) {
+    return kind === "image";
+  }
+
+  return true;
+}
+
+function normalizeRestoredEditorPanel(
+  panel: EditorPanelId | null,
+  mediaKind: MediaKind | null,
+  watermarkType: WatermarkType,
+): EditorPanelId | null {
+  const rawPanel = panel as string | null;
+  const resolvedPanel =
+    rawPanel === "templates" || rawPanel === "watermark"
+      ? mediaKind === "pdf"
+        ? "pdfDocs"
+        : "photos"
+      : rawPanel === "effects" ||
+          rawPanel === "blur" ||
+          rawPanel === "crop" ||
+          rawPanel === "resize" ||
+          rawPanel === "rotate"
+        ? "photos"
+        : rawPanel === "signFill"
+          ? "pdfDocs"
+          : rawPanel === "caption"
+            ? "video"
+            : panel;
+
+  if (mediaKind === "pdf" && watermarkType === "signature") {
+    return "pdfDocs";
+  }
+
+  return resolvedPanel;
+}
+
+function normalizeRestoredPhotoTool(
+  panel: EditorPanelId | string | null,
+): PhotoToolId {
+  if (panel === "effects") {
+    return "filters";
+  }
+
+  if (
+    panel === "blur" ||
+    panel === "crop" ||
+    panel === "resize" ||
+    panel === "rotate"
+  ) {
+    return panel;
+  }
+
+  return "watermark";
+}
+
+function normalizeRestoredPdfTool(
+  panel: EditorPanelId | string | null,
+): PdfDocToolId {
+  if (panel === "watermark" || panel === "templates") {
+    return "watermark";
+  }
+
+  if (panel === "merge") {
+    return "merge";
+  }
+
+  if (panel === "compress") {
+    return "compress";
+  }
+
+  return "signFill";
+}
+
+function isPhotoImageTool(tool: PhotoToolId): tool is ImageTool {
+  return (
+    tool === "blur" ||
+    tool === "crop" ||
+    tool === "resize" ||
+    tool === "rotate"
+  );
+}
+
+const REAL_VIDEO_EXPORT_LOG = "[real-video-export]";
+
+function logRealVideoExport(step: string, data?: Record<string, unknown>) {
+  if (data) {
+    console.log(`${REAL_VIDEO_EXPORT_LOG} ${step}`, data);
+    return;
+  }
+
+  console.log(`${REAL_VIDEO_EXPORT_LOG} ${step}`);
+}
+
+function summarizeLogoLayersForExportLog(logoLayers: LogoWatermarkLayer[] | undefined) {
+  return (logoLayers ?? []).map((layer) => ({
+    customPosition: layer.customPosition,
+    hasLogoImage: Boolean(layer.logoImage),
+    id: layer.id,
+    isForcedLayer: layer.id === FORCED_TILE_LAYER_ID,
+    naturalHeight: layer.logoImage?.naturalHeight ?? null,
+    naturalWidth: layer.logoImage?.naturalWidth ?? null,
+    opacity: layer.opacity,
+  }));
+}
+
+function summarizeTextLayersForExportLog(textLayers: TextWatermarkLayer[] | undefined) {
+  return (textLayers ?? []).map((layer) => ({
+    id: layer.id,
+    text: layer.text,
+    textPreview: layer.text.slice(0, 80),
+  }));
+}
+
+function summarizeWatermarkSettingsForExportLog(settings: {
+  logoLayers?: LogoWatermarkLayer[];
+  textLayers?: TextWatermarkLayer[];
+  watermarkType: string;
+}) {
+  const logoLayers = settings.logoLayers ?? [];
+
+  return {
+    forcedLayerPresent: logoLayers.some((layer) => layer.id === FORCED_TILE_LAYER_ID),
+    forcedLayerSummary: logoLayers.find((layer) => layer.id === FORCED_TILE_LAYER_ID)
+      ? summarizeLogoLayersForExportLog(logoLayers).find(
+          (layer) => layer.isForcedLayer,
+        )
+      : null,
+    hasForcedWatermarkOverlay: hasForcedWatermarkOverlay({ logoLayers }),
+    logoLayerCount: logoLayers.length,
+    logoLayers: summarizeLogoLayersForExportLog(logoLayers),
+    textLayerCount: settings.textLayers?.length ?? 0,
+    textLayers: summarizeTextLayersForExportLog(settings.textLayers),
+    watermarkType: settings.watermarkType,
+  };
+}
+
+async function sampleOverlayPngBytesCenter(
+  overlayPngBytes: Uint8Array,
+  width: number,
+  height: number,
+) {
+  const blob = new Blob([new Uint8Array(overlayPngBytes)], { type: "image/png" });
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, width);
+  canvas.height = Math.max(1, height);
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return {
+      centerAlpha: null,
+      centerRgb: null,
+      decodeError: "Could not create sampling canvas.",
+    };
+  }
+
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+
+  const centerX = Math.floor(canvas.width / 2);
+  const centerY = Math.floor(canvas.height / 2);
+  const sample = context.getImageData(centerX, centerY, 1, 1).data;
+
+  return {
+    centerAlpha: sample[3] ?? null,
+    centerRgb: [sample[0] ?? 0, sample[1] ?? 0, sample[2] ?? 0],
+    overlayPngByteLength: overlayPngBytes.byteLength,
+    sampleHeight: canvas.height,
+    sampleWidth: canvas.width,
+  };
+}
+
 export default function WatermarkPage() {
+  const pathname = usePathname();
+  const isEditorRoute =
+    pathname === "/watermark" || pathname.startsWith("/watermark/");
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const previewCheckerboardRef = useRef<HTMLDivElement>(null);
+  const previewPanDragRef = useRef<{
+    pointerId: number;
+    scrollLeft: number;
+    scrollTop: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
   const videoOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const videoPreviewRef = useRef<HTMLDivElement>(null);
+  const videoElementRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const formatPhotosInputRef = useRef<HTMLInputElement>(null);
+  const formatPdfInputRef = useRef<HTMLInputElement>(null);
+  const formatVideoInputRef = useRef<HTMLInputElement>(null);
   const appendImagesInputRef = useRef<HTMLInputElement>(null);
+  const appendVideosInputRef = useRef<HTMLInputElement>(null);
+  const appendPdfsInputRef = useRef<HTMLInputElement>(null);
+  const pendingMergedVideoPreviewRef = useRef(false);
+  const videoShortenOriginalRef = useRef<VideoShortenSnapshot | null>(null);
+  const videoShortenUndoRef = useRef<VideoShortenSnapshot[]>([]);
+  const videoShortenRedoRef = useRef<VideoShortenSnapshot[]>([]);
   const filePickerIntentRef = useRef<"append" | "replace">("replace");
   const logoInputRef = useRef<HTMLInputElement>(null);
   const previewPanelRef = useRef<HTMLDivElement>(null);
@@ -432,6 +996,9 @@ export default function WatermarkPage() {
   const imageFrameRef = useRef<ImageFrame | null>(null);
   const isDraggingRef = useRef(false);
   const draggingLayerIdRef = useRef<string | null>(null);
+  const isDraggingCaptionRef = useRef(false);
+  const draggingCaptionLayerIdRef = useRef<string | null>(null);
+  const captionBoundsRef = useRef<Map<string, TextBounds>>(new Map());
   const settingsHistoryRef = useRef<WatermarkSettingsSnapshot[]>([]);
   const settingsHistoryIndexRef = useRef(0);
   const settingsHistoryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -450,7 +1017,10 @@ export default function WatermarkPage() {
   const isRestoringSessionRef = useRef(false);
   const sessionSaveRef = useRef<(() => Promise<void>) | null>(null);
   const mediaLoadGenerationRef = useRef(0);
+  const hasBootstrappedEditorRef = useRef(false);
+  const resetAnonymousEditorEntryRef = useRef<() => void>(() => {});
   const cropDragRef = useRef<{
+    aspectRatio?: number;
     mode: CropDragMode;
     origin: { x: number; y: number };
     rect: CropRect;
@@ -461,15 +1031,60 @@ export default function WatermarkPage() {
     startHeight: number;
     startWidth: number;
   } | null>(null);
+  const blurDragRef = useRef<{ strokeId: string } | null>(null);
+  const fillFieldBoundsRef = useRef<Record<string, FillFieldBounds>>({});
+  const fillDragRef = useRef<{
+    fieldId: string;
+    mode: "move" | "resize";
+    origin: { x: number; y: number };
+    resizeHandle?: FillResizeHandle;
+    startField: PdfFillTextField;
+  } | null>(null);
+  const signatureDragRef = useRef<{
+    mode: "move" | "resize";
+    origin: { x: number; y: number };
+    placementId: string;
+    resizeHandle?: PlacementResizeHandle;
+    startBounds: TextBounds;
+    startCustomPosition: { xPercent: number; yPercent: number };
+    startFontSizeScale: number;
+  } | null>(null);
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [imageBatch, setImageBatch] = useState<BatchImageEntry[]>([]);
   const [activeBatchImageId, setActiveBatchImageId] = useState<string | null>(
     null,
   );
+  const [videoBatch, setVideoBatch] = useState<BatchVideoEntry[]>([]);
+  const [activeBatchVideoId, setActiveBatchVideoId] = useState<string | null>(
+    null,
+  );
+  const [isVideoEditProcessing, setIsVideoEditProcessing] = useState(false);
+  const [videoShortenHistoryTick, setVideoShortenHistoryTick] = useState(0);
   const [mediaKind, setMediaKind] = useState<MediaKind | null>(null);
   const [pdfPageCount, setPdfPageCount] = useState(0);
   const [pdfPages, setPdfPages] = useState<PdfPageThumbnail[]>([]);
   const [activePdfPageId, setActivePdfPageId] = useState<string | null>(null);
+  const [pdfPageSignatures, setPdfPageSignatures] = useState<PdfPageSignatureMap>({});
+  const [pdfPageFillMap, setPdfPageFillMap] = useState<PdfPageFillMap>({});
+  const [pdfDocumentTool, setPdfDocumentTool] = useState<"signature" | "fill">(
+    "signature",
+  );
+  const [activeFillFieldId, setActiveFillFieldId] = useState<string | null>(null);
+  const [showServerVideoCreditGate, setShowServerVideoCreditGate] =
+    useState(false);
+  const [isFillFieldHovering, setIsFillFieldHovering] = useState(false);
+  const [fillHoverResizeHandle, setFillHoverResizeHandle] =
+    useState<FillResizeHandle | null>(null);
+  const [fillHoverFrameAction, setFillHoverFrameAction] =
+    useState<FillFrameAction | null>(null);
+  const [signatureHoverResizeHandle, setSignatureHoverResizeHandle] =
+    useState<PlacementResizeHandle | null>(null);
+  const [signatureHoverFrameAction, setSignatureHoverFrameAction] =
+    useState<PlacementFrameAction | null>(null);
+  const [isSignaturePlacementHovering, setIsSignaturePlacementHovering] =
+    useState(false);
+  const [showUnsignedPdfExportConfirm, setShowUnsignedPdfExportConfirm] =
+    useState(false);
   const [isPdfLoading, setIsPdfLoading] = useState(false);
   const [pdfExportProgress, setPdfExportProgress] = useState<{
     current: number;
@@ -488,7 +1103,17 @@ export default function WatermarkPage() {
     height: 0,
     width: 0,
   });
+  const [videoPreviewTime, setVideoPreviewTime] = useState(0);
+  const [videoTrimStartSeconds, setVideoTrimStartSeconds] = useState(0);
+  const [videoTrimEndSeconds, setVideoTrimEndSeconds] = useState(0);
+  const [videoTrimAppliedStartSeconds, setVideoTrimAppliedStartSeconds] =
+    useState(0);
+  const [videoTrimAppliedEndSeconds, setVideoTrimAppliedEndSeconds] = useState(0);
+  const [videoCropSavedNotice, setVideoCropSavedNotice] = useState(false);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [activeImageTool, setActiveImageTool] = useState<ImageTool | null>(null);
+  const [blurBrushSize, setBlurBrushSize] = useState<BlurBrushSize>("medium");
+  const [blurStrokes, setBlurStrokes] = useState<BlurStroke[]>([]);
   const [uploadedImageSize, setUploadedImageSize] = useState<CanvasSize | null>(
     null,
   );
@@ -496,6 +1121,10 @@ export default function WatermarkPage() {
   const [resizeWidth, setResizeWidth] = useState(0);
   const [resizeHeight, setResizeHeight] = useState(0);
   const [isAspectRatioLocked, setIsAspectRatioLocked] = useState(true);
+  const [isCropAspectRatioLocked, setIsCropAspectRatioLocked] = useState(false);
+  const [resizeUnit, setResizeUnit] = useState<ResizeUnit>("px");
+  const [resizeScaleMode, setResizeScaleMode] =
+    useState<ResizeScaleMode>("contain");
   const [resizeWarning, setResizeWarning] = useState("");
   const [rotationAngle, setRotationAngle] = useState(0);
   const [activeImageEffect, setActiveImageEffect] =
@@ -506,21 +1135,31 @@ export default function WatermarkPage() {
     useState<EffectBorderColor>("ink");
   const [effectExposure, setEffectExposure] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportPreparing, setIsExportPreparing] = useState(false);
+  const [isRestoringAnonymousDraft, setIsRestoringAnonymousDraft] = useState(false);
   const [exportProgress, setExportProgress] = useState<number | null>(null);
   const [exportError, setExportError] = useState("");
   const [exportNotice, setExportNotice] = useState("");
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isEmailConfirmed, setIsEmailConfirmed] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [showWatermarkedExportUpsell, setShowWatermarkedExportUpsell] =
     useState(false);
+  const [showExportLoginGate, setShowExportLoginGate] = useState(false);
+  const [loginGatePhase, setLoginGatePhase] = useState<ExportLoginGatePhase>("saving");
+  const [loginGateError, setLoginGateError] = useState("");
   const pendingExportRef = useRef<(() => void) | null>(null);
+  const resumeExportAfterLoginRef = useRef(false);
+  const anonymousDraftRestoreRef = useRef<AnonymousExportDraftState | null>(null);
+  const pendingDraftRestoreResolverRef = useRef<(() => void) | null>(null);
   const [exportServerStage, setExportServerStage] =
     useState<ServerVideoExportStage | null>(null);
+  const [longVideoProcessingDetail, setLongVideoProcessingDetail] = useState<
+    string | null
+  >(null);
   const [isServerVideoExport, setIsServerVideoExport] = useState(false);
-  const [showRestoredSettingsNotice, setShowRestoredSettingsNotice] =
-    useState(false);
   const [watermarkType, setWatermarkType] = useState<WatermarkType>("text");
   const initialTextLayer = createDefaultTextLayer();
   const initialLogoLayer = createDefaultLogoLayer();
@@ -541,8 +1180,10 @@ export default function WatermarkPage() {
   const [logoFileName, setLogoFileName] = useState("");
   const [isLogoBackgroundRemoved, setIsLogoBackgroundRemoved] = useState(false);
   const [logoBackgroundMessage, setLogoBackgroundMessage] = useState("");
-  const [activeTemplate, setActiveTemplate] =
+  const [activeTextTemplate, setActiveTextTemplate] =
     useState<WatermarkTemplateId | null>(null);
+  const [activeLogoTemplate, setActiveLogoTemplate] =
+    useState<LogoWatermarkTemplateId | null>(null);
   const [watermarkMode, setWatermarkMode] = useState<WatermarkMode>("single");
   const [watermarkPosition, setWatermarkPosition] =
     useState<WatermarkPosition>("top-left");
@@ -552,11 +1193,15 @@ export default function WatermarkPage() {
   const [tileDensity, setTileDensity] = useState<TileDensity>("medium");
   const [tileGap, setTileGap] = useState(120);
   const [tileAngle, setTileAngle] = useState<TileAngle>(45);
-  const [watermarkOpacity, setWatermarkOpacity] = useState(70);
-  const [fontSizeScale, setFontSizeScale] = useState(100);
-  const [fontFamily, setFontFamily] = useState<string>(watermarkFontFamilies[0].value);
+  const [watermarkOpacity, setWatermarkOpacity] = useState(
+    initialTextLayer.opacity,
+  );
+  const [fontSizeScale, setFontSizeScale] = useState(
+    initialTextLayer.fontSizeScale,
+  );
+  const [fontFamily, setFontFamily] = useState(initialTextLayer.fontFamily);
   const [fontWeight, setFontWeight] = useState<TextWatermarkFontWeight>(
-    DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
+    initialTextLayer.fontWeight,
   );
   const [textColor, setTextColor] = useState(DEFAULT_TEXT_WATERMARK_COLOR);
   const [textShadowEnabled, setTextShadowEnabled] = useState(
@@ -566,6 +1211,8 @@ export default function WatermarkPage() {
   const [logoError, setLogoError] = useState("");
   const [isDraggingWatermark, setIsDraggingWatermark] = useState(false);
   const [isWatermarkHovering, setIsWatermarkHovering] = useState(false);
+  const [isDraggingCaption, setIsDraggingCaption] = useState(false);
+  const [isCaptionHovering, setIsCaptionHovering] = useState(false);
   const [showWatermarkDragHint, setShowWatermarkDragHint] = useState(false);
   const [watermarkDragHintPos, setWatermarkDragHintPos] = useState<{
     x: number;
@@ -580,13 +1227,47 @@ export default function WatermarkPage() {
   const [activeSignatureId, setActiveSignatureId] = useState<string | null>(
     null,
   );
+  const [activeSignaturePlacementId, setActiveSignaturePlacementId] = useState<
+    string | null
+  >(null);
   const [isSignatureDropTarget, setIsSignatureDropTarget] = useState(false);
-  const [canvasSize, setCanvasSize] = useState<CanvasSize>({
-    width: 900,
+  const [canvasSize, setCanvasSize] = useState<PreviewCanvasSize>({
     height: 600,
+    pixelRatio: 1,
+    width: 900,
   });
   const [activeEditorPanel, setActiveEditorPanel] =
-    useState<EditorPanelId | null>("watermark");
+    useState<EditorPanelId | null>(null);
+  const [formatUploadPrompt, setFormatUploadPrompt] =
+    useState<EditorFormatUploadKind | null>(null);
+  const [activePhotoTool, setActivePhotoTool] = useState<PhotoToolId>("watermark");
+  const [activePdfTool, setActivePdfTool] = useState<PdfDocToolId>("signFill");
+  const [pdfMergeBatch, setPdfMergeBatch] = useState<PdfMergeEntry[]>([]);
+  const [isPdfMergeProcessing, setIsPdfMergeProcessing] = useState(false);
+  const [isPdfCompressProcessing, setIsPdfCompressProcessing] = useState(false);
+  const [lastPdfCompressResult, setLastPdfCompressResult] =
+    useState<PdfCompressStats | null>(null);
+  const [previewZoomPercent, setPreviewZoomPercent] = useState(PREVIEW_ZOOM_DEFAULT);
+  const [isPreviewPanning, setIsPreviewPanning] = useState(false);
+  const [activeWatermarkTool, setActiveWatermarkTool] =
+    useState<WatermarkToolId>("upload");
+  const [activeVideoTool, setActiveVideoTool] = useState<VideoToolId>("overview");
+  const [videoCaptionLayers, setVideoCaptionLayers] = useState<VideoCaptionLayer[]>(
+    createInitialVideoCaptionLayers,
+  );
+  const [activeVideoCaptionLayerId, setActiveVideoCaptionLayerId] = useState(
+    () => createInitialVideoCaptionLayers()[0]!.id,
+  );
+  const [videoBlurRegions, setVideoBlurRegions] = useState<VideoBlurRegion[]>(
+    [],
+  );
+  const [activeVideoBlurRegionId, setActiveVideoBlurRegionId] = useState<
+    string | null
+  >(null);
+  const [videoBlurBrushSize, setVideoBlurBrushSize] =
+    useState<BlurBrushSize>("medium");
+  const videoBlurDragRef = useRef<{ strokeId: string } | null>(null);
+  const [captionsMasterEnabled, setCaptionsMasterEnabled] = useState(true);
 
   async function finalizeCleanExportBilling(auth: ExportAuthorizationContext) {
     const billing = await completeCleanExportBilling({ auth });
@@ -599,7 +1280,9 @@ export default function WatermarkPage() {
   }
 
   function applyAuthorizeNotice(auth: ExportAuthorizationContext) {
-    if (auth.authorizeNotice) {
+    if (auth.costNotice) {
+      setExportNotice(auth.costNotice);
+    } else if (auth.authorizeNotice) {
       setExportNotice(auth.authorizeNotice);
     }
 
@@ -608,23 +1291,1158 @@ export default function WatermarkPage() {
     }
   }
 
-  function getWatermarkedExportUpsellContext() {
-    const fileType = getCurrentExportFileType();
-    const photoCount =
-      mediaKind === "image" && imageBatch.length >= 2 ? imageBatch.length : 1;
-
+  function getVideoExportFileMeta(): ExportFileMeta {
     return {
-      creditBalance,
-      estimatedExportCost: estimateClientExportCost(fileType, {
-        pdfPageCount,
-        photoCount,
-      }),
-      fileType,
-      isAuthenticated,
+      durationSeconds: getVideoTrimDuration(
+        videoTrimAppliedStartSeconds,
+        videoTrimAppliedEndSeconds,
+        videoDuration,
+      ),
+      fileSizeBytes: videoFileSize,
+      height: videoSize?.height,
+      width: videoSize?.width,
     };
   }
 
+  function seekVideoPreview(seconds: number, respectTrim = false) {
+    const clamped = respectTrim
+      ? clampVideoPreviewTimeToTrim(
+          seconds,
+          videoTrimStartSeconds,
+          videoTrimEndSeconds,
+          videoDuration,
+        )
+      : Math.min(
+          videoDuration,
+          Math.max(0, Number.isFinite(seconds) ? seconds : 0),
+        );
+    const video = videoElementRef.current;
+
+    if (video) {
+      video.currentTime = clamped;
+    }
+
+    setVideoPreviewTime(clamped);
+  }
+
+  function clearVideoShortenHistory() {
+    videoShortenOriginalRef.current = null;
+    videoShortenUndoRef.current = [];
+    videoShortenRedoRef.current = [];
+    setVideoShortenHistoryTick((tick) => tick + 1);
+  }
+
+  function captureVideoShortenSnapshot(): VideoShortenSnapshot | null {
+    const activeEntry =
+      videoBatch.find((entry) => entry.id === activeBatchVideoId) ??
+      videoBatch[0];
+
+    if (!activeEntry) {
+      return null;
+    }
+
+    return {
+      captionLayers: videoCaptionLayers.map((layer) => ({ ...layer })),
+      entry: {
+        duration: activeEntry.duration,
+        file: activeEntry.file,
+        fileName: activeEntry.fileName,
+        fileSize: activeEntry.fileSize,
+        height: activeEntry.height,
+        id: activeEntry.id,
+        width: activeEntry.width,
+      },
+      textLayers: textLayers.map((layer) => ({ ...layer })),
+    };
+  }
+
+  function setVideoShortenOriginalFromEntry(entry: BatchVideoEntry) {
+    videoShortenOriginalRef.current = {
+      captionLayers: videoCaptionLayers.map((layer) => ({ ...layer })),
+      entry: {
+        duration: entry.duration,
+        file: entry.file,
+        fileName: entry.fileName,
+        fileSize: entry.fileSize,
+        height: entry.height,
+        id: entry.id,
+        width: entry.width,
+      },
+      textLayers: textLayers.map((layer) => ({ ...layer })),
+    };
+    videoShortenUndoRef.current = [];
+    videoShortenRedoRef.current = [];
+    setVideoShortenHistoryTick((tick) => tick + 1);
+  }
+
+  async function restoreVideoShortenSnapshot(snapshot: VideoShortenSnapshot) {
+    const previousUrls = videoBatch.map((entry) => entry.objectUrl);
+    const entry = await createBatchVideoEntryFromFile(
+      snapshot.entry.file,
+      snapshot.entry.id,
+      {
+        height: snapshot.entry.height,
+        width: snapshot.entry.width,
+      },
+    );
+
+    for (const url of previousUrls) {
+      if (url !== entry.objectUrl) {
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    setTextLayers(snapshot.textLayers.map((layer) => ({ ...layer })));
+    setVideoCaptionLayers(snapshot.captionLayers.map((layer) => ({ ...layer })));
+    setVideoBatch([entry]);
+    applyActiveBatchVideoEntry(entry);
+    setVideoCropSavedNotice(true);
+    pendingMergedVideoPreviewRef.current = true;
+    setVideoPreviewTime(0);
+    setVideoShortenHistoryTick((tick) => tick + 1);
+  }
+
+  function pushVideoShortenUndoSnapshot() {
+    const snapshot = captureVideoShortenSnapshot();
+
+    if (!snapshot) {
+      return;
+    }
+
+    videoShortenUndoRef.current.push(cloneVideoShortenSnapshot(snapshot));
+    videoShortenRedoRef.current = [];
+    setVideoShortenHistoryTick((tick) => tick + 1);
+  }
+
+  async function undoVideoShorten() {
+    if (!videoShortenUndoRef.current.length) {
+      return;
+    }
+
+    const currentSnapshot = captureVideoShortenSnapshot();
+
+    if (currentSnapshot) {
+      videoShortenRedoRef.current.push(cloneVideoShortenSnapshot(currentSnapshot));
+    }
+
+    const previousSnapshot = videoShortenUndoRef.current.pop()!;
+
+    try {
+      await restoreVideoShortenSnapshot(previousSnapshot);
+      setExportNotice("Restored the previous shortened clip.");
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "Could not undo the last shorten.",
+      );
+    }
+  }
+
+  async function redoVideoShorten() {
+    if (!videoShortenRedoRef.current.length) {
+      return;
+    }
+
+    const currentSnapshot = captureVideoShortenSnapshot();
+
+    if (currentSnapshot) {
+      videoShortenUndoRef.current.push(cloneVideoShortenSnapshot(currentSnapshot));
+    }
+
+    const nextSnapshot = videoShortenRedoRef.current.pop()!;
+
+    try {
+      await restoreVideoShortenSnapshot(nextSnapshot);
+      setExportNotice("Restored the next shortened clip.");
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "Could not redo the shorten step.",
+      );
+    }
+  }
+
+  async function restoreOriginalVideoLength() {
+    const originalSnapshot = videoShortenOriginalRef.current;
+
+    if (!originalSnapshot) {
+      resetVideoTrim();
+      return;
+    }
+
+    const currentSnapshot = captureVideoShortenSnapshot();
+
+    if (
+      currentSnapshot &&
+      !areVideoShortenSnapshotsEqual(currentSnapshot, originalSnapshot)
+    ) {
+      videoShortenUndoRef.current.push(cloneVideoShortenSnapshot(currentSnapshot));
+      videoShortenRedoRef.current = [];
+    }
+
+    try {
+      await restoreVideoShortenSnapshot(originalSnapshot);
+      setExportNotice("Restored the original full-length video.");
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "Could not restore the original video.",
+      );
+    }
+  }
+
+  function resetVideoTrim() {
+    const endSeconds = resolveVideoTrimEnd(undefined, videoDuration);
+    setVideoTrimStartSeconds(0);
+    setVideoTrimEndSeconds(endSeconds);
+    setVideoCropSavedNotice(false);
+    seekVideoPreview(videoPreviewTime, true);
+  }
+
+  function beginReshortenSession() {
+    setActiveEditorPanel("video");
+    setActiveVideoTool("trim");
+    setVideoCropSavedNotice(false);
+
+    const endSeconds = resolveVideoTrimEnd(undefined, videoDuration);
+    setVideoTrimStartSeconds(0);
+    setVideoTrimEndSeconds(endSeconds);
+    setVideoTrimAppliedStartSeconds(0);
+    setVideoTrimAppliedEndSeconds(endSeconds);
+    seekVideoPreview(0, false);
+    setExportNotice("Drag the timeline handles, then apply shorten.");
+  }
+
+  function saveVideoCrop() {
+    void applyVideoShorten();
+  }
+
+  function shiftVideoEditorTimingsAfterTrim(
+    trimStart: number,
+    trimEnd: number,
+  ) {
+    setTextLayers((current) =>
+      current.flatMap((layer) => {
+        const shifted = shiftTimedVisibilityAfterTrim(layer, trimStart, trimEnd);
+        return shifted ? [shifted] : [];
+      }),
+    );
+    setVideoCaptionLayers((current) =>
+      current.flatMap((layer) => {
+        const shifted = shiftTimedVisibilityAfterTrim(layer, trimStart, trimEnd);
+        return shifted ? [shifted] : [];
+      }),
+    );
+    setVideoBlurRegions((current) =>
+      current.flatMap((region) => {
+        const shifted = shiftTimedVisibilityAfterTrim(region, trimStart, trimEnd);
+        return shifted ? [shifted] : [];
+      }),
+    );
+  }
+
+  function initializeVideoBlurState(durationSeconds: number) {
+    const firstRegion = createDefaultVideoBlurRegion(durationSeconds, 0);
+    setVideoBlurRegions([firstRegion]);
+    setActiveVideoBlurRegionId(firstRegion.id);
+    videoBlurDragRef.current = null;
+  }
+
+  function getActiveVideoBlurRegion() {
+    return (
+      videoBlurRegions.find((region) => region.id === activeVideoBlurRegionId) ??
+      videoBlurRegions[0] ??
+      null
+    );
+  }
+
+  function updateActiveVideoBlurRegion(
+    patch: Partial<VideoBlurRegion> | ((region: VideoBlurRegion) => VideoBlurRegion),
+  ) {
+    const activeRegion = getActiveVideoBlurRegion();
+
+    if (!activeRegion) {
+      return;
+    }
+
+    setVideoBlurRegions((current) =>
+      current.map((region) => {
+        if (region.id !== activeRegion.id) {
+          return region;
+        }
+
+        return typeof patch === "function"
+          ? patch(region)
+          : { ...region, ...patch };
+      }),
+    );
+  }
+
+  function updateVideoBlurRegionStrokes(
+    regionId: string,
+    updater: (strokes: BlurStroke[]) => BlurStroke[],
+  ) {
+    setVideoBlurRegions((current) =>
+      current.map((region) =>
+        region.id === regionId
+          ? { ...region, strokes: updater(region.strokes) }
+          : region,
+      ),
+    );
+  }
+
+  function ensureVideoBlurRegionsInitialized() {
+    if (videoDuration <= 0 || videoBlurRegions.length > 0) {
+      return;
+    }
+
+    initializeVideoBlurState(videoDuration);
+  }
+
+  function addVideoBlurRegion() {
+    const nextRegion = createDefaultVideoBlurRegion(
+      videoDuration,
+      videoBlurRegions.length,
+    );
+    setVideoBlurRegions((current) => [...current, nextRegion]);
+    setActiveVideoBlurRegionId(nextRegion.id);
+  }
+
+  function removeVideoBlurRegion(regionId: string) {
+    if (videoBlurRegions.length <= 1) {
+      return;
+    }
+
+    const remaining = videoBlurRegions.filter((region) => region.id !== regionId);
+    setVideoBlurRegions(remaining);
+
+    if (activeVideoBlurRegionId === regionId) {
+      setActiveVideoBlurRegionId(remaining[0]!.id);
+    }
+  }
+
+  function isVideoBlurInteractionActive() {
+    return (
+      mediaKind === "video" &&
+      activeEditorPanel === "video" &&
+      activeVideoTool === "blur" &&
+      Boolean(videoUrl)
+    );
+  }
+
+  function isVideoWatermarkInteractionActive() {
+    return (
+      mediaKind === "video" &&
+      activeEditorPanel === "video" &&
+      activeVideoTool === "watermark" &&
+      Boolean(videoUrl)
+    );
+  }
+
+  function shouldPaintVideoWatermarkPreview() {
+    return isVideoWatermarkInteractionActive();
+  }
+
+  function isVideoCanvasInteractionActive() {
+    return (
+      isVideoCaptionInteractionActive() ||
+      isVideoBlurInteractionActive() ||
+      isVideoWatermarkInteractionActive()
+    );
+  }
+
+  function getVideoPoint(
+    event: PointerEvent<HTMLCanvasElement>,
+    options: { requireInside?: boolean } = {},
+  ) {
+    const video = videoElementRef.current;
+
+    if (!video || !videoSize) {
+      return null;
+    }
+
+    const { height: naturalHeight, width: naturalWidth } =
+      getVideoNaturalDimensions(video, videoSize.width, videoSize.height);
+    const mapped = mapClientPointToVideoNatural(
+      event.clientX,
+      event.clientY,
+      video,
+      naturalWidth,
+      naturalHeight,
+    );
+
+    if (!mapped) {
+      return null;
+    }
+
+    if (options.requireInside && !mapped.inside) {
+      return null;
+    }
+
+    return {
+      x: mapped.x,
+      y: mapped.y,
+    };
+  }
+
+  function handleVideoBlurPointerDown(event: PointerEvent<HTMLCanvasElement>) {
+    const point = getVideoPoint(event, { requireInside: true });
+    const activeRegion = getActiveVideoBlurRegion();
+
+    if (!point || !activeRegion || !videoSize) {
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+
+    const strokeId = crypto.randomUUID();
+    videoBlurDragRef.current = { strokeId };
+
+    updateVideoBlurRegionStrokes(activeRegion.id, (current) => [
+      ...current,
+      {
+        brushSize: videoBlurBrushSize,
+        id: strokeId,
+        points: [point],
+      },
+    ]);
+
+    if (activeRegion.strokes.length === 0) {
+      updateActiveVideoBlurRegion((region) => ({
+        ...region,
+        visibleFromSeconds: Math.min(region.visibleFromSeconds, videoPreviewTime),
+        visibleUntilSeconds: Math.max(
+          region.visibleUntilSeconds,
+          videoPreviewTime + 0.25,
+        ),
+      }));
+    }
+  }
+
+  function handleVideoBlurPointerMove(event: PointerEvent<HTMLCanvasElement>) {
+    const drag = videoBlurDragRef.current;
+    const point = getVideoPoint(event);
+    const activeRegion = getActiveVideoBlurRegion();
+
+    if (!drag || !point || !activeRegion || !videoSize) {
+      return;
+    }
+
+    event.preventDefault();
+
+    updateVideoBlurRegionStrokes(activeRegion.id, (current) =>
+      current.map((stroke) => {
+        if (stroke.id !== drag.strokeId) {
+          return stroke;
+        }
+
+        const lastPoint = stroke.points[stroke.points.length - 1];
+
+        if (lastPoint) {
+          const deltaX = point.x - lastPoint.x;
+          const deltaY = point.y - lastPoint.y;
+          const minDistance =
+            getBlurBrushRadius(
+              stroke.brushSize,
+              videoSize.width,
+              videoSize.height,
+            ) * 0.15;
+
+          if (deltaX * deltaX + deltaY * deltaY < minDistance * minDistance) {
+            return stroke;
+          }
+        }
+
+        return {
+          ...stroke,
+          points: [...stroke.points, point],
+        };
+      }),
+    );
+  }
+
+  function handleVideoBlurPointerUp(event: PointerEvent<HTMLCanvasElement>) {
+    if (!videoBlurDragRef.current) {
+      return;
+    }
+
+    videoBlurDragRef.current = null;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function hasVideoBlurToExport() {
+    return videoBlurRegions.some((region) => region.strokes.length > 0);
+  }
+
+  async function applyVideoShorten() {
+    const range = resolveVideoTrimRange(
+      videoTrimStartSeconds,
+      videoTrimEndSeconds,
+      videoDuration,
+    );
+
+    if (
+      !isVideoTrimActive(
+        range.startSeconds,
+        range.endSeconds,
+        videoDuration,
+      )
+    ) {
+      setVideoTrimAppliedStartSeconds(range.startSeconds);
+      setVideoTrimAppliedEndSeconds(range.endSeconds);
+      setVideoCropSavedNotice(true);
+      return;
+    }
+
+    const activeEntry =
+      videoBatch.find((entry) => entry.id === activeBatchVideoId) ??
+      videoBatch[0];
+
+    if (!activeEntry) {
+      setUploadError("Load a video before shortening.");
+      return;
+    }
+
+    pushVideoShortenUndoSnapshot();
+
+    setIsVideoEditProcessing(true);
+    setUploadError("");
+    setExportNotice("");
+
+    try {
+      let trimmedBlob: Blob;
+
+      if (
+        isClientVideoExportEligible(
+          activeEntry.duration,
+          activeEntry.width,
+          activeEntry.height,
+        )
+      ) {
+        trimmedBlob = await trimVideoBlob({
+          endSeconds: range.endSeconds,
+          fileName: activeEntry.fileName,
+          startSeconds: range.startSeconds,
+          videoBlob: activeEntry.file,
+        });
+      } else {
+        const response = await fetch("/api/watermark/video/edit", {
+          body: JSON.stringify({
+            action: "trim",
+            endSeconds: range.endSeconds,
+            fileName: activeEntry.fileName,
+            startSeconds: range.startSeconds,
+            videoBase64: await blobToBase64(activeEntry.file),
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        });
+        const payload = (await response.json()) as {
+          error?: string;
+          fileName?: string;
+          videoBase64?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Video shorten failed.");
+        }
+
+        trimmedBlob = base64ToVideoFile(
+          payload.videoBase64!,
+          payload.fileName ??
+            activeEntry.fileName.replace(/(\.[^.]+)?$/, "-shortened.mp4"),
+        );
+      }
+
+      shiftVideoEditorTimingsAfterTrim(range.startSeconds, range.endSeconds);
+
+      const trimmedFileName = activeEntry.fileName.replace(
+        /(\.[^.]+)?$/,
+        "-shortened.mp4",
+      );
+      const trimmedEntry = await createBatchVideoEntryFromFile(
+        new File([trimmedBlob], trimmedFileName, { type: trimmedBlob.type }),
+        createVideoBatchId(),
+        {
+          height: activeEntry.height,
+          width: activeEntry.width,
+        },
+      );
+
+      const nextBatch = videoBatch.map((entry) =>
+        entry.id === activeEntry.id ? trimmedEntry : entry,
+      );
+      setVideoBatch(nextBatch);
+      applyActiveBatchVideoEntry(trimmedEntry);
+      setVideoCropSavedNotice(true);
+      pendingMergedVideoPreviewRef.current = true;
+      setVideoPreviewTime(0);
+      setExportNotice(
+        "Video shortened. Adjust the timeline and apply again if you need it shorter.",
+      );
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "Video shorten failed. Please try again.",
+      );
+    } finally {
+      setIsVideoEditProcessing(false);
+    }
+  }
+
+  function initializeVideoTrimState(durationSeconds: number) {
+    const endSeconds = resolveVideoTrimEnd(undefined, durationSeconds);
+    setVideoTrimStartSeconds(0);
+    setVideoTrimEndSeconds(endSeconds);
+    setVideoTrimAppliedStartSeconds(0);
+    setVideoTrimAppliedEndSeconds(endSeconds);
+    setVideoCropSavedNotice(false);
+  }
+
+  function getWatermarkedExportUpsellContext(
+    overrides?: Partial<WatermarkedExportUpsellContext>,
+  ) {
+    const fileType = overrides?.fileType ?? getCurrentExportFileType();
+    const photoCount =
+      mediaKind === "image" && imageBatch.length >= 2 ? imageBatch.length : 1;
+    const exportSignatureMap = getPdfPageSignaturesWithActivePersisted();
+    const exportFillMap = getPdfPageFillMapWithActivePersisted();
+
+    const videoFileMeta =
+      mediaKind === "video" && videoSize && videoFileSize > 0
+        ? getVideoExportFileMeta()
+        : undefined;
+    const videoExportRoute =
+      mediaKind === "video" && videoSize
+        ? getVideoExportRoute(
+            exportVideoDuration,
+            videoSize.width,
+            videoSize.height,
+            videoFileSize > 0 ? videoFileSize : Number.MAX_SAFE_INTEGER,
+          )
+        : null;
+
+    return {
+      creditBalance: overrides?.creditBalance ?? creditBalance,
+      estimatedExportCost:
+        overrides?.estimatedExportCost ??
+        estimateClientExportCost(fileType, {
+          fillMap: mediaKind === "pdf" ? exportFillMap : undefined,
+          fillPageCount:
+            mediaKind === "pdf" ? countFillPages(exportFillMap) : undefined,
+          pdfBillingMode:
+            mediaKind === "pdf"
+              ? getPdfBillingMode(getPdfWatermarkSettings())
+              : undefined,
+          pdfPageCount,
+          photoCount,
+          signatureMap: mediaKind === "pdf" ? exportSignatureMap : undefined,
+          videoFileMeta,
+        }),
+      fileType,
+      isAuthenticated:
+        overrides?.isAuthenticated ?? (isAuthenticated && isEmailConfirmed),
+      videoServerRouted:
+        overrides?.videoServerRouted ??
+        (videoExportRoute ? isServerSideVideoExportRoute(videoExportRoute) : false),
+    };
+  }
+
+  function isPdfSignFillMode() {
+    return (
+      mediaKind === "pdf" &&
+      activeEditorPanel === "pdfDocs" &&
+      activePdfTool === "signFill"
+    );
+  }
+
+  function isPdfWatermarkMode() {
+    return (
+      mediaKind === "pdf" &&
+      activeEditorPanel === "pdfDocs" &&
+      activePdfTool === "watermark"
+    );
+  }
+
+  async function collectAnonymousExportDraftPayload() {
+    if (!mediaKind) {
+      throw new Error("Load a file before exporting.");
+    }
+
+    const blobsByKey: Record<string, Blob> = {};
+    const files: Array<{
+      contentType: string;
+      fileKey: string;
+      fileName: string;
+      sizeBytes: number;
+    }> = [];
+
+    let draftInput: BuildAnonymousExportDraftInput;
+
+    if (mediaKind === "image" && imageBatch.length >= 2) {
+      const nextBatch = persistActiveBatchEntry(imageBatch, activeBatchImageId);
+      const batchEntries = nextBatch.map((entry) => {
+        const fileKey = entry.id;
+        return {
+          blurBrushSize,
+          blurStrokes: cloneBlurStrokes(entry.blurStrokes),
+          fileKey,
+          fileName: entry.fileName,
+          id: entry.id,
+          imageEffectSettings: getImageEffectSettings(),
+          resizeHeight: entry.resizeHeight,
+          resizeWidth: entry.resizeWidth,
+          rotationAngle: entry.rotationAngle,
+          uploadedImageSize: entry.uploadedImageSize,
+        };
+      });
+
+      for (const entry of nextBatch) {
+        const blob = await fetch(entry.objectUrl).then((response) => response.blob());
+        blobsByKey[entry.id] = blob;
+        files.push({
+          contentType: blob.type || "image/jpeg",
+          fileKey: entry.id,
+          fileName: entry.fileName,
+          sizeBytes: blob.size,
+        });
+      }
+
+      draftInput = {
+        activeBatchImageId,
+        activeEditorPanel,
+        activeLogoLayerId,
+        activePdfPageId,
+        activeSignatureId,
+        activeLogoTemplate,
+        activeTemplate: activeTextTemplate,
+        activeTextLayerId,
+        fileName,
+        imageBatch: batchEntries,
+        logoLayers,
+        mediaKind: "image",
+        savedSignatures,
+        textLayers,
+        tileAngle,
+        tileDensity,
+        tileGap,
+        watermarkMode,
+        watermarkType,
+      };
+    } else if (mediaKind === "pdf") {
+      if (!pdfBytesRef.current) {
+        throw new Error("Reload the PDF before exporting.");
+      }
+
+      const pdfBlob = new Blob([new Uint8Array(pdfBytesRef.current)], {
+        type: "application/pdf",
+      });
+      blobsByKey.source = pdfBlob;
+      files.push({
+        contentType: "application/pdf",
+        fileKey: "source",
+        fileName,
+        sizeBytes: pdfBlob.size,
+      });
+
+      draftInput = {
+        activeBatchImageId,
+        activeEditorPanel,
+        activeLogoLayerId,
+        activePdfPageId,
+        activeSignatureId,
+        activeLogoTemplate,
+        activeTemplate: activeTextTemplate,
+        activeTextLayerId,
+        fileName,
+        logoLayers,
+        mediaKind: "pdf",
+        pdfPageCount,
+        pdfDocumentTool,
+        pdfPageFillMap: getPdfPageFillMapWithActivePersisted(),
+        pdfPageSignatures: getPdfPageSignaturesWithActivePersisted(),
+        savedSignatures,
+        textLayers,
+        tileAngle,
+        tileDensity,
+        tileGap,
+        watermarkMode,
+        watermarkType,
+      };
+    } else if (mediaKind === "video") {
+      if (!videoUrl) {
+        throw new Error("Reload the video before exporting.");
+      }
+
+      const videoBlob = await fetch(videoUrl).then((response) => response.blob());
+      blobsByKey.source = videoBlob;
+      files.push({
+        contentType: videoBlob.type || "video/mp4",
+        fileKey: "source",
+        fileName,
+        sizeBytes: videoBlob.size,
+      });
+
+      draftInput = {
+        activeBatchImageId,
+        activeEditorPanel,
+        activeLogoLayerId,
+        activePdfPageId,
+        activeSignatureId,
+        activeLogoTemplate,
+        activeTemplate: activeTextTemplate,
+        activeTextLayerId,
+        fileName,
+        logoLayers,
+        mediaKind: "video",
+        savedSignatures,
+        textLayers,
+        tileAngle,
+        tileDensity,
+        tileGap,
+        videoDuration,
+        videoFileSize,
+        videoSize,
+        watermarkMode,
+        watermarkType,
+      };
+    } else {
+      if (!objectUrlRef.current || !image) {
+        throw new Error("Reload the image before exporting.");
+      }
+
+      const imageBlob = await fetch(objectUrlRef.current).then((response) =>
+        response.blob(),
+      );
+      blobsByKey.source = imageBlob;
+      files.push({
+        contentType: imageBlob.type || "image/jpeg",
+        fileKey: "source",
+        fileName,
+        sizeBytes: imageBlob.size,
+      });
+
+      draftInput = {
+        activeBatchImageId,
+        activeEditorPanel,
+        activeLogoLayerId,
+        activePdfPageId,
+        activeSignatureId,
+        activeLogoTemplate,
+        activeTemplate: activeTextTemplate,
+        activeTextLayerId,
+        fileName,
+        imageTools: {
+          blurBrushSize,
+          blurStrokes: cloneBlurStrokes(blurStrokes),
+          cropRect,
+          imageEffectSettings: getImageEffectSettings(),
+          resizeHeight,
+          resizeWidth,
+          rotationAngle,
+          uploadedImageSize,
+        },
+        logoLayers,
+        mediaKind: "image",
+        savedSignatures,
+        textLayers,
+        tileAngle,
+        tileDensity,
+        tileGap,
+        watermarkMode,
+        watermarkType,
+      };
+    }
+
+    const state = await buildAnonymousExportDraftState(draftInput);
+    return { blobsByKey, files, mediaKind, state };
+  }
+
+  async function saveDraftForLoginGate() {
+    const payload = await collectAnonymousExportDraftPayload();
+    await saveAnonymousExportDraft(payload);
+    markPendingExportAfterLogin();
+  }
+
+  async function applyAnonymousDraftState(state: AnonymousExportDraftState) {
+    const { logoLayers: restoredLogoLayers, textLayers: restoredTextLayers } =
+      await deserializeDraftWatermarkLayers(state);
+
+    setTextLayers(restoredTextLayers);
+    setLogoLayers(restoredLogoLayers);
+    setActiveTextLayerId(state.activeTextLayerId);
+    setActiveLogoLayerId(state.activeLogoLayerId);
+    setWatermarkType(state.watermarkType);
+    setWatermarkMode(state.watermarkMode);
+    setTileDensity(state.tileDensity);
+    setTileGap(state.tileGap);
+    setTileAngle(state.tileAngle);
+    setActiveTextTemplate(state.activeTemplate as WatermarkTemplateId | null);
+    setActiveLogoTemplate(
+      (state.activeLogoTemplate ?? null) as LogoWatermarkTemplateId | null,
+    );
+    const restoredPanel = normalizeRestoredEditorPanel(
+      state.activeEditorPanel,
+      state.mediaKind,
+      state.watermarkType,
+    );
+    setActiveEditorPanel(restoredPanel);
+    if (restoredPanel === "photos") {
+      setActivePhotoTool(normalizeRestoredPhotoTool(state.activeEditorPanel));
+    } else if (restoredPanel === "pdfDocs") {
+      setActivePdfTool(normalizeRestoredPdfTool(state.activeEditorPanel));
+    }
+    setActiveSignatureId(state.activeSignatureId);
+
+    const activeTextLayer =
+      restoredTextLayers.find((layer) => layer.id === state.activeTextLayerId) ??
+      restoredTextLayers[0];
+    const activeLogoLayer =
+      restoredLogoLayers.find((layer) => layer.id === state.activeLogoLayerId) ??
+      restoredLogoLayers[0];
+
+    if (activeTextLayer) {
+      syncLegacyFromTextLayer(activeTextLayer);
+    }
+
+    if (activeLogoLayer) {
+      syncLegacyFromLogoLayer(activeLogoLayer);
+    }
+
+    const restoredSignatures = await Promise.all(
+      state.savedSignatures.map(async (entry) => ({
+        ...entry,
+        image: await createImageFromDataUrl(entry.previewSrc),
+        kind: normalizeSignatureKind(entry.kind),
+        typedText: entry.typedText ?? null,
+      })),
+    );
+    setSavedSignatures(restoredSignatures);
+
+    if (state.mediaKind === "pdf") {
+      const restoredMap = state.pdfPageSignatures
+        ? deserializePdfPageSignatureMap(state.pdfPageSignatures)
+        : createEmptyPdfPageSignatureMap(state.pdfPageCount ?? 0);
+      setPdfPageSignatures(restoredMap);
+
+      const restoredFillMap = state.pdfPageFillMap
+        ? deserializePdfPageFillMap(state.pdfPageFillMap)
+        : createEmptyPdfPageFillMap(state.pdfPageCount ?? 0);
+      setPdfPageFillMap(restoredFillMap);
+      setPdfDocumentTool(state.pdfDocumentTool ?? "signature");
+
+      if (state.watermarkType === "signature") {
+        const pageId = state.activePdfPageId ?? buildPdfPageId(1);
+        const pagePlacements = restoredMap[pageId] ?? [];
+        applyPdfPageSignaturePlacementToEditor(
+          pagePlacements[pagePlacements.length - 1] ?? null,
+        );
+      }
+
+      if (state.pdfDocumentTool === "fill") {
+        const pageId = state.activePdfPageId ?? buildPdfPageId(1);
+        applyPdfPageFillFieldsToEditor(restoredFillMap[pageId] ?? []);
+      }
+    }
+
+    if (state.imageTools) {
+      setBlurBrushSize(state.imageTools.blurBrushSize);
+      setBlurStrokes(cloneBlurStrokes(state.imageTools.blurStrokes));
+      setCropRect(state.imageTools.cropRect);
+      setResizeWidth(state.imageTools.resizeWidth);
+      setResizeHeight(state.imageTools.resizeHeight);
+      setRotationAngle(state.imageTools.rotationAngle);
+      setUploadedImageSize(state.imageTools.uploadedImageSize);
+      setActiveImageEffect(state.imageTools.imageEffectSettings.activeEffect);
+      setEffectBorderColor(state.imageTools.imageEffectSettings.borderColor);
+      setEffectBorderWidth(state.imageTools.imageEffectSettings.borderWidth);
+      setEffectExposure(state.imageTools.imageEffectSettings.exposure);
+    }
+  }
+
+  function resolvePendingDraftRestore() {
+    pendingDraftRestoreResolverRef.current?.();
+    pendingDraftRestoreResolverRef.current = null;
+  }
+
+  async function finalizeAnonymousDraftRestore() {
+    const state = anonymousDraftRestoreRef.current;
+
+    if (!state) {
+      resolvePendingDraftRestore();
+      return;
+    }
+
+    try {
+      await applyAnonymousDraftState(state);
+      if (state.mediaKind === "pdf" && state.activePdfPageId) {
+        void selectPdfPage(state.activePdfPageId);
+      }
+      await deleteAnonymousExportDraft(getOrCreateAnonymousSessionId());
+      clearPendingExportAfterLogin();
+    } finally {
+      anonymousDraftRestoreRef.current = null;
+      isRestoringSessionRef.current = false;
+      resolvePendingDraftRestore();
+    }
+  }
+
+  function waitForAnonymousDraftRestore() {
+    return new Promise<void>((resolve) => {
+      pendingDraftRestoreResolverRef.current = resolve;
+    });
+  }
+
+  async function restoreAnonymousDraftIntoEditor() {
+    const sessionId = getOrCreateAnonymousSessionId();
+    const draft = await loadAnonymousExportDraft(sessionId);
+    const files = await downloadDraftFiles(draft.downloads);
+
+    anonymousDraftRestoreRef.current = draft.state;
+    isRestoringSessionRef.current = true;
+    const restorePromise = waitForAnonymousDraftRestore();
+    loadMediaFiles(files);
+    await restorePromise;
+  }
+
+  function continueExportFlow(
+    upsellOverrides?: Partial<WatermarkedExportUpsellContext>,
+  ) {
+    const upsellContext = getWatermarkedExportUpsellContext(upsellOverrides);
+
+    logRealVideoExport("STEP 4/15: continueExportFlow()", {
+      creditBalance: upsellContext.creditBalance,
+      estimatedExportCost: upsellContext.estimatedExportCost,
+      fileType: upsellContext.fileType,
+      isAuthenticated: upsellContext.isAuthenticated,
+      mediaKind,
+      requiresCreditsBeforeExport: shouldRequireCreditsBeforeExport(upsellContext),
+      showsWatermarkedUpsell: shouldShowWatermarkedExportUpsell(upsellContext),
+      videoServerRouted: upsellContext.videoServerRouted,
+    });
+
+    if (shouldRequireCreditsBeforeExport(upsellContext)) {
+      pendingExportRef.current = null;
+      setShowServerVideoCreditGate(true);
+      logRealVideoExport("STEP 4/15: blocked by server-video credit gate modal");
+      return;
+    }
+
+    if (shouldShowWatermarkedExportUpsell(upsellContext)) {
+      pendingExportRef.current = proceedWithExport;
+      setShowWatermarkedExportUpsell(true);
+      logRealVideoExport("STEP 4/15: showing watermarked-export upsell modal");
+      return;
+    }
+
+    proceedWithExport();
+  }
+
+  function handleDismissServerVideoCreditGate() {
+    setShowServerVideoCreditGate(false);
+    pendingExportRef.current = null;
+  }
+
+  async function beginExportWithLoginGate() {
+    logRealVideoExport("STEP 3/15: beginExportWithLoginGate()", {
+      isAuthenticated,
+      isEmailConfirmed,
+      mediaKind,
+    });
+
+    if (isAuthenticated && isEmailConfirmed) {
+      continueExportFlow();
+      return;
+    }
+
+    if (isAuthenticated && !isEmailConfirmed) {
+      setExportNotice(
+        "Confirm your email, then click Export again. Your draft stays saved for 48 hours.",
+      );
+      return;
+    }
+
+    setLoginGateError("");
+    setLoginGatePhase("saving");
+    setShowExportLoginGate(true);
+    resumeExportAfterLoginRef.current = true;
+
+    try {
+      await saveDraftForLoginGate();
+      setLoginGatePhase("auth");
+    } catch (error) {
+      setLoginGateError(
+        error instanceof Error
+          ? error.message
+          : "Could not save your work before sign-in.",
+      );
+      setShowExportLoginGate(false);
+      resumeExportAfterLoginRef.current = false;
+    }
+  }
+
+  async function handleLoginGateAuthenticated() {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user?.email_confirmed_at) {
+      setLoginGatePhase("verify-email");
+      return;
+    }
+
+    setIsAuthenticated(true);
+    setIsEmailConfirmed(true);
+    setUserEmail(user.email ?? null);
+    setShowExportLoginGate(false);
+
+    const balance = await fetchUserCreditBalance(supabase, user.id);
+    setCreditBalance(balance);
+
+    setIsRestoringAnonymousDraft(true);
+
+    try {
+      await restoreAnonymousDraftIntoEditor();
+
+      if (resumeExportAfterLoginRef.current) {
+        continueExportFlow({
+          creditBalance: balance,
+          isAuthenticated: true,
+        });
+      }
+    } catch (error) {
+      setExportError(
+        error instanceof Error
+          ? error.message
+          : "Could not restore your saved draft after sign-in.",
+      );
+    } finally {
+      setIsRestoringAnonymousDraft(false);
+      resumeExportAfterLoginRef.current = false;
+    }
+  }
+
+  function handleDismissExportLoginGate() {
+    setShowExportLoginGate(false);
+    setLoginGateError("");
+    resumeExportAfterLoginRef.current = false;
+  }
+
   function proceedWithExport() {
+    logRealVideoExport("STEP 5/15: proceedWithExport()", {
+      isExporting,
+      mediaKind,
+    });
+
     if (isExporting) {
       return;
     }
@@ -655,14 +2473,21 @@ export default function WatermarkPage() {
   }
 
   function handleContinueWithWatermarkedExport() {
+    logRealVideoExport("STEP 4b/15: watermarked-export upsell confirmed");
     setShowWatermarkedExportUpsell(false);
     const runExport = pendingExportRef.current;
     pendingExportRef.current = null;
     runExport?.();
   }
 
+  function handleDismissWatermarkedExportUpsell() {
+    setShowWatermarkedExportUpsell(false);
+    pendingExportRef.current = null;
+  }
+
   function getCurrentExportFileType(): ReturnType<typeof getExportFileType> {
     return getExportFileType({
+      hasFillFields: hasAnyFillFields(getPdfPageFillMapWithActivePersisted()),
       mediaKind,
       watermarkType,
     });
@@ -720,6 +2545,8 @@ export default function WatermarkPage() {
     entryRotationAngle: number,
     useResizePreview: boolean,
     auth: ExportAuthorizationContext,
+    entryBlurStrokes: BlurStroke[] = blurStrokes,
+    entryReferenceImageSize?: CanvasSize,
   ) {
     const input = getWatermarkExportInput(
       imageElement,
@@ -727,6 +2554,8 @@ export default function WatermarkPage() {
       entryResizeHeight,
       entryRotationAngle,
       useResizePreview,
+      entryBlurStrokes,
+      entryReferenceImageSize,
     );
 
     if (isCleanExportTier(auth.tier)) {
@@ -738,34 +2567,74 @@ export default function WatermarkPage() {
 
   async function resolvePdfExportAuthorization(exportId: string) {
     const fileType = getCurrentExportFileType();
+    const exportFillMap = getPdfPageFillMapWithActivePersisted();
+    const exportSignatureMap = getPdfPageSignaturesWithActivePersisted();
+    const hasFillFields = hasAnyFillFields(exportFillMap);
+    const hasSignaturePlacements =
+      countSignedPdfPages(exportSignatureMap) > 0;
+    const signatureManifest = buildSignatureManifestForExport();
+    const pdfBillingMode = getPdfBillingMode(getPdfWatermarkSettings());
 
     if (!pdfBytesRef.current) {
-      return createWatermarkedAuthorizationContext({
-        exportId,
-        fileMeta: {},
-        fileType,
-      });
+      throw new ExportCreditCheckError(
+        "Reload the PDF before exporting sign-and-fill content.",
+      );
     }
 
     try {
-      const fileMeta = await uploadPdfForExportAuthorization({
+      let fileMeta: ExportFileMeta = await uploadPdfForExportAuthorization({
         exportId,
         fileName,
         pdfBytes: pdfBytesRef.current,
       });
 
-      return resolveExportAuthorization({
+      fileMeta = {
+        ...fileMeta,
+        pdfBillingMode,
+        signatureManifest,
+      };
+
+      if (hasSignaturePlacements) {
+        const signaturePlacementMeta =
+          await uploadSignaturePlacementManifestForExportAuthorization({
+            exportId,
+            manifestJson: JSON.stringify(
+              buildSignaturePlacementManifestDocument(
+                serializePdfPageSignatureMap(exportSignatureMap),
+              ),
+            ),
+          });
+        fileMeta = { ...fileMeta, ...signaturePlacementMeta };
+      }
+
+      if (hasFillFields) {
+        const fillMeta = await uploadFillManifestForExportAuthorization({
+          exportId,
+          manifestJson: JSON.stringify(
+            buildFillManifestDocument(serializePdfPageFillMap(exportFillMap)),
+          ),
+        });
+        fileMeta = { ...fileMeta, ...fillMeta };
+      }
+
+      return resolveExportAuthorizationStrict({
         exportId,
         fileMeta,
         fileType,
       });
-    } catch {
-      return createWatermarkedAuthorizationContext({
-        exportId,
-        fileMeta: {},
-        fileType,
-        notice: PDF_UPLOAD_FAIL_SAFE_NOTICE,
-      });
+    } catch (error) {
+      if (
+        error instanceof ExportCreditCheckError ||
+        error instanceof ExportAuthorizationRequiredError
+      ) {
+        throw error;
+      }
+
+      throw new ExportCreditCheckError(
+        error instanceof Error
+          ? error.message
+          : "Could not verify credits for PDF export. Please try again.",
+      );
     }
   }
 
@@ -773,25 +2642,182 @@ export default function WatermarkPage() {
     void loadForcedTileLogoImage().catch(() => {
       // Forced tile exports will retry loading at export time.
     });
+    void loadClientVideoFreeExportStampImage().catch(() => {
+      // Client video free export stamp retries at export time.
+    });
   }, []);
 
   useEffect(() => {
-    const supabase = createClient();
+    if (watermarkType !== "signature") {
+      return;
+    }
 
-    void supabase.auth.getUser().then(async ({ data: { user } }) => {
-      setIsAuthenticated(Boolean(user));
+    setWatermarkType("text");
+  }, [watermarkType]);
+
+  useEffect(() => {
+    if (!isEditorRoute) {
+      return;
+    }
+
+    hasBootstrappedEditorRef.current = false;
+    const supabase = createClient();
+    let cancelled = false;
+
+    async function bootstrapEditorSession(isAuthenticated: boolean) {
+      const loadGeneration = ++mediaLoadGenerationRef.current;
+
+      traceEditorBootstrap("bootstrap start", {
+        authChecked: true,
+        isAuthenticated,
+        pathname,
+      });
+
+      const shouldPreserveAnonymousDraft =
+        anonymousDraftRestoreRef.current !== null ||
+        resumeExportAfterLoginRef.current;
+
+      if (!isAuthenticated && !shouldPreserveAnonymousDraft) {
+        traceEditorBootstrap("clearing anonymous editor media state");
+        resetAnonymousEditorEntryRef.current();
+      }
+
+      const handoffFiles = await consumeEditorHandoffFiles();
+
+      if (loadGeneration !== mediaLoadGenerationRef.current || cancelled) {
+        traceEditorBootstrap("bootstrap aborted after handoff read", {
+          loadGeneration,
+        });
+        return;
+      }
+
+      if (handoffFiles?.length) {
+        traceEditorBootstrap("loading editor handoff files", {
+          count: handoffFiles.length,
+        });
+        loadMediaFiles(handoffFiles);
+        return;
+      }
+
+      if (!isAuthenticated) {
+        traceEditorBootstrap("skipping IndexedDB restore for anonymous user");
+        return;
+      }
+
+      traceEditorBootstrap("reading IndexedDB editor session");
+      const session = await readEditorSession();
+
+      if (loadGeneration !== mediaLoadGenerationRef.current || cancelled) {
+        traceEditorBootstrap("bootstrap aborted after session read", {
+          loadGeneration,
+        });
+        return;
+      }
+
+      if (!session) {
+        traceEditorBootstrap("no IndexedDB session to restore");
+        return;
+      }
+
+      traceEditorBootstrap("restoring IndexedDB editor session", {
+        fileName: session.meta.fileName,
+        mediaKind: session.meta.mediaKind,
+      });
+      isRestoringSessionRef.current = true;
+      sessionRestoreRef.current = session.meta;
+      loadMediaFiles(storedSessionFilesToFiles(session.files));
+    }
+
+    async function syncAuthState() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (cancelled) {
+        return;
+      }
+
+      const authenticated = Boolean(user);
+
+      setIsAuthenticated(authenticated);
+      setIsEmailConfirmed(Boolean(user?.email_confirmed_at));
       setUserEmail(user?.email ?? null);
 
       if (!user) {
         setAuthChecked(true);
+
+        if (!hasBootstrappedEditorRef.current) {
+          hasBootstrappedEditorRef.current = true;
+          void bootstrapEditorSession(false);
+        }
+
         return;
       }
 
       const balance = await fetchUserCreditBalance(supabase, user.id);
+
+      if (cancelled) {
+        return;
+      }
+
       setCreditBalance(balance);
       setAuthChecked(true);
+
+      if (!hasBootstrappedEditorRef.current) {
+        hasBootstrappedEditorRef.current = true;
+        void bootstrapEditorSession(true);
+      }
+
+      if (
+        user.email_confirmed_at &&
+        hasPendingExportAfterLogin() &&
+        resumeExportAfterLoginRef.current
+      ) {
+        setIsRestoringAnonymousDraft(true);
+
+        try {
+          await restoreAnonymousDraftIntoEditor();
+          continueExportFlow({
+            creditBalance: balance,
+            isAuthenticated: true,
+          });
+        } catch (error) {
+          setExportError(
+            error instanceof Error
+              ? error.message
+              : "Could not restore your saved draft after sign-in.",
+          );
+        } finally {
+          setIsRestoringAnonymousDraft(false);
+          resumeExportAfterLoginRef.current = false;
+        }
+      }
+    }
+
+    void syncAuthState();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user ?? null;
+      setIsAuthenticated(Boolean(user));
+      setIsEmailConfirmed(Boolean(user?.email_confirmed_at));
+      setUserEmail(user?.email ?? null);
+
+      if (user) {
+        void fetchUserCreditBalance(supabase, user.id).then(setCreditBalance);
+      } else {
+        setCreditBalance(null);
+      }
     });
-  }, []);
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+      mediaLoadGenerationRef.current += 1;
+      setIsPdfLoading(false);
+    };
+  }, [isEditorRoute, pathname]);
 
   function commitSettingsHistorySnapshot(snapshot: WatermarkSettingsSnapshot) {
     const history = settingsHistoryRef.current;
@@ -814,40 +2840,6 @@ export default function WatermarkPage() {
   }
 
   useEffect(() => {
-    const loadGeneration = ++mediaLoadGenerationRef.current;
-
-    async function bootstrapEditor() {
-      const handoffFiles = await consumeEditorHandoffFiles();
-
-      if (loadGeneration !== mediaLoadGenerationRef.current) {
-        return;
-      }
-
-      if (handoffFiles?.length) {
-        loadMediaFiles(handoffFiles);
-        return;
-      }
-
-      const session = await readEditorSession();
-
-      if (loadGeneration !== mediaLoadGenerationRef.current || !session) {
-        return;
-      }
-
-      isRestoringSessionRef.current = true;
-      sessionRestoreRef.current = session.meta;
-      loadMediaFiles(storedSessionFilesToFiles(session.files));
-    }
-
-    void bootstrapEditor();
-
-    return () => {
-      mediaLoadGenerationRef.current += 1;
-      setIsPdfLoading(false);
-    };
-  }, []);
-
-  useEffect(() => {
     const panel = previewPanelRef.current;
 
     if (!panel) {
@@ -859,12 +2851,15 @@ export default function WatermarkPage() {
         return;
       }
 
-      const nextWidth = Math.max(320, Math.floor(panel.clientWidth));
-      const nextHeight = Math.max(320, Math.floor(panel.clientHeight));
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2.5);
+      const zoomScale = previewZoomPercent / 100;
+      const baseWidth = Math.max(320, Math.floor(panel.clientWidth));
+      const baseHeight = Math.max(320, Math.floor(panel.clientHeight));
 
       setCanvasSize({
-        width: nextWidth,
-        height: nextHeight,
+        height: Math.max(320, Math.floor(baseHeight * zoomScale)),
+        pixelRatio,
+        width: Math.max(320, Math.floor(baseWidth * zoomScale)),
       });
     }
 
@@ -876,7 +2871,7 @@ export default function WatermarkPage() {
     return () => {
       resizeObserver.disconnect();
     };
-  }, []);
+  }, [previewZoomPercent]);
 
   useEffect(() => {
     const preview = videoPreviewRef.current;
@@ -903,6 +2898,192 @@ export default function WatermarkPage() {
 
     return () => {
       resizeObserver.disconnect();
+    };
+  }, [mediaKind, previewZoomPercent, videoUrl]);
+
+  useEffect(() => {
+    if (mediaKind !== "video") {
+      setVideoPreviewTime(0);
+      return;
+    }
+
+    const video = videoElementRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    const shouldClampPreviewToTrim =
+      activeEditorPanel === "video" && activeVideoTool === "trim";
+
+    let lastSyncMs = 0;
+
+    const syncPreviewTime = (force = false) => {
+      const now = Date.now();
+
+      if (!force && now - lastSyncMs < 250) {
+        return;
+      }
+
+      lastSyncMs = now;
+      const nextTime = shouldClampPreviewToTrim
+        ? clampVideoPreviewTimeToTrim(
+            video.currentTime,
+            videoTrimStartSeconds,
+            videoTrimEndSeconds,
+            videoDuration,
+          )
+        : video.currentTime;
+
+      if (
+        shouldClampPreviewToTrim &&
+        Math.abs(video.currentTime - nextTime) > 0.05
+      ) {
+        video.currentTime = nextTime;
+      }
+
+      setVideoPreviewTime(nextTime);
+    };
+
+    const handleTimeUpdate = () => syncPreviewTime(false);
+    const handleSeeked = () => syncPreviewTime(true);
+    const handleLoadedMetadata = () => syncPreviewTime(true);
+
+    video.addEventListener("timeupdate", handleTimeUpdate);
+    video.addEventListener("seeked", handleSeeked);
+    video.addEventListener("loadedmetadata", handleLoadedMetadata);
+    syncPreviewTime(true);
+
+    return () => {
+      video.removeEventListener("timeupdate", handleTimeUpdate);
+      video.removeEventListener("seeked", handleSeeked);
+      video.removeEventListener("loadedmetadata", handleLoadedMetadata);
+    };
+  }, [
+    activeEditorPanel,
+    activeVideoTool,
+    mediaKind,
+    videoDuration,
+    videoTrimEndSeconds,
+    videoTrimStartSeconds,
+    videoUrl,
+  ]);
+
+  useEffect(() => {
+    if (mediaKind !== "video" || videoDuration <= 0) {
+      return;
+    }
+
+    setVideoTrimEndSeconds((current) => {
+      if (current <= 0) {
+        return videoDuration;
+      }
+
+      return Math.min(current, videoDuration);
+    });
+  }, [mediaKind, videoDuration]);
+
+  useEffect(() => {
+    if (mediaKind !== "video") {
+      setIsVideoPlaying(false);
+      return;
+    }
+
+    const video = videoElementRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    const syncPlaying = () => setIsVideoPlaying(!video.paused);
+
+    syncPlaying();
+    video.addEventListener("play", syncPlaying);
+    video.addEventListener("pause", syncPlaying);
+    video.addEventListener("ended", syncPlaying);
+
+    return () => {
+      video.removeEventListener("play", syncPlaying);
+      video.removeEventListener("pause", syncPlaying);
+      video.removeEventListener("ended", syncPlaying);
+    };
+  }, [mediaKind, videoUrl]);
+
+  useEffect(() => {
+    if (mediaKind !== "video" || !videoUrl) {
+      return;
+    }
+
+    const video = videoElementRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    const syncVideoSizeFromElement = () => {
+      if (video.videoWidth <= 0 || video.videoHeight <= 0) {
+        return;
+      }
+
+      setVideoSize((current) => {
+        if (
+          current?.width === video.videoWidth &&
+          current?.height === video.videoHeight
+        ) {
+          return current;
+        }
+
+        return {
+          height: video.videoHeight,
+          width: video.videoWidth,
+        };
+      });
+    };
+
+    video.addEventListener("loadedmetadata", syncVideoSizeFromElement);
+    video.addEventListener("loadeddata", syncVideoSizeFromElement);
+
+    if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      syncVideoSizeFromElement();
+    }
+
+    return () => {
+      video.removeEventListener("loadedmetadata", syncVideoSizeFromElement);
+      video.removeEventListener("loadeddata", syncVideoSizeFromElement);
+    };
+  }, [mediaKind, videoUrl]);
+
+  useEffect(() => {
+    if (mediaKind !== "video" || !videoUrl || !pendingMergedVideoPreviewRef.current) {
+      return;
+    }
+
+    const video = videoElementRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    const resetMergedPreview = () => {
+      if (!pendingMergedVideoPreviewRef.current) {
+        return;
+      }
+
+      pendingMergedVideoPreviewRef.current = false;
+      video.pause();
+      video.currentTime = 0;
+      setVideoPreviewTime(0);
+    };
+
+    if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      resetMergedPreview();
+      return;
+    }
+
+    video.addEventListener("loadedmetadata", resetMergedPreview, { once: true });
+
+    return () => {
+      video.removeEventListener("loadedmetadata", resetMergedPreview);
     };
   }, [mediaKind, videoUrl]);
 
@@ -969,6 +3150,8 @@ export default function WatermarkPage() {
   }, [
     activeLogoLayerId,
     activeTextLayerId,
+    blurBrushSize,
+    blurStrokes,
     logoLayers,
     textLayers,
     tileAngle,
@@ -992,11 +3175,19 @@ export default function WatermarkPage() {
     }
 
     applyHighQualityCanvasDefaults(context);
-    canvas.width = canvasSize.width;
-    canvas.height = canvasSize.height;
-    context.clearRect(0, 0, canvas.width, canvas.height);
+
+    const logicalWidth = canvasSize.width;
+    const logicalHeight = canvasSize.height;
+    const pixelRatio = canvasSize.pixelRatio || 1;
+
+    canvas.width = Math.max(1, Math.floor(logicalWidth * pixelRatio));
+    canvas.height = Math.max(1, Math.floor(logicalHeight * pixelRatio));
+    canvas.style.width = `${logicalWidth}px`;
+    canvas.style.height = `${logicalHeight}px`;
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    context.clearRect(0, 0, logicalWidth, logicalHeight);
     context.fillStyle = "#DCDCDD";
-    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillRect(0, 0, logicalWidth, logicalHeight);
 
     if (!image) {
       imageFrameRef.current = null;
@@ -1021,15 +3212,15 @@ export default function WatermarkPage() {
       rotationAngle,
     );
     const imageScale = Math.min(
-      canvas.width / Math.max(referenceSize.width, rotatedPreviewBounds.width),
-      canvas.height / Math.max(referenceSize.height, rotatedPreviewBounds.height),
+      logicalWidth / Math.max(referenceSize.width, rotatedPreviewBounds.width),
+      logicalHeight / Math.max(referenceSize.height, rotatedPreviewBounds.height),
     );
     const sourceImageWidth = previewImageWidth * imageScale;
     const sourceImageHeight = previewImageHeight * imageScale;
     const imageWidth = rotatedPreviewBounds.width * imageScale;
     const imageHeight = rotatedPreviewBounds.height * imageScale;
-    const imageX = (canvas.width - imageWidth) / 2;
-    const imageY = (canvas.height - imageHeight) / 2;
+    const imageX = (logicalWidth - imageWidth) / 2;
+    const imageY = (logicalHeight - imageHeight) / 2;
     const imageFrame = {
       height: imageHeight,
       width: imageWidth,
@@ -1042,47 +3233,169 @@ export default function WatermarkPage() {
     context.save();
     context.translate(imageX + imageWidth / 2, imageY + imageHeight / 2);
     context.rotate((rotationAngle * Math.PI) / 180);
-    drawBaseImageWithEffect(
-      context,
-      image,
-      -sourceImageWidth / 2,
-      -sourceImageHeight / 2,
-      sourceImageWidth,
-      sourceImageHeight,
-      getImageEffectSettings(),
-    );
+    const effectedCanvas = document.createElement("canvas");
+    effectedCanvas.width = previewImageWidth;
+    effectedCanvas.height = previewImageHeight;
+    const effectedContext = effectedCanvas.getContext("2d");
+
+    if (effectedContext) {
+      if (activeImageTool === "resize") {
+        drawResizeTargetImage(
+          effectedContext,
+          image,
+          previewImageWidth,
+          previewImageHeight,
+          resizeScaleMode,
+          getImageEffectSettings(),
+        );
+      } else {
+        drawBaseImageWithEffect(
+          effectedContext,
+          image,
+          0,
+          0,
+          previewImageWidth,
+          previewImageHeight,
+          getImageEffectSettings(),
+        );
+      }
+      context.drawImage(
+        effectedCanvas,
+        -sourceImageWidth / 2,
+        -sourceImageHeight / 2,
+        sourceImageWidth,
+        sourceImageHeight,
+      );
+      applyBlurStrokes(context, {
+        destHeight: sourceImageHeight,
+        destWidth: sourceImageWidth,
+        destX: -sourceImageWidth / 2,
+        destY: -sourceImageHeight / 2,
+        source: effectedCanvas,
+        sourceHeight: previewImageHeight,
+        sourceWidth: previewImageWidth,
+        strokes: blurStrokes,
+      });
+    } else {
+      drawBaseImageWithEffect(
+        context,
+        image,
+        -sourceImageWidth / 2,
+        -sourceImageHeight / 2,
+        sourceImageWidth,
+        sourceImageHeight,
+        getImageEffectSettings(),
+      );
+    }
     context.restore();
 
-    const { activeBounds, boundsByLayer } = paintWatermarkLayers({
-      activeLayerId:
-        watermarkType === "text"
-          ? activeTextLayerId
-          : watermarkType === "logo"
-            ? activeLogoLayerId
-            : activeTextLayerId,
-      canvasHeight: canvas.height,
-      canvasWidth: canvas.width,
-      context,
-      imageHeight,
-      imageWidth,
-      imageX,
-      imageY,
-      logoLayers,
-      signatureFontSizeScale: fontSizeScale,
-      signatureImage: watermarkType === "signature" ? logoImage : null,
-      signatureOpacity: watermarkOpacity,
-      signaturePosition: watermarkPosition,
-      signatureCustomPosition: customPosition,
-      textLayers,
-      tileAngle,
-      tileDensity,
-      tileGap,
-      watermarkMode,
-      watermarkType,
-    });
+    const pdfSignaturePlacements =
+      mediaKind === "pdf" && activePdfPageId
+        ? getPdfPageSignaturePlacementsForPaint()
+        : [];
+    const showPdfSignatureChrome =
+      isPdfSignFillMode() && pdfDocumentTool === "signature";
+    const shouldPaintPdfWatermarks =
+      mediaKind !== "pdf" || isPdfWatermarkMode();
 
-    layerBoundsRef.current = boundsByLayer;
-    textBoundsRef.current = activeBounds;
+    let combinedBoundsByLayer = new Map<string, TextBounds>();
+    let combinedActiveBounds: TextBounds | null = null;
+
+    if (pdfSignaturePlacements.length > 0) {
+      const signaturePaint = paintWatermarkLayers({
+        activeLayerId: showPdfSignatureChrome
+          ? (activeSignaturePlacementId ?? "")
+          : "",
+        canvasHeight: logicalHeight,
+        canvasWidth: logicalWidth,
+        context,
+        imageHeight,
+        imageWidth,
+        imageX,
+        imageY,
+        logoLayers: [],
+        signatureFontSizeScale: fontSizeScale,
+        signatureImage: null,
+        signatureOpacity: watermarkOpacity,
+        signaturePlacements: pdfSignaturePlacements.map((placement) => ({
+          ...placement,
+          isActive: showPdfSignatureChrome ? placement.isActive : false,
+        })),
+        signaturePosition: watermarkPosition,
+        signatureCustomPosition: customPosition,
+        textLayers: [],
+        tileAngle,
+        tileDensity,
+        tileGap,
+        watermarkMode: "single",
+        watermarkType: "signature",
+      });
+
+      combinedBoundsByLayer = signaturePaint.boundsByLayer;
+      combinedActiveBounds = signaturePaint.activeBounds;
+    }
+
+    if (shouldPaintPdfWatermarks) {
+      const watermarkPaint = paintWatermarkLayers({
+        activeLayerId:
+          watermarkType === "text"
+            ? (activeTextLayerId ?? "")
+            : watermarkType === "logo"
+              ? (activeLogoLayerId ?? "")
+              : (activeTextLayerId ?? ""),
+        canvasHeight: logicalHeight,
+        canvasWidth: logicalWidth,
+        context,
+        imageHeight,
+        imageWidth,
+        imageX,
+        imageY,
+        logoLayers,
+        signatureFontSizeScale: fontSizeScale,
+        signatureImage:
+          watermarkType === "signature" ? logoImage : null,
+        signatureOpacity: watermarkOpacity,
+        signaturePosition: watermarkPosition,
+        signatureCustomPosition: customPosition,
+        signaturePlacements: undefined,
+        textLayers,
+        tileAngle,
+        tileDensity,
+        tileGap,
+        watermarkMode,
+        watermarkType,
+      });
+
+      for (const [layerId, bounds] of watermarkPaint.boundsByLayer) {
+        combinedBoundsByLayer.set(layerId, bounds);
+      }
+
+      if (watermarkPaint.activeBounds) {
+        combinedActiveBounds = watermarkPaint.activeBounds;
+      }
+    }
+
+    layerBoundsRef.current = combinedBoundsByLayer;
+    textBoundsRef.current = combinedActiveBounds;
+
+    if (
+      mediaKind === "pdf" &&
+      activePdfPageId &&
+      isPdfSignFillMode() &&
+      pdfDocumentTool === "fill"
+    ) {
+      fillFieldBoundsRef.current = paintFillFields({
+        activeFieldId:
+          pdfDocumentTool === "fill" ? activeFillFieldId : null,
+        canvasHeight: logicalHeight,
+        canvasWidth: logicalWidth,
+        context,
+        fields: getActivePdfPageFillFields(),
+      });
+    } else {
+      fillFieldBoundsRef.current = {};
+    }
+
     drawCropOverlay({
       context,
       cropRect,
@@ -1094,6 +3407,8 @@ export default function WatermarkPage() {
       context,
       frame: imageFrame,
       isActive: activeImageTool === "resize",
+      resizeHeight,
+      resizeWidth,
     });
   });
 
@@ -1117,37 +3432,122 @@ export default function WatermarkPage() {
     canvas.width = videoOverlaySize.width;
     canvas.height = videoOverlaySize.height;
     context.clearRect(0, 0, canvas.width, canvas.height);
-    const { activeBounds, boundsByLayer } = paintWatermarkLayers({
-      activeLayerId:
-        watermarkType === "text"
-          ? activeTextLayerId
-          : watermarkType === "logo"
-            ? activeLogoLayerId
-            : activeTextLayerId,
-      canvasHeight: canvas.height,
-      canvasWidth: canvas.width,
-      context,
-      imageHeight: canvas.height,
-      imageWidth: canvas.width,
-      imageX: 0,
-      imageY: 0,
-      logoLayers,
-      signatureFontSizeScale: fontSizeScale,
-      signatureImage: watermarkType === "signature" ? logoImage : null,
-      signatureOpacity: watermarkOpacity,
-      signaturePosition: watermarkPosition,
-      signatureCustomPosition: customPosition,
-      textLayers,
-      tileAngle,
-      tileDensity,
-      tileGap,
-      watermarkMode,
-      watermarkType,
-    });
 
-    layerBoundsRef.current = boundsByLayer;
-    textBoundsRef.current = activeBounds;
-  });
+    if (shouldPaintVideoWatermarkPreview() && videoSize) {
+      const video = videoElementRef.current;
+      const frame =
+        video && video.readyState >= 2
+          ? getVideoElementFrameInCanvas(canvas, video)
+          : getVideoDisplayFrame(
+              canvas.width,
+              canvas.height,
+              videoSize.width,
+              videoSize.height,
+            );
+      const { activeBounds, boundsByLayer } = paintWatermarkLayers({
+        activeLayerId:
+          watermarkType === "text"
+            ? activeTextLayerId
+            : watermarkType === "logo"
+              ? activeLogoLayerId
+              : activeTextLayerId,
+        canvasHeight: canvas.height,
+        canvasWidth: canvas.width,
+        context,
+        imageHeight: frame.height,
+        imageWidth: frame.width,
+        imageX: frame.x,
+        imageY: frame.y,
+        logoLayers,
+        signatureFontSizeScale: fontSizeScale,
+        signatureImage: watermarkType === "signature" ? logoImage : null,
+        signatureOpacity: watermarkOpacity,
+        signaturePosition: watermarkPosition,
+        signatureCustomPosition: customPosition,
+        textLayers,
+        tileAngle,
+        tileDensity,
+        tileGap,
+        videoDurationSeconds: videoDuration,
+        videoPreviewTimeSeconds: videoPreviewTime,
+        watermarkMode,
+        watermarkType,
+      });
+
+      layerBoundsRef.current = boundsByLayer;
+      textBoundsRef.current = activeBounds;
+    } else {
+      layerBoundsRef.current = new Map();
+      textBoundsRef.current = null;
+    }
+
+    if (
+      captionsMasterEnabled &&
+      videoCaptionLayers.some((layer) => isCaptionLayerActive(layer))
+    ) {
+      captionBoundsRef.current = drawVideoCaptions(
+        context,
+        canvas.width,
+        canvas.height,
+        videoCaptionLayers,
+        videoPreviewTime,
+        videoDuration,
+        {
+          highlightLayerId:
+            activeEditorPanel === "video" && activeVideoTool === "caption"
+              ? activeVideoCaptionLayerId
+              : undefined,
+        },
+      );
+    } else {
+      captionBoundsRef.current = new Map();
+    }
+
+    const video = videoElementRef.current;
+
+    if (video && videoSize && activeVideoTool === "blur") {
+      drawVideoBlurPreview(
+        context,
+        canvas,
+        video,
+        videoBlurRegions,
+        videoPreviewTime,
+        videoSize.width,
+        videoSize.height,
+        true,
+      );
+    }
+  }, [
+    activeEditorPanel,
+    activeVideoBlurRegionId,
+    activeVideoTool,
+    captionsMasterEnabled,
+    customPosition,
+    fontFamily,
+    fontSizeScale,
+    fontWeight,
+    logoImage,
+    logoLayers,
+    mediaKind,
+    previewZoomPercent,
+    textColor,
+    textLayers,
+    textShadowEnabled,
+    tileAngle,
+    tileDensity,
+    tileGap,
+    videoBlurRegions,
+    videoCaptionLayers,
+    videoDuration,
+    videoOverlaySize.height,
+    videoOverlaySize.width,
+    videoPreviewTime,
+    videoSize,
+    watermarkMode,
+    watermarkOpacity,
+    watermarkPosition,
+    watermarkType,
+  ]);
 
   function getImageEffectSettings(): ImageEffectSettings {
     return {
@@ -1163,6 +3563,74 @@ export default function WatermarkPage() {
     fileInputRef.current?.click();
   }
 
+  function openFormatUploadPicker(kind: EditorFormatUploadKind) {
+    if (kind === "photos") {
+      formatPhotosInputRef.current?.click();
+      return;
+    }
+
+    if (kind === "pdfDocs") {
+      formatPdfInputRef.current?.click();
+      return;
+    }
+
+    formatVideoInputRef.current?.click();
+  }
+
+  function handleFormatUploadFiles(
+    files: File[],
+    kind: EditorFormatUploadKind,
+  ) {
+    if (!files.length) {
+      return;
+    }
+
+    if (kind === "photos") {
+      const imageFiles = files.filter(isImageFile);
+
+      if (!imageFiles.length) {
+        setUploadError("Please choose JPG, PNG, or WebP images.");
+        return;
+      }
+
+      setFormatUploadPrompt(null);
+      loadMediaFiles(imageFiles);
+      return;
+    }
+
+    if (kind === "pdfDocs") {
+      const pdfFile = files.find(isPdfFile);
+
+      if (!pdfFile) {
+        setUploadError("Please choose a PDF document.");
+        return;
+      }
+
+      setFormatUploadPrompt(null);
+      loadMediaFiles([pdfFile]);
+      return;
+    }
+
+    const videoFile = files.find(isVideoFile);
+
+    if (!videoFile) {
+      setUploadError("Please choose an MP4, MOV, or WebM video.");
+      return;
+    }
+
+    setFormatUploadPrompt(null);
+    loadMediaFiles([videoFile]);
+  }
+
+  function requestFormatUploadPrompt(kind: EditorFormatUploadKind) {
+    if (formatUploadPrompt === kind) {
+      setFormatUploadPrompt(null);
+      return;
+    }
+
+    setFormatUploadPrompt(kind);
+  }
+
   function openBatchImagePicker() {
     filePickerIntentRef.current = "append";
     fileInputRef.current?.click();
@@ -1174,6 +3642,390 @@ export default function WatermarkPage() {
 
   function openAddMoreImagesPicker() {
     appendImagesInputRef.current?.click();
+  }
+
+  function openAddMoreVideosPicker() {
+    appendVideosInputRef.current?.click();
+  }
+
+  function openAddMorePdfsPicker() {
+    appendPdfsInputRef.current?.click();
+  }
+
+  function clearPdfMergeBatch() {
+    setPdfMergeBatch([]);
+  }
+
+  function syncLoadedPdfIntoMergeBatch() {
+    if (activeEditorPanel !== "pdfDocs" || activePdfTool !== "merge") {
+      return;
+    }
+
+    if (
+      mediaKind !== "pdf" ||
+      !pdfBytesRef.current ||
+      pdfPageCount <= 0 ||
+      !fileName
+    ) {
+      setPdfMergeBatch((current) =>
+        current.filter((entry) => entry.id !== LOADED_PDF_MERGE_ENTRY_ID),
+      );
+      return;
+    }
+
+    const loadedEntry = createPdfMergeEntryFromLoadedDocument(
+      pdfBytesRef.current,
+      fileName,
+      pdfPageCount,
+    );
+
+    setPdfMergeBatch((current) => {
+      const addedEntries = current.filter(
+        (entry) => entry.id !== LOADED_PDF_MERGE_ENTRY_ID,
+      );
+      return [loadedEntry, ...addedEntries];
+    });
+  }
+
+  async function appendPdfMergeBatchFiles(files: File[]) {
+    const pdfFiles = files.filter(isPdfFile);
+
+    if (!pdfFiles.length) {
+      setUploadError("Please choose PDF files.");
+      return;
+    }
+
+    setUploadError("");
+
+    try {
+      const entries = await Promise.all(
+        pdfFiles.map((file) => createPdfMergeEntryFromFile(file)),
+      );
+      setPdfMergeBatch((current) => {
+        const existing = new Set(
+          current.map((entry) => `${entry.fileName}:${entry.fileSize}`),
+        );
+        const novelEntries = entries.filter(
+          (entry) => !existing.has(`${entry.fileName}:${entry.fileSize}`),
+        );
+
+        return [...current, ...novelEntries];
+      });
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "We could not read one of those PDF files.",
+      );
+    }
+  }
+
+  function removePdfMergeEntry(id: string) {
+    if (id === LOADED_PDF_MERGE_ENTRY_ID) {
+      return;
+    }
+
+    setPdfMergeBatch((current) => current.filter((entry) => entry.id !== id));
+  }
+
+  function movePdfMergeEntry(id: string, direction: "down" | "up") {
+    if (id === LOADED_PDF_MERGE_ENTRY_ID) {
+      return;
+    }
+
+    setPdfMergeBatch((current) => {
+      const index = current.findIndex((entry) => entry.id === id);
+
+      if (index < 0) {
+        return current;
+      }
+
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+
+      if (targetIndex < 0 || targetIndex >= current.length) {
+        return current;
+      }
+
+      if (current[targetIndex]?.id === LOADED_PDF_MERGE_ENTRY_ID) {
+        return current;
+      }
+
+      const next = [...current];
+      const [entry] = next.splice(index, 1);
+      next.splice(targetIndex, 0, entry!);
+      return next;
+    });
+  }
+
+  async function mergePdfBatchDocuments() {
+    if (pdfMergeBatch.length < 2) {
+      setUploadError("Add at least two PDF files to merge.");
+      return;
+    }
+
+    setIsPdfMergeProcessing(true);
+    setUploadError("");
+
+    try {
+      const mergedBlob = await mergePdfFiles(
+        pdfMergeBatch.map((entry) => entry.file),
+      );
+      const mergedFile = new File(
+        [mergedBlob],
+        buildMergedPdfFileName(pdfMergeBatch),
+        { type: "application/pdf" },
+      );
+
+      clearPdfMergeBatch();
+      await loadPdfFile(mergedFile);
+      setActiveEditorPanel("pdfDocs");
+      setActivePdfTool("merge");
+      syncLoadedPdfIntoMergeBatch();
+      setExportNotice("PDFs merged successfully. Your combined document is ready.");
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "PDF merge failed. Please try again.",
+      );
+    } finally {
+      setIsPdfMergeProcessing(false);
+    }
+  }
+
+  async function compressLoadedPdf() {
+    if (!pdfBytesRef.current || pdfPageCount === 0) {
+      setUploadError("Upload a PDF to compress.");
+      return;
+    }
+
+    setIsPdfCompressProcessing(true);
+    setUploadError("");
+    setLastPdfCompressResult(null);
+
+    try {
+      const result = await compressPdfBytes(pdfBytesRef.current);
+      const compressedFile = new File(
+        [result.blob],
+        buildCompressedPdfFileName(fileName ?? "document.pdf"),
+        { type: "application/pdf" },
+      );
+
+      await loadPdfFile(compressedFile);
+      setActiveEditorPanel("pdfDocs");
+      setActivePdfTool("compress");
+      setLastPdfCompressResult({
+        compressedSize: result.compressedSize,
+        originalSize: result.originalSize,
+        savedBytes: result.savedBytes,
+        savedPercent: result.savedPercent,
+      });
+
+      if (result.savedBytes > 0) {
+        setExportNotice(
+          `PDF compressed successfully (${result.savedPercent.toFixed(1)}% smaller).`,
+        );
+      } else {
+        setExportNotice("PDF optimized. File size was already minimal.");
+      }
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "PDF compression failed. Please try again.",
+      );
+    } finally {
+      setIsPdfCompressProcessing(false);
+    }
+  }
+
+  function clearVideoBatch() {
+    revokeBatchVideoObjectUrls(videoBatch);
+    setVideoBatch([]);
+    setActiveBatchVideoId(null);
+    clearVideoShortenHistory();
+  }
+
+  function applyActiveBatchVideoEntry(entry: BatchVideoEntry) {
+    if (objectUrlRef.current && objectUrlRef.current !== entry.objectUrl) {
+      URL.revokeObjectURL(objectUrlRef.current);
+    }
+
+    objectUrlRef.current = entry.objectUrl;
+    setActiveBatchVideoId(entry.id);
+    setVideoUrl(entry.objectUrl);
+    setVideoDuration(entry.duration);
+    initializeVideoTrimState(entry.duration);
+    setVideoSize({
+      height: entry.height,
+      width: entry.width,
+    });
+    setFileName(entry.fileName);
+    setVideoFileSize(entry.fileSize);
+    initializeVideoBlurState(entry.duration);
+  }
+
+  async function appendVideoBatchFiles(files: File[]) {
+    const videoFiles = files.filter(isVideoFile);
+
+    if (!videoFiles.length) {
+      setUploadError("Please choose MP4, MOV, or WebM videos.");
+      return;
+    }
+
+    if (mediaKind !== "video" || videoBatch.length === 0) {
+      setUploadError("Load a video before adding more.");
+      return;
+    }
+
+    setUploadError("");
+
+    try {
+      const loadedEntries = await Promise.all(
+        videoFiles.map((file) => createBatchVideoEntryFromFile(file)),
+      );
+      const nextBatch = [...videoBatch, ...loadedEntries];
+      setMediaKind("video");
+      clearImageBatch();
+      clearPdfState();
+      setImage(null);
+      setVideoBatch(nextBatch);
+      applyActiveBatchVideoEntry(loadedEntries[loadedEntries.length - 1]!);
+      finishMediaLoad("video");
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "We could not load those videos. Please try again.",
+      );
+    }
+  }
+
+  async function blobToBase64(blob: Blob) {
+    const buffer = await blob.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+
+    for (let index = 0; index < bytes.length; index += 1) {
+      binary += String.fromCharCode(bytes[index]!);
+    }
+
+    return btoa(binary);
+  }
+
+  function base64ToVideoFile(base64: string, fileName: string) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+
+    return new File([bytes], fileName, { type: "video/mp4" });
+  }
+
+  async function mergeVideoBatchClips() {
+    if (videoBatch.length < 2) {
+      setUploadError("Add at least two videos before merging.");
+      return;
+    }
+
+    setIsVideoEditProcessing(true);
+    setUploadError("");
+    setExportNotice("");
+
+    try {
+      const canUseClient = videoBatch.every((entry) =>
+        isClientVideoExportEligible(entry.duration, entry.width, entry.height),
+      );
+      let mergedBlob: Blob;
+
+      if (canUseClient) {
+        mergedBlob = await mergeVideoBlobs({
+          videos: videoBatch.map((entry) => ({
+            blob: entry.file,
+            fileName: entry.fileName,
+          })),
+        });
+      } else {
+        const response = await fetch("/api/watermark/video/edit", {
+          body: JSON.stringify({
+            action: "merge",
+            videos: await Promise.all(
+              videoBatch.map(async (entry) => ({
+                fileName: entry.fileName,
+                videoBase64: await blobToBase64(entry.file),
+              })),
+            ),
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        });
+        const payload = (await response.json()) as {
+          error?: string;
+          fileName?: string;
+          videoBase64?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Video merge failed.");
+        }
+
+        mergedBlob = base64ToVideoFile(
+          payload.videoBase64!,
+          payload.fileName ?? "merged-video.mp4",
+        );
+      }
+
+      revokeBatchVideoObjectUrls(videoBatch);
+      const mergedEntry = await createBatchVideoEntryFromFile(
+        new File([mergedBlob], "merged-video.mp4", { type: mergedBlob.type }),
+      );
+      setVideoBatch([mergedEntry]);
+      applyActiveBatchVideoEntry(mergedEntry);
+      pendingMergedVideoPreviewRef.current = true;
+      setActiveEditorPanel("video");
+      setActiveVideoTool("trim");
+      setVideoPreviewTime(0);
+      setExportNotice("Videos merged into one clip. Trim the result on the timeline.");
+    } catch (error) {
+      setUploadError(
+        error instanceof Error ? error.message : "Video merge failed. Please try again.",
+      );
+    } finally {
+      setIsVideoEditProcessing(false);
+    }
+  }
+
+  function selectBatchVideo(id: string) {
+    const entry = videoBatch.find((item) => item.id === id);
+
+    if (!entry) {
+      return;
+    }
+
+    applyActiveBatchVideoEntry(entry);
+  }
+
+  function removeBatchVideo(id: string) {
+    const nextBatch = videoBatch.filter((entry) => entry.id !== id);
+    const removed = videoBatch.find((entry) => entry.id === id);
+
+    if (removed) {
+      URL.revokeObjectURL(removed.objectUrl);
+    }
+
+    if (nextBatch.length === 0) {
+      clearVideoBatch();
+      removeLoadedMedia();
+      return;
+    }
+
+    setVideoBatch(nextBatch);
+
+    if (activeBatchVideoId === id) {
+      applyActiveBatchVideoEntry(nextBatch[nextBatch.length - 1]!);
+    }
   }
 
   function createBatchImageId() {
@@ -1195,6 +4047,7 @@ export default function WatermarkPage() {
     id = createBatchImageId(),
   ): BatchImageEntry {
     return {
+      blurStrokes: [],
       fileName: file.name,
       id,
       image: imageElement,
@@ -1241,6 +4094,7 @@ export default function WatermarkPage() {
       entry.id === activeId
         ? {
             ...entry,
+            blurStrokes: cloneBlurStrokes(blurStrokes),
             image,
             resizeHeight,
             resizeWidth,
@@ -1249,6 +4103,26 @@ export default function WatermarkPage() {
           }
         : entry,
     );
+  }
+
+  function updateBlurStrokes(
+    updater: (current: BlurStroke[]) => BlurStroke[],
+  ) {
+    setBlurStrokes((current) => {
+      const next = updater(current);
+
+      if (activeBatchImageId) {
+        setImageBatch((batch) =>
+          batch.map((entry) =>
+            entry.id === activeBatchImageId
+              ? { ...entry, blurStrokes: cloneBlurStrokes(next) }
+              : entry,
+          ),
+        );
+      }
+
+      return next;
+    });
   }
 
   function applyActiveBatchEntry(entry: BatchImageEntry) {
@@ -1260,6 +4134,7 @@ export default function WatermarkPage() {
     setResizeWidth(entry.resizeWidth);
     setResizeHeight(entry.resizeHeight);
     setRotationAngle(entry.rotationAngle);
+    setBlurStrokes(cloneBlurStrokes(entry.blurStrokes));
     setResizeWarning("");
     setActiveImageTool(null);
     setCropRect(null);
@@ -1276,6 +4151,782 @@ export default function WatermarkPage() {
     setPdfPages([]);
     setPdfPageCount(0);
     setActivePdfPageId(null);
+    setPdfPageSignatures({});
+    setPdfPageFillMap({});
+    setPdfDocumentTool("signature");
+    setActiveFillFieldId(null);
+    setActiveSignaturePlacementId(null);
+    setLastPdfCompressResult(null);
+  }
+
+  function getActivePdfPageSignatureWorkingState(): PdfPageSignaturePlacement | null {
+    if (mediaKind !== "pdf" || !activePdfPageId || !activeSignaturePlacementId) {
+      return null;
+    }
+
+    const existing = pdfPageSignatures[activePdfPageId]?.find(
+      (placement) => placement.id === activeSignaturePlacementId,
+    );
+
+    if (!existing) {
+      return null;
+    }
+
+    return {
+      ...existing,
+      customPosition: customPosition ? { ...customPosition } : null,
+      fontSizeScale,
+      opacity: watermarkOpacity,
+      watermarkPosition,
+    };
+  }
+
+  function getPdfPageSignaturesWithActivePersisted(): PdfPageSignatureMap {
+    const workingState = getActivePdfPageSignatureWorkingState();
+
+    if (!workingState || !activePdfPageId) {
+      return pdfPageSignatures;
+    }
+
+    return upsertPdfPageSignaturePlacement(
+      pdfPageSignatures,
+      activePdfPageId,
+      workingState,
+    );
+  }
+
+  function getPdfPageSignaturePlacementsForPaint() {
+    if (mediaKind !== "pdf" || !activePdfPageId) {
+      return [];
+    }
+
+    const placements =
+      getPdfPageSignaturesWithActivePersisted()[activePdfPageId] ?? [];
+
+    return placements.flatMap((placement) => {
+      const signature = savedSignatures.find(
+        (entry) => entry.id === placement.signatureId,
+      );
+
+      if (!signature?.image) {
+        return [];
+      }
+
+      const isActive =
+        pdfDocumentTool === "signature" &&
+        placement.id === activeSignaturePlacementId;
+
+      return [
+        {
+          customPosition:
+            isActive && customPosition
+              ? { ...customPosition }
+              : placement.customPosition,
+          fontSizeScale: isActive ? fontSizeScale : placement.fontSizeScale,
+          id: placement.id,
+          image: signature.image,
+          isActive,
+          opacity: isActive ? watermarkOpacity : placement.opacity,
+          watermarkPosition: isActive
+            ? watermarkPosition
+            : placement.watermarkPosition,
+        },
+      ];
+    });
+  }
+
+  function applyPdfPageSignaturePlacementToEditor(
+    placement: PdfPageSignaturePlacement | null | undefined,
+  ) {
+    if (!placement) {
+      setActiveSignaturePlacementId(null);
+      setActiveSignatureId(null);
+      if (!isPdfWatermarkMode()) {
+        setLogoImage(null);
+      }
+      setCustomPosition(null);
+      setWatermarkPosition("bottom-right");
+      setFontSizeScale(100);
+      setWatermarkOpacity(70);
+      setIsWatermarkHovering(false);
+      return;
+    }
+
+    const signature = savedSignatures.find(
+      (entry) => entry.id === placement.signatureId,
+    );
+
+    setActiveSignaturePlacementId(placement.id);
+    setActiveSignatureId(placement.signatureId);
+    if (isPdfSignFillMode()) {
+      setLogoImage(signature?.image ?? null);
+      setCustomPosition(
+        placement.customPosition ? { ...placement.customPosition } : null,
+      );
+      setWatermarkPosition(placement.watermarkPosition);
+      setFontSizeScale(placement.fontSizeScale);
+      setWatermarkOpacity(placement.opacity);
+    }
+    setIsWatermarkHovering(false);
+  }
+
+  function syncActivePdfPageSignature(
+    updater: (current: PdfPageSignaturePlacement) => PdfPageSignaturePlacement,
+  ) {
+    if (mediaKind !== "pdf" || !activePdfPageId || !activeSignaturePlacementId) {
+      return;
+    }
+
+    setPdfPageSignatures((currentMap) => {
+      const placements = currentMap[activePdfPageId] ?? [];
+      const index = placements.findIndex(
+        (placement) => placement.id === activeSignaturePlacementId,
+      );
+
+      if (index === -1) {
+        return currentMap;
+      }
+
+      return upsertPdfPageSignaturePlacement(
+        currentMap,
+        activePdfPageId,
+        updater(placements[index]),
+      );
+    });
+  }
+
+  function getActivePdfPageFillFields(): PdfFillTextField[] {
+    if (mediaKind !== "pdf" || !activePdfPageId) {
+      return [];
+    }
+
+    return pdfPageFillMap[activePdfPageId] ?? [];
+  }
+
+  function getPdfPageFillMapWithActivePersisted(): PdfPageFillMap {
+    return pdfPageFillMap;
+  }
+
+  function persistActivePdfPageFillFields(
+    map: PdfPageFillMap,
+    pageId: string,
+    fields: PdfFillTextField[],
+  ): PdfPageFillMap {
+    return persistPdfPageFillFields(map, pageId, fields);
+  }
+
+  function applyPdfPageFillFieldsToEditor(fields: PdfFillTextField[]) {
+    setActiveFillFieldId(fields[0]?.id ?? null);
+  }
+
+  function syncActivePdfPageFillFields(
+    updater: (current: PdfFillTextField[]) => PdfFillTextField[],
+  ) {
+    if (mediaKind !== "pdf" || !activePdfPageId) {
+      return;
+    }
+
+    setPdfPageFillMap((currentMap) =>
+      persistPdfPageFillFields(
+        currentMap,
+        activePdfPageId,
+        updater(currentMap[activePdfPageId] ?? []),
+      ),
+    );
+  }
+
+  function buildSignatureManifestForExport() {
+    return buildSignatureManifestFromSavedSignatures(savedSignatures);
+  }
+
+  async function handleAddTextClick() {
+    setActiveEditorPanel("pdfDocs");
+    setActivePdfTool("signFill");
+    setPdfDocumentTool("fill");
+    applyPdfPageFillFieldsToEditor(getActivePdfPageFillFields());
+  }
+
+  function getCustomPositionFromBounds(
+    bounds: TextBounds,
+    canvas: HTMLCanvasElement,
+  ) {
+    return {
+      xPercent: (bounds.left + bounds.right) / 2 / canvas.width,
+      yPercent: (bounds.top + bounds.bottom) / 2 / canvas.height,
+    };
+  }
+
+  function deselectActiveFillField() {
+    setActiveFillFieldId(null);
+    setFillHoverResizeHandle(null);
+    setFillHoverFrameAction(null);
+    setIsFillFieldHovering(false);
+  }
+
+  function deselectActiveSignaturePlacement() {
+    applyPdfPageSignaturePlacementToEditor(null);
+    setSignatureHoverResizeHandle(null);
+    setSignatureHoverFrameAction(null);
+    setIsSignaturePlacementHovering(false);
+  }
+
+  function removeFillFieldFromPage(fieldId: string) {
+    syncActivePdfPageFillFields((fields) =>
+      fields.filter((field) => field.id !== fieldId),
+    );
+    setActiveFillFieldId((currentId) => (currentId === fieldId ? null : currentId));
+    setFillHoverResizeHandle(null);
+    setFillHoverFrameAction(null);
+    setIsFillFieldHovering(false);
+  }
+
+  function removeSignaturePlacementFromPage(placementId: string) {
+    if (!activePdfPageId) {
+      return;
+    }
+
+    setPdfPageSignatures((currentMap) => {
+      const nextMap = removePdfPageSignaturePlacement(
+        currentMap,
+        activePdfPageId,
+        placementId,
+      );
+      const remaining = nextMap[activePdfPageId] ?? [];
+
+      if (placementId === activeSignaturePlacementId) {
+        applyPdfPageSignaturePlacementToEditor(
+          remaining[remaining.length - 1] ?? null,
+        );
+      }
+
+      return nextMap;
+    });
+    setSignatureHoverResizeHandle(null);
+    setSignatureHoverFrameAction(null);
+    setIsSignaturePlacementHovering(false);
+  }
+
+  function handleFillFrameAction(action: FillFrameAction, fieldId: string) {
+    if (action === "done") {
+      deselectActiveFillField();
+      return;
+    }
+
+    removeFillFieldFromPage(fieldId);
+  }
+
+  function handleSignatureFrameAction(
+    action: PlacementFrameAction,
+    placementId: string,
+  ) {
+    if (action === "done") {
+      deselectActiveSignaturePlacement();
+      return;
+    }
+
+    removeSignaturePlacementFromPage(placementId);
+  }
+
+  function handleSignaturePlacementPointerDown(
+    event: PointerEvent<HTMLCanvasElement>,
+  ) {
+    previewPanDragRef.current = null;
+    setIsPreviewPanning(false);
+
+    const point = getCanvasPoint(event);
+    const canvas = event.currentTarget;
+    const boundsMap = layerBoundsRef.current;
+
+    if (!point || !activePdfPageId) {
+      return;
+    }
+
+    if (activeSignaturePlacementId) {
+      const activeBounds = boundsMap.get(activeSignaturePlacementId);
+
+      if (activeBounds) {
+        const frameAction = getPlacementFrameActionAtPoint(point, activeBounds);
+
+        if (frameAction) {
+          event.preventDefault();
+          handleSignatureFrameAction(frameAction, activeSignaturePlacementId);
+          return;
+        }
+
+        const resizeHandle = getPlacementResizeHandleAtPoint(point, activeBounds);
+
+        if (resizeHandle) {
+          const workingState = getActivePdfPageSignatureWorkingState();
+          const placement =
+            workingState ??
+            pdfPageSignatures[activePdfPageId]?.find(
+              (entry) => entry.id === activeSignaturePlacementId,
+            );
+
+          if (!placement) {
+            return;
+          }
+
+          event.preventDefault();
+          signatureDragRef.current = {
+            mode: "resize",
+            origin: point,
+            placementId: activeSignaturePlacementId,
+            resizeHandle,
+            startBounds: { ...activeBounds },
+            startCustomPosition: placement.customPosition
+              ? { ...placement.customPosition }
+              : getCustomPositionFromBounds(activeBounds, canvas),
+            startFontSizeScale: placement.fontSizeScale,
+          };
+          setSignatureHoverResizeHandle(resizeHandle);
+          event.currentTarget.setPointerCapture(event.pointerId);
+          return;
+        }
+      }
+    }
+
+    const placements =
+      getPdfPageSignaturesWithActivePersisted()[activePdfPageId] ?? [];
+
+    for (let index = placements.length - 1; index >= 0; index -= 1) {
+      const placement = placements[index];
+      const bounds = boundsMap.get(placement.id);
+
+      if (!bounds || !isPointInBounds(point, bounds)) {
+        continue;
+      }
+
+      if (placement.id !== activeSignaturePlacementId) {
+        applyPdfPageSignaturePlacementToEditor(placement);
+      }
+
+      event.preventDefault();
+      signatureDragRef.current = {
+        mode: "move",
+        origin: point,
+        placementId: placement.id,
+        startBounds: { ...bounds },
+        startCustomPosition: placement.customPosition
+          ? { ...placement.customPosition }
+          : getCustomPositionFromBounds(bounds, canvas),
+        startFontSizeScale: placement.fontSizeScale,
+      };
+      setIsSignaturePlacementHovering(true);
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
+
+    deselectActiveSignaturePlacement();
+    setIsSignaturePlacementHovering(false);
+    setSignatureHoverResizeHandle(null);
+    setSignatureHoverFrameAction(null);
+  }
+
+  function handleSignaturePlacementPointerMove(
+    event: PointerEvent<HTMLCanvasElement>,
+  ) {
+    const point = getCanvasPoint(event);
+    const canvas = event.currentTarget;
+    const boundsMap = layerBoundsRef.current;
+
+    if (!signatureDragRef.current) {
+      if (!point || !activePdfPageId) {
+        setIsSignaturePlacementHovering(false);
+        setSignatureHoverResizeHandle(null);
+        setSignatureHoverFrameAction(null);
+        return;
+      }
+
+      if (activeSignaturePlacementId) {
+        const activeBounds = boundsMap.get(activeSignaturePlacementId);
+
+        if (activeBounds) {
+          const frameAction = getPlacementFrameActionAtPoint(point, activeBounds);
+
+          if (frameAction) {
+            setSignatureHoverFrameAction(frameAction);
+            setSignatureHoverResizeHandle(null);
+            setIsSignaturePlacementHovering(false);
+            return;
+          }
+
+          const resizeHandle = getPlacementResizeHandleAtPoint(point, activeBounds);
+
+          if (resizeHandle) {
+            setSignatureHoverResizeHandle(resizeHandle);
+            setSignatureHoverFrameAction(null);
+            setIsSignaturePlacementHovering(false);
+            return;
+          }
+        }
+      }
+
+      const placements =
+        getPdfPageSignaturesWithActivePersisted()[activePdfPageId] ?? [];
+      let hovering = false;
+
+      for (const placement of placements) {
+        const bounds = boundsMap.get(placement.id);
+
+        if (bounds && isPointInBounds(point, bounds)) {
+          hovering = true;
+          break;
+        }
+      }
+
+      setIsSignaturePlacementHovering(hovering);
+      setSignatureHoverResizeHandle(null);
+      setSignatureHoverFrameAction(null);
+      return;
+    }
+
+    if (!point) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const drag = signatureDragRef.current;
+    const logicalCanvasSize = getCanvasLogicalSize(canvas);
+    const dx = (point.x - drag.origin.x) / logicalCanvasSize.width;
+    const dy = (point.y - drag.origin.y) / logicalCanvasSize.height;
+
+    if (drag.mode === "move") {
+      const nextCustomPosition = {
+        xPercent: Math.min(1, Math.max(0, drag.startCustomPosition.xPercent + dx)),
+        yPercent: Math.min(1, Math.max(0, drag.startCustomPosition.yPercent + dy)),
+      };
+
+      setCustomPosition(nextCustomPosition);
+      setPdfPageSignatures((currentMap) => {
+        if (!activePdfPageId) {
+          return currentMap;
+        }
+
+        const placements = currentMap[activePdfPageId] ?? [];
+        const existing = placements.find((entry) => entry.id === drag.placementId);
+
+        if (!existing) {
+          return currentMap;
+        }
+
+        return upsertPdfPageSignaturePlacement(currentMap, activePdfPageId, {
+          ...existing,
+          customPosition: nextCustomPosition,
+        });
+      });
+      return;
+    }
+
+    if (!drag.resizeHandle) {
+      return;
+    }
+
+    const resized = applyCenteredPlacementResize({
+      canvasHeight: logicalCanvasSize.height,
+      canvasWidth: logicalCanvasSize.width,
+      handle: drag.resizeHandle,
+      pointer: point,
+      startBounds: drag.startBounds,
+      startFontSizeScale: drag.startFontSizeScale,
+    });
+
+    setCustomPosition(resized.customPosition);
+    setFontSizeScale(resized.fontSizeScale);
+    setPdfPageSignatures((currentMap) => {
+      if (!activePdfPageId) {
+        return currentMap;
+      }
+
+      const placements = currentMap[activePdfPageId] ?? [];
+      const existing = placements.find((entry) => entry.id === drag.placementId);
+
+      if (!existing) {
+        return currentMap;
+      }
+
+      return upsertPdfPageSignaturePlacement(currentMap, activePdfPageId, {
+        ...existing,
+        customPosition: resized.customPosition,
+        fontSizeScale: resized.fontSizeScale,
+        watermarkPosition: "center",
+      });
+    });
+  }
+
+  function handleSignaturePlacementPointerUp(
+    event: PointerEvent<HTMLCanvasElement>,
+  ) {
+    if (!signatureDragRef.current) {
+      return;
+    }
+
+    event.preventDefault();
+    signatureDragRef.current = null;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function handleFillFieldPointerDown(event: PointerEvent<HTMLCanvasElement>) {
+    previewPanDragRef.current = null;
+    setIsPreviewPanning(false);
+
+    const point = getCanvasPoint(event);
+
+    if (!point) {
+      return;
+    }
+
+    if (activeFillFieldId) {
+      const activeBounds = fillFieldBoundsRef.current[activeFillFieldId];
+
+      if (activeBounds) {
+        const frameAction = getFillFrameActionAtPoint(point, activeBounds);
+
+        if (frameAction) {
+          event.preventDefault();
+          handleFillFrameAction(frameAction, activeFillFieldId);
+          return;
+        }
+
+        const resizeHandle = getFillResizeHandleAtPoint(point, activeBounds);
+
+        if (resizeHandle) {
+          const field = getActivePdfPageFillFields().find(
+            (entry) => entry.id === activeFillFieldId,
+          );
+
+          if (!field) {
+            return;
+          }
+
+          event.preventDefault();
+          fillDragRef.current = {
+            fieldId: field.id,
+            mode: "resize",
+            origin: point,
+            resizeHandle,
+            startField: { ...field },
+          };
+          setFillHoverResizeHandle(resizeHandle);
+          event.currentTarget.setPointerCapture(event.pointerId);
+          return;
+        }
+      }
+    }
+
+    const fields = getActivePdfPageFillFields();
+
+    for (let index = fields.length - 1; index >= 0; index -= 1) {
+      const field = fields[index];
+      const bounds = fillFieldBoundsRef.current[field.id];
+
+      if (!bounds || !field.text.trim()) {
+        continue;
+      }
+
+      if (isPointInBounds(point, bounds)) {
+        event.preventDefault();
+        fillDragRef.current = {
+          fieldId: field.id,
+          mode: "move",
+          origin: point,
+          startField: { ...field },
+        };
+        setActiveFillFieldId(field.id);
+        event.currentTarget.setPointerCapture(event.pointerId);
+        return;
+      }
+    }
+
+    deselectActiveFillField();
+    setIsFillFieldHovering(false);
+    setFillHoverResizeHandle(null);
+    setFillHoverFrameAction(null);
+  }
+
+  function handleFillFieldPointerMove(event: PointerEvent<HTMLCanvasElement>) {
+    const point = getCanvasPoint(event);
+    const canvas = event.currentTarget;
+
+    if (!fillDragRef.current) {
+      if (!point) {
+        setIsFillFieldHovering(false);
+        setFillHoverResizeHandle(null);
+        setFillHoverFrameAction(null);
+        return;
+      }
+
+      if (activeFillFieldId) {
+        const activeBounds = fillFieldBoundsRef.current[activeFillFieldId];
+
+        if (activeBounds) {
+          const frameAction = getFillFrameActionAtPoint(point, activeBounds);
+
+          if (frameAction) {
+            setFillHoverFrameAction(frameAction);
+            setFillHoverResizeHandle(null);
+            setIsFillFieldHovering(false);
+            return;
+          }
+
+          const resizeHandle = getFillResizeHandleAtPoint(point, activeBounds);
+
+          if (resizeHandle) {
+            setFillHoverResizeHandle(resizeHandle);
+            setFillHoverFrameAction(null);
+            setIsFillFieldHovering(false);
+            return;
+          }
+        }
+      }
+
+      let hovering = false;
+      let hoverHandle: FillResizeHandle | null = null;
+
+      for (const field of getActivePdfPageFillFields()) {
+        const bounds = fillFieldBoundsRef.current[field.id];
+
+        if (!bounds || !field.text.trim()) {
+          continue;
+        }
+
+        if (isPointInBounds(point, bounds)) {
+          hovering = true;
+          break;
+        }
+      }
+
+      setIsFillFieldHovering(hovering);
+      setFillHoverResizeHandle(hoverHandle);
+      setFillHoverFrameAction(null);
+      return;
+    }
+
+    if (!point) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const drag = fillDragRef.current;
+    const dx = (point.x - drag.origin.x) / canvas.width;
+    const dy = (point.y - drag.origin.y) / canvas.height;
+
+    syncActivePdfPageFillFields((fields) =>
+      fields.map((field) => {
+        if (field.id !== drag.fieldId) {
+          return field;
+        }
+
+        if (drag.mode === "move") {
+          return {
+            ...field,
+            xPercent: Math.min(
+              1 - field.widthPercent,
+              Math.max(0, drag.startField.xPercent + dx),
+            ),
+            yPercent: Math.min(
+              1 - field.heightPercent,
+              Math.max(0, drag.startField.yPercent + dy),
+            ),
+          };
+        }
+
+        if (!drag.resizeHandle) {
+          return field;
+        }
+
+        const startRect = getFillFieldRect(
+          drag.startField,
+          canvas.width,
+          canvas.height,
+        );
+
+        return applyFillFieldResize({
+          canvasHeight: canvas.height,
+          canvasWidth: canvas.width,
+          handle: drag.resizeHandle,
+          pointer: point,
+          startField: drag.startField,
+          startRect,
+        });
+      }),
+    );
+  }
+
+  function handleFillFieldPointerUp(event: PointerEvent<HTMLCanvasElement>) {
+    if (!fillDragRef.current) {
+      return;
+    }
+
+    event.preventDefault();
+    fillDragRef.current = null;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function removeSignatureFromActivePdfPage() {
+    if (
+      mediaKind !== "pdf" ||
+      !activePdfPageId ||
+      !activeSignaturePlacementId
+    ) {
+      return;
+    }
+
+    setPdfPageSignatures((currentMap) => {
+      const nextMap = removePdfPageSignaturePlacement(
+        currentMap,
+        activePdfPageId,
+        activeSignaturePlacementId,
+      );
+      const remaining = nextMap[activePdfPageId] ?? [];
+      applyPdfPageSignaturePlacementToEditor(
+        remaining[remaining.length - 1] ?? null,
+      );
+      return nextMap;
+    });
+  }
+
+  function handleSavedSignaturesChange(nextSignatures: SavedSignature[]) {
+    const removedIds = savedSignatures
+      .filter(
+        (signature) =>
+          !nextSignatures.some((entry) => entry.id === signature.id),
+      )
+      .map((signature) => signature.id);
+
+    setSavedSignatures(nextSignatures);
+
+    if (!removedIds.length || mediaKind !== "pdf") {
+      return;
+    }
+
+    setPdfPageSignatures((currentMap) => {
+      let nextMap = currentMap;
+
+      for (const removedId of removedIds) {
+        nextMap = removeSignatureFromPdfPageMap(nextMap, removedId);
+      }
+
+      if (activePdfPageId) {
+        const remaining = nextMap[activePdfPageId] ?? [];
+        const stillSelected = remaining.find(
+          (placement) => placement.id === activeSignaturePlacementId,
+        );
+        applyPdfPageSignaturePlacementToEditor(
+          stillSelected ?? remaining[remaining.length - 1] ?? null,
+        );
+      }
+
+      return nextMap;
+    });
   }
 
   function clearImageBatch() {
@@ -1353,6 +5004,31 @@ export default function WatermarkPage() {
       return;
     }
 
+    let nextMap = pdfPageSignatures;
+    let nextFillMap = pdfPageFillMap;
+
+    if (mediaKind === "pdf" && activePdfPageId && activeSignaturePlacementId) {
+      const workingState = getActivePdfPageSignatureWorkingState();
+
+      if (workingState) {
+        nextMap = upsertPdfPageSignaturePlacement(
+          pdfPageSignatures,
+          activePdfPageId,
+          workingState,
+        );
+        setPdfPageSignatures(nextMap);
+      }
+    }
+
+    if (mediaKind === "pdf" && activePdfPageId && pdfDocumentTool === "fill") {
+      nextFillMap = persistActivePdfPageFillFields(
+        pdfPageFillMap,
+        activePdfPageId,
+        getActivePdfPageFillFields(),
+      );
+      setPdfPageFillMap(nextFillMap);
+    }
+
     setActivePdfPageId(id);
 
     try {
@@ -1368,6 +5044,22 @@ export default function WatermarkPage() {
       });
       setResizeWidth(rendered.width);
       setResizeHeight(rendered.height);
+
+      if (mediaKind === "pdf") {
+        const pagePlacements = nextMap[id] ?? [];
+
+        if (isPdfSignFillMode()) {
+          applyPdfPageSignaturePlacementToEditor(
+            pagePlacements[pagePlacements.length - 1] ?? null,
+          );
+
+          if (pdfDocumentTool === "fill") {
+            applyPdfPageFillFieldsToEditor(nextFillMap[id] ?? []);
+          }
+        } else if (isPdfWatermarkMode()) {
+          deselectActiveSignaturePlacement();
+        }
+      }
     } catch (error) {
       setUploadError(
         error instanceof Error
@@ -1387,6 +5079,7 @@ export default function WatermarkPage() {
 
     setUploadError("");
     setIsPdfLoading(true);
+    setPreviewZoomPercent(PREVIEW_ZOOM_DEFAULT);
     setFileName(file.name);
     setMediaKind("pdf");
 
@@ -1396,10 +5089,16 @@ export default function WatermarkPage() {
     }
 
     clearImageBatch();
+    clearVideoBatch();
     clearPdfState();
     setImage(null);
     setVideoUrl("");
     setVideoDuration(0);
+    setVideoTrimStartSeconds(0);
+    setVideoTrimEndSeconds(0);
+    setVideoTrimAppliedStartSeconds(0);
+    setVideoTrimAppliedEndSeconds(0);
+    setVideoCropSavedNotice(false);
     setVideoSize(null);
     setVideoFileSize(0);
     setPdfPages([]);
@@ -1426,7 +5125,13 @@ export default function WatermarkPage() {
       setMediaKind("pdf");
       setFileName(file.name);
       setPdfPageCount(pdfDocument.numPages);
+      setPdfPageSignatures(createEmptyPdfPageSignatureMap(pdfDocument.numPages));
+      setPdfPageFillMap(createEmptyPdfPageFillMap(pdfDocument.numPages));
+      setPdfDocumentTool("signature");
+      setActiveFillFieldId(null);
+      setActiveSignaturePlacementId(null);
       setActivePdfPageId("pdf-page-1");
+      applyPdfPageSignaturePlacementToEditor(null);
 
       const firstPage = await renderPdfPagePreview(pdfDocument, 1);
 
@@ -1446,7 +5151,7 @@ export default function WatermarkPage() {
       setActiveImageTool(null);
       setCropRect(null);
       setIsWatermarkHovering(false);
-      finishMediaLoad();
+      finishMediaLoad("pdf");
 
       void buildPdfPageThumbnails(pdfDocument)
         .then((pages) => {
@@ -1520,6 +5225,7 @@ export default function WatermarkPage() {
         uploadedImageSize
       ) {
         const currentEntry: BatchImageEntry = {
+          blurStrokes: cloneBlurStrokes(blurStrokes),
           fileName,
           id: createBatchImageId(),
           image,
@@ -1557,10 +5263,13 @@ export default function WatermarkPage() {
     entryResizeHeight: number,
     entryRotationAngle: number,
     useResizePreview: boolean,
+    entryBlurStrokes: BlurStroke[] = blurStrokes,
+    entryReferenceImageSize?: CanvasSize,
   ): ExportRenderInput {
     return {
       activeLogoLayerId,
       activeTextLayerId,
+      blurStrokes: cloneBlurStrokes(entryBlurStrokes),
       customPosition,
       fontFamily,
       fontSizeScale,
@@ -1568,6 +5277,12 @@ export default function WatermarkPage() {
       imageEffectSettings: getImageEffectSettings(),
       logoImage,
       logoLayers,
+      previewCanvasSize: canvasSize,
+      referenceImageSize: entryReferenceImageSize ??
+        uploadedImageSize ?? {
+          height: imageElement.naturalHeight,
+          width: imageElement.naturalWidth,
+        },
       resizeHeight: entryResizeHeight,
       resizeWidth: entryResizeWidth,
       rotationAngle: entryRotationAngle,
@@ -1658,6 +5373,7 @@ export default function WatermarkPage() {
     setUploadError("");
     setExportError("");
     setIsExporting(true);
+    setIsExportPreparing(true);
     setBatchExportProgress({ current: 0, total: imageBatch.length });
 
     const exportId = createExportId();
@@ -1673,6 +5389,7 @@ export default function WatermarkPage() {
         fileType,
       });
       applyAuthorizeNotice(auth);
+      setIsExportPreparing(false);
 
       const zip = new JSZip();
       const usedNames = new Set<string>();
@@ -1691,6 +5408,8 @@ export default function WatermarkPage() {
             entry.rotationAngle,
             false,
             auth,
+            entry.blurStrokes,
+            entry.uploadedImageSize,
           ),
         );
 
@@ -1710,6 +5429,7 @@ export default function WatermarkPage() {
       setUploadError("We could not export those images. Please try again.");
     } finally {
       setIsExporting(false);
+      setIsExportPreparing(false);
       setBatchExportProgress(null);
     }
   }
@@ -1723,8 +5443,19 @@ export default function WatermarkPage() {
       return;
     }
 
-    clearActiveTemplate();
+    if (watermarkType === "text") {
+      clearActiveTextTemplate();
+    } else if (watermarkType === "logo") {
+      clearActiveLogoTemplate();
+    } else {
+      clearActiveTemplates();
+    }
+
     setWatermarkOpacity(value);
+    syncActivePdfPageSignature((current) => ({
+      ...current,
+      opacity: value,
+    }));
   }
 
   function handleFontSizeScaleChange(value: number) {
@@ -1732,8 +5463,19 @@ export default function WatermarkPage() {
       return;
     }
 
-    clearActiveTemplate();
+    if (watermarkType === "text") {
+      clearActiveTextTemplate();
+    } else if (watermarkType === "logo") {
+      clearActiveLogoTemplate();
+    } else {
+      clearActiveTemplates();
+    }
+
     setFontSizeScale(value);
+    syncActivePdfPageSignature((current) => ({
+      ...current,
+      fontSizeScale: value,
+    }));
   }
 
   function handleFontFamilyChange(value: string) {
@@ -1741,7 +5483,7 @@ export default function WatermarkPage() {
       return;
     }
 
-    clearActiveTemplate();
+    clearActiveTextTemplate();
     setFontFamily(value);
     void loadWatermarkFont(value, fontWeight);
   }
@@ -1751,7 +5493,7 @@ export default function WatermarkPage() {
       return;
     }
 
-    clearActiveTemplate();
+    clearActiveTextTemplate();
     setFontWeight(value);
     void loadWatermarkFont(fontFamily, value);
   }
@@ -1761,12 +5503,21 @@ export default function WatermarkPage() {
       return;
     }
 
-    clearActiveTemplate();
+    clearActiveTextTemplate();
     setTextColor(value);
   }
 
-  function clearActiveTemplate() {
-    setActiveTemplate(null);
+  function clearActiveTextTemplate() {
+    setActiveTextTemplate(null);
+  }
+
+  function clearActiveLogoTemplate() {
+    setActiveLogoTemplate(null);
+  }
+
+  function clearActiveTemplates() {
+    clearActiveTextTemplate();
+    clearActiveLogoTemplate();
   }
 
   function shouldIgnoreManualSettingsChange() {
@@ -1777,6 +5528,18 @@ export default function WatermarkPage() {
     textLayers.find((layer) => layer.id === activeTextLayerId) ?? textLayers[0];
   const activeLogoLayer =
     logoLayers.find((layer) => layer.id === activeLogoLayerId) ?? logoLayers[0];
+  const activePlacementSignatureKind =
+    mediaKind === "pdf" &&
+    activePdfPageId &&
+    activeSignaturePlacementId
+      ? (savedSignatures.find(
+          (signature) =>
+            signature.id ===
+            pdfPageSignatures[activePdfPageId]?.find(
+              (placement) => placement.id === activeSignaturePlacementId,
+            )?.signatureId,
+        )?.kind ?? null)
+      : null;
 
   function syncLegacyFromTextLayer(layer: TextWatermarkLayer) {
     setWatermarkText(layer.text);
@@ -1835,17 +5598,37 @@ export default function WatermarkPage() {
     }
 
     setCustomPosition(position);
+    syncActivePdfPageSignature((current) => ({
+      ...current,
+      customPosition: position,
+    }));
   }
 
   function updateTextLayer(
     layerId: string,
     patch: Partial<TextWatermarkLayer>,
   ) {
-    clearActiveTemplate();
+    clearActiveTextTemplate();
+    const isAssigningVisibility =
+      typeof patch.visibleFromSeconds === "number" ||
+      typeof patch.visibleUntilSeconds === "number";
+
     setTextLayers((layers) =>
-      layers.map((layer) =>
-        layer.id === layerId ? { ...layer, ...patch } : layer,
-      ),
+      layers.map((layer) => {
+        if (layer.id === layerId) {
+          return { ...layer, ...patch };
+        }
+
+        if (isAssigningVisibility) {
+          return {
+            ...layer,
+            visibleFromSeconds: undefined,
+            visibleUntilSeconds: undefined,
+          };
+        }
+
+        return layer;
+      }),
     );
   }
 
@@ -1853,7 +5636,7 @@ export default function WatermarkPage() {
     layerId: string,
     patch: Partial<LogoWatermarkLayer>,
   ) {
-    clearActiveTemplate();
+    clearActiveLogoTemplate();
     setLogoLayers((layers) =>
       layers.map((layer) =>
         layer.id === layerId ? { ...layer, ...patch } : layer,
@@ -1869,6 +5652,7 @@ export default function WatermarkPage() {
     const nextLayer = createDefaultTextLayer();
     setTextLayers((layers) => [...layers, nextLayer]);
     setActiveTextLayerId(nextLayer.id);
+    syncLegacyFromTextLayer(nextLayer);
     setIsWatermarkHovering(false);
   }
 
@@ -1926,6 +5710,8 @@ export default function WatermarkPage() {
       activeLogoLayerId,
       activeTextLayerId,
       backgroundRemovedLogoImage: activeLogoLayer.backgroundRemovedLogoImage,
+      blurBrushSize,
+      blurStrokes: cloneBlurStrokes(blurStrokes),
       customPosition: activeTextLayer.customPosition
         ? { ...activeTextLayer.customPosition }
         : null,
@@ -1936,6 +5722,15 @@ export default function WatermarkPage() {
       logoImage: activeLogoLayer.logoImage,
       logoLayers: logoLayers.map((layer) => ({ ...layer })),
       originalLogoImage: activeLogoLayer.originalLogoImage,
+      pdfDocumentTool: mediaKind === "pdf" ? pdfDocumentTool : undefined,
+      pdfPageFillMap:
+        mediaKind === "pdf"
+          ? serializePdfPageFillMap(getPdfPageFillMapWithActivePersisted())
+          : undefined,
+      pdfPageSignatures:
+        mediaKind === "pdf"
+          ? serializePdfPageSignatureMap(getPdfPageSignaturesWithActivePersisted())
+          : undefined,
       textLayers: textLayers.map((layer) => ({ ...layer })),
       tileAngle,
       tileDensity,
@@ -2022,7 +5817,38 @@ export default function WatermarkPage() {
     setTextShadowEnabled(
       primaryTextLayer.textShadowEnabled ?? DEFAULT_TEXT_SHADOW_ENABLED,
     );
+    setBlurBrushSize(snapshot.blurBrushSize ?? "medium");
+    setBlurStrokes(cloneBlurStrokes(snapshot.blurStrokes ?? []));
     setIsWatermarkHovering(false);
+
+    if (snapshot.pdfPageSignatures) {
+      const restoredMap = deserializePdfPageSignatureMap(snapshot.pdfPageSignatures);
+      setPdfPageSignatures(restoredMap);
+
+      if (mediaKind === "pdf" && activePdfPageId) {
+        const pagePlacements = restoredMap[activePdfPageId] ?? [];
+        applyPdfPageSignaturePlacementToEditor(
+          pagePlacements[pagePlacements.length - 1] ?? null,
+        );
+      }
+    }
+
+    if (snapshot.pdfPageFillMap) {
+      const restoredFillMap = deserializePdfPageFillMap(snapshot.pdfPageFillMap);
+      setPdfPageFillMap(restoredFillMap);
+
+      if (
+        mediaKind === "pdf" &&
+        activePdfPageId &&
+        snapshot.pdfDocumentTool === "fill"
+      ) {
+        applyPdfPageFillFieldsToEditor(restoredFillMap[activePdfPageId] ?? []);
+      }
+    }
+
+    if (snapshot.pdfDocumentTool) {
+      setPdfDocumentTool(snapshot.pdfDocumentTool);
+    }
   }
 
   function applyStoredWatermarkSettingsOnMediaLoad() {
@@ -2036,23 +5862,55 @@ export default function WatermarkPage() {
       {
         ...stored,
         backgroundRemovedLogoImage: null,
+        blurBrushSize: "medium",
+        blurStrokes: [],
         logoImage: null,
         originalLogoImage: null,
       },
       { suppressHistory: true },
     );
-    setActiveTemplate(null);
-    setShowRestoredSettingsNotice(true);
+    setActiveTextTemplate(null);
+    setActiveLogoTemplate(null);
     return true;
   }
 
-  function finishMediaLoad() {
+  function openEditorPanelForMediaKind(kind: MediaKind) {
+    if (kind === "image") {
+      setActiveEditorPanel("photos");
+      setActivePhotoTool("watermark");
+      setActiveWatermarkTool("upload");
+      return;
+    }
+
+    if (kind === "pdf") {
+      setActiveEditorPanel("pdfDocs");
+      setActivePdfTool((current) =>
+        current === "merge" || current === "compress" ? current : "signFill",
+      );
+      return;
+    }
+
+    setActiveEditorPanel("video");
+    setActiveVideoTool("overview");
+  }
+
+  function finishMediaLoad(openPanelForKind?: MediaKind) {
     if (sessionRestoreRef.current) {
       void finalizeSessionRestore();
       return;
     }
 
+    if (anonymousDraftRestoreRef.current) {
+      void finalizeAnonymousDraftRestore();
+      return;
+    }
+
     applyStoredWatermarkSettingsOnMediaLoad();
+
+    if (openPanelForKind) {
+      setFormatUploadPrompt(null);
+      openEditorPanelForMediaKind(openPanelForKind);
+    }
   }
 
   async function finalizeSessionRestore() {
@@ -2070,6 +5928,8 @@ export default function WatermarkPage() {
         meta.savedSignatures.map(async (entry) => ({
           ...entry,
           image: await createImageFromDataUrl(entry.previewSrc),
+          kind: normalizeSignatureKind(entry.kind),
+          typedText: entry.typedText ?? null,
         })),
       );
       setSavedSignatures(restoredSignatures);
@@ -2095,6 +5955,8 @@ export default function WatermarkPage() {
       applyWatermarkSettingsSnapshot(
         {
           backgroundRemovedLogoImage: backgroundRemovedLogo,
+          blurBrushSize: "medium",
+          blurStrokes: [],
           customPosition: meta.customPosition,
           fontFamily: meta.watermarkSettings.fontFamily,
           fontSizeScale: meta.watermarkSettings.fontSizeScale,
@@ -2108,6 +5970,9 @@ export default function WatermarkPage() {
                 ? backgroundRemovedLogo
                 : originalLogo,
           originalLogoImage: originalLogo,
+          pdfDocumentTool: meta.pdfDocumentTool,
+          pdfPageFillMap: meta.pdfPageFillMap,
+          pdfPageSignatures: meta.pdfPageSignatures,
           tileAngle: meta.watermarkSettings.tileAngle,
           tileDensity: meta.watermarkSettings.tileDensity,
           tileGap: meta.watermarkSettings.tileGap,
@@ -2120,11 +5985,23 @@ export default function WatermarkPage() {
         { suppressHistory: true },
       );
 
-      setActiveTemplate(
+      setActiveTextTemplate(
         meta.activeTemplate as WatermarkTemplateId | null,
       );
-      setActiveEditorPanel(meta.activeEditorPanel);
-      setShowRestoredSettingsNotice(false);
+      setActiveLogoTemplate(
+        (meta.activeLogoTemplate ?? null) as LogoWatermarkTemplateId | null,
+      );
+      const restoredPanel = normalizeRestoredEditorPanel(
+        meta.activeEditorPanel,
+        meta.mediaKind,
+        meta.watermarkSettings.watermarkType,
+      );
+      setActiveEditorPanel(restoredPanel);
+      if (restoredPanel === "photos") {
+        setActivePhotoTool(normalizeRestoredPhotoTool(meta.activeEditorPanel));
+      } else if (restoredPanel === "pdfDocs") {
+        setActivePdfTool(normalizeRestoredPdfTool(meta.activeEditorPanel));
+      }
 
       if (meta.activeBatchImageId) {
         setActiveBatchImageId(meta.activeBatchImageId);
@@ -2202,11 +6079,13 @@ export default function WatermarkPage() {
       const savedSignaturesMeta = await Promise.all(
         savedSignatures.map(async (signature) => ({
           id: signature.id,
+          kind: normalizeSignatureKind(signature.kind),
           label: signature.label,
           previewSrc: signature.previewSrc.startsWith("data:")
             ? signature.previewSrc
             : await imageElementToDataUrl(signature.image),
           source: signature.source,
+          typedText: signature.typedText ?? null,
         })),
       );
 
@@ -2215,7 +6094,8 @@ export default function WatermarkPage() {
         activeEditorPanel,
         activePdfPageId,
         activeSignatureId,
-        activeTemplate,
+        activeLogoTemplate,
+        activeTemplate: activeTextTemplate,
         backgroundRemovedLogoDataUrl,
         batchEntryIds: imageBatch.map((entry) => entry.id),
         batchFileNames: imageBatch.map((entry) => entry.fileName),
@@ -2224,6 +6104,15 @@ export default function WatermarkPage() {
         logoDataUrl,
         logoFileName,
         mediaKind,
+        pdfDocumentTool: mediaKind === "pdf" ? pdfDocumentTool : undefined,
+        pdfPageFillMap:
+          mediaKind === "pdf"
+            ? serializePdfPageFillMap(getPdfPageFillMapWithActivePersisted())
+            : undefined,
+        pdfPageSignatures:
+          mediaKind === "pdf"
+            ? serializePdfPageSignatureMap(getPdfPageSignaturesWithActivePersisted())
+            : undefined,
         savedSignatures: savedSignaturesMeta,
         version: 1,
         videoDuration,
@@ -2248,18 +6137,31 @@ export default function WatermarkPage() {
       {
         ...defaults,
         backgroundRemovedLogoImage: null,
+        blurBrushSize: "medium",
+        blurStrokes: [],
         logoImage: null,
         originalLogoImage: null,
       },
       { suppressHistory: true },
     );
-    setActiveTemplate(null);
-    setShowRestoredSettingsNotice(false);
+    setActiveTextTemplate(null);
+    setActiveLogoTemplate(null);
     setExportNotice("");
     setExportError("");
+
+    if (mediaKind === "pdf" && pdfPageCount > 0) {
+      setPdfPageSignatures(createEmptyPdfPageSignatureMap(pdfPageCount));
+      setPdfPageFillMap(createEmptyPdfPageFillMap(pdfPageCount));
+      setPdfDocumentTool("signature");
+      setActiveFillFieldId(null);
+      applyPdfPageSignaturePlacementToEditor(null);
+    }
+
     commitSettingsHistorySnapshot({
       ...defaults,
       backgroundRemovedLogoImage: null,
+      blurBrushSize: "medium",
+      blurStrokes: [],
       logoImage: null,
       originalLogoImage: null,
     });
@@ -2313,7 +6215,7 @@ export default function WatermarkPage() {
     setIsSavingPreset(false);
   }
 
-  function applyTemplate(template: WatermarkTemplate) {
+  function applyTextTemplate(template: WatermarkTemplate) {
     if (settingsHistoryTimerRef.current) {
       clearTimeout(settingsHistoryTimerRef.current);
       settingsHistoryTimerRef.current = null;
@@ -2354,13 +6256,74 @@ export default function WatermarkPage() {
       watermarkMode: template.mode,
       watermarkOpacity: template.opacity,
       watermarkPosition: template.position,
+      watermarkType: "text",
     };
 
     commitSettingsHistorySnapshot(currentSnapshot);
     applyWatermarkSettingsSnapshot(templateSnapshot, { suppressHistory: true });
     commitSettingsHistorySnapshot(templateSnapshot);
     isApplyingSettingsHistoryRef.current = false;
-    setActiveTemplate(template.id);
+    setActiveTextTemplate(template.id);
+    setIsWatermarkHovering(false);
+  }
+
+  function applyLogoTemplate(template: LogoWatermarkTemplate) {
+    if (settingsHistoryTimerRef.current) {
+      clearTimeout(settingsHistoryTimerRef.current);
+      settingsHistoryTimerRef.current = null;
+    }
+
+    shouldIgnoreManualSettingsRef.current = true;
+
+    if (manualSettingsGuardTimerRef.current) {
+      clearTimeout(manualSettingsGuardTimerRef.current);
+    }
+
+    manualSettingsGuardTimerRef.current = setTimeout(() => {
+      shouldIgnoreManualSettingsRef.current = false;
+      manualSettingsGuardTimerRef.current = null;
+    }, 500);
+
+    const currentSnapshot = getWatermarkSettingsSnapshot();
+    const templateSnapshot: WatermarkSettingsSnapshot = {
+      ...currentSnapshot,
+      customPosition: null,
+      fontSizeScale: template.fontSizeScale,
+      logoLayers: currentSnapshot.logoLayers?.map((layer) =>
+        layer.id === currentSnapshot.activeLogoLayerId
+          ? {
+              ...layer,
+              customPosition: null,
+              fontSizeScale: template.fontSizeScale,
+              opacity: template.opacity,
+              watermarkPosition: template.position,
+            }
+          : layer,
+      ),
+      tileAngle: template.tileAngle,
+      tileDensity: template.density,
+      tileGap: template.tileGap,
+      watermarkMode: template.mode,
+      watermarkOpacity: template.opacity,
+      watermarkPosition: template.position,
+      watermarkType: "logo",
+    };
+
+    commitSettingsHistorySnapshot(currentSnapshot);
+    applyWatermarkSettingsSnapshot(templateSnapshot, { suppressHistory: true });
+    commitSettingsHistorySnapshot(templateSnapshot);
+    isApplyingSettingsHistoryRef.current = false;
+
+    const updatedLogoLayer =
+      templateSnapshot.logoLayers?.find(
+        (layer) => layer.id === templateSnapshot.activeLogoLayerId,
+      ) ?? templateSnapshot.logoLayers?.[0];
+
+    if (updatedLogoLayer) {
+      syncLegacyFromLogoLayer(updatedLogoLayer);
+    }
+
+    setActiveLogoTemplate(template.id);
     setIsWatermarkHovering(false);
   }
 
@@ -2370,18 +6333,21 @@ export default function WatermarkPage() {
     }
 
     setIsExporting(true);
+    setIsExportPreparing(true);
     setExportProgress(null);
 
     const exportId = createExportId();
     const fileType = getCurrentExportFileType();
-    const auth = await resolveExportAuthorization({
-      exportId,
-      fileMeta: { photoCount: 1 },
-      fileType,
-    });
-    applyAuthorizeNotice(auth);
 
     try {
+      const auth = await resolveExportAuthorization({
+        exportId,
+        fileMeta: { photoCount: 1 },
+        fileType,
+      });
+      applyAuthorizeNotice(auth);
+      setIsExportPreparing(false);
+
       const blob = await exportImageToBlob(
         await getExportRenderInputForAuth(
           image,
@@ -2402,24 +6368,24 @@ export default function WatermarkPage() {
       setUploadError("We could not export that image. Please try again.");
     } finally {
       setIsExporting(false);
+      setIsExportPreparing(false);
     }
   }
 
   function handleExport() {
+    logRealVideoExport("STEP 2/15: handleExport() called", {
+      isExporting,
+      mediaKind,
+    });
+
     if (isExporting) {
       return;
     }
 
-    if (shouldShowWatermarkedExportUpsell(getWatermarkedExportUpsellContext())) {
-      pendingExportRef.current = proceedWithExport;
-      setShowWatermarkedExportUpsell(true);
-      return;
-    }
-
-    proceedWithExport();
+    void beginExportWithLoginGate();
   }
 
-  async function handlePdfExport() {
+  async function handlePdfExport(skipUnsignedConfirm = false) {
     if (!pdfBytesRef.current || pdfPageCount === 0) {
       setExportError("Reload the PDF before exporting.");
       return;
@@ -2448,29 +6414,90 @@ export default function WatermarkPage() {
       return;
     }
 
-    if (watermarkType === "signature" && !logoImage) {
-      setExportError("Add a signature before exporting.");
+    const exportSignatureMapPreview = getPdfPageSignaturesWithActivePersisted();
+    const exportFillMapPreview = getPdfPageFillMapWithActivePersisted();
+    const signedCount = countSignedPdfPages(exportSignatureMapPreview);
+    const hasFillContent = hasAnyFillFields(exportFillMapPreview);
+    const hasWatermarkContent = hasPdfWatermarkExportContent(
+      getPdfWatermarkSettings(),
+    );
+
+    if (
+      !hasWatermarkContent &&
+      !hasFillContent &&
+      signedCount === 0 &&
+      !skipUnsignedConfirm
+    ) {
+      setShowUnsignedPdfExportConfirm(true);
       return;
     }
 
     setUploadError("");
     setExportError("");
     setIsExporting(true);
+    setIsExportPreparing(true);
     setPdfExportProgress({ current: 0, total: pdfPageCount });
 
     const exportId = createExportId();
-    const auth = await resolvePdfExportAuthorization(exportId);
-    applyAuthorizeNotice(auth);
-
-    const watermarkInput = isCleanExportTier(auth.tier)
-      ? getPdfWatermarkSettings()
-      : await applyForcedTileWatermarkSettings(getPdfWatermarkSettings());
+    const exportSignatureMap = getPdfPageSignaturesWithActivePersisted();
+    const exportFillMap = getPdfPageFillMapWithActivePersisted();
 
     try {
+      const auth = await resolvePdfExportAuthorization(exportId);
+
+      if (
+        (hasFillContent ||
+          signedCount > 0 ||
+          hasWatermarkContent) &&
+        !isCleanExportTier(auth.tier)
+      ) {
+        throw new ExportCreditCheckError(
+          "This PDF export requires sufficient credits. Add credits or remove paid sign-and-fill content, then try again.",
+        );
+      }
+
+      applyAuthorizeNotice(auth);
+      setIsExportPreparing(false);
+
+      const watermarkInput = isCleanExportTier(auth.tier)
+        ? getPdfWatermarkSettings()
+        : await applyForcedTileWatermarkSettings(getPdfWatermarkSettings());
+
       const exportedBytes = await exportWatermarkedPdf(
         pdfBytesRef.current,
-        async (_pageIndex, pageWidth, pageHeight) => {
-          if (watermarkInput.watermarkMode === "tile") {
+        async (pageIndex, pageWidth, pageHeight) => {
+          const pageId = buildPdfPageId(pageIndex + 1);
+          const pagePlacements = exportSignatureMap[pageId] ?? [];
+          const pageFillFields = exportFillMap[pageId] ?? [];
+          const hasPageFillContent = pageFillFields.some((field) =>
+            field.text.trim(),
+          );
+          const pageSignatures = pagePlacements.flatMap((pagePlacement) => {
+            const signature = savedSignatures.find(
+              (entry) => entry.id === pagePlacement.signatureId,
+            );
+
+            if (!signature) {
+              return [];
+            }
+
+            return [
+              {
+                customPosition: pagePlacement.customPosition,
+                fontSizeScale: pagePlacement.fontSizeScale,
+                id: pagePlacement.id,
+                image: signature.image,
+                opacity: pagePlacement.opacity,
+                watermarkPosition: pagePlacement.watermarkPosition,
+              },
+            ];
+          });
+
+          if (
+            watermarkInput.watermarkMode === "tile" &&
+            !hasPageFillContent &&
+            !hasForcedWatermarkOverlay(watermarkInput)
+          ) {
             return buildPdfTilePageWatermark(
               pageWidth,
               pageHeight,
@@ -2480,8 +6507,10 @@ export default function WatermarkPage() {
 
           const overlayCanvas = renderWatermarkOverlayForPdfPage({
             canvasSize,
+            pageFillFields,
             pageHeight,
             pageWidth,
+            pageSignatures,
             ...watermarkInput,
           });
 
@@ -2511,10 +6540,17 @@ export default function WatermarkPage() {
       if (isCleanExportTier(auth.tier)) {
         await finalizeCleanExportBilling(auth);
       }
-    } catch {
-      setExportError("We could not export that PDF. Please try again.");
+    } catch (error) {
+      if (error instanceof ExportCreditCheckError) {
+        setExportError(error.message);
+      } else if (error instanceof ExportAuthorizationRequiredError) {
+        setExportError(error.message);
+      } else {
+        setExportError("We could not export that PDF. Please try again.");
+      }
     } finally {
       setIsExporting(false);
+      setIsExportPreparing(false);
       setPdfExportProgress(null);
     }
   }
@@ -2532,12 +6568,23 @@ export default function WatermarkPage() {
   }
 
   async function handleVideoExport() {
+    logRealVideoExport("STEP 6/15: handleVideoExport() entered", {
+      creditBalance,
+      exportVideoDuration,
+      fileName,
+      videoDuration,
+      videoFileSize,
+      videoSize,
+      watermarkType,
+    });
+
     if (!videoUrl || !videoSize) {
       setExportError("Reload the video before exporting.");
       return;
     }
 
     if (
+      !hasVideoBlurToExport() &&
       watermarkType === "text" &&
       !textLayers.some((layer) => layer.text.trim()) &&
       watermarkMode === "single"
@@ -2547,6 +6594,7 @@ export default function WatermarkPage() {
     }
 
     if (
+      !hasVideoBlurToExport() &&
       watermarkType === "text" &&
       watermarkMode === "tile" &&
       !activeTextLayer.text.trim()
@@ -2555,12 +6603,20 @@ export default function WatermarkPage() {
       return;
     }
 
-    if (watermarkType === "logo" && !logoLayers.some((layer) => layer.logoImage)) {
+    if (
+      !hasVideoBlurToExport() &&
+      watermarkType === "logo" &&
+      !logoLayers.some((layer) => layer.logoImage)
+    ) {
       setExportError("Upload a logo before exporting.");
       return;
     }
 
-    if (watermarkType === "signature" && !logoImage) {
+    if (
+      !hasVideoBlurToExport() &&
+      watermarkType === "signature" &&
+      !logoImage
+    ) {
       setExportError("Add a signature before exporting.");
       return;
     }
@@ -2577,28 +6633,9 @@ export default function WatermarkPage() {
     const abortSignal = videoExportAbortControllerRef.current.signal;
 
     const exportId = createExportId();
-    const fileType = getCurrentExportFileType();
-    const fileMeta: ExportFileMeta = {
-      durationSeconds: videoDuration,
-    };
-    const auth = await resolveExportAuthorization({
-      exportId,
-      fileMeta,
-      fileType,
-    });
-    applyAuthorizeNotice(auth);
-
-    const watermarkSettings = isCleanExportTier(auth.tier)
-      ? getVideoWatermarkSettings()
-      : await applyForcedTileWatermarkSettings(getVideoWatermarkSettings());
+    const fileMeta = getVideoExportFileMeta();
 
     try {
-      const overlayCanvas = renderWatermarkOverlayCanvas({
-        ...watermarkSettings,
-        height: videoSize.height,
-        width: videoSize.width,
-      });
-      const overlayPngBytes = await canvasToPngBytes(overlayCanvas);
       const videoResponse = await fetch(videoUrl);
 
       if (!videoResponse.ok) {
@@ -2610,26 +6647,190 @@ export default function WatermarkPage() {
       const videoBlob = await videoResponse.blob();
       const effectiveFileSize = videoFileSize || videoBlob.size;
       const exportRoute = getVideoExportRoute(
-        videoDuration,
+        exportVideoDuration,
         videoSize.width,
         videoSize.height,
         effectiveFileSize,
       );
 
+      logRealVideoExport("STEP 7/15: export route computed", {
+        effectiveFileSize,
+        exportRoute,
+        exportVideoDuration,
+        height: videoSize.height,
+        width: videoSize.width,
+      });
+
       if (exportRoute === "reject") {
         throw new VideoExportFailedError(getVideoExportRejectionMessage());
       }
 
-      setIsServerVideoExport(exportRoute === "server");
+      const auth = await resolveVideoExportAuthorization({
+        exportId,
+        exportRoute,
+        fileMeta: {
+          ...fileMeta,
+          fileSizeBytes: effectiveFileSize,
+        },
+      });
+      applyAuthorizeNotice(auth);
+
+      logRealVideoExport("STEP 8/15: export authorization resolved", {
+        authBalance: auth.balance ?? null,
+        authCost: auth.cost ?? null,
+        authReason: auth.reason ?? null,
+        authTier: auth.tier,
+        creditBalanceState: creditBalance,
+        exportRoute,
+        isCleanExportTier: isCleanExportTier(auth.tier),
+      });
+
+      const applyStaticFreeExportStamp =
+        exportRoute === "client" && !isCleanExportTier(auth.tier);
+
+      const watermarkSettings = getVideoWatermarkSettings();
+
+      logRealVideoExport("STEP 9/15: watermark settings prepared for overlay", {
+        applyStaticFreeExportStamp,
+        settings: summarizeWatermarkSettingsForExportLog(watermarkSettings),
+      });
+
+      if (exportVideoDuration <= 0) {
+        throw new VideoExportFailedError(
+          "Set a valid export length on the trim timeline.",
+        );
+      }
+
+      if (
+        !areVideoTrimRangesEqual(
+          videoTrimStartSeconds,
+          videoTrimEndSeconds,
+          videoTrimAppliedStartSeconds,
+          videoTrimAppliedEndSeconds,
+          videoDuration,
+        )
+      ) {
+        throw new VideoExportFailedError(
+          "Apply your shorten on the timeline before exporting the video.",
+        );
+      }
+
+      if (
+        exportRoute === "long-server" &&
+        (resolvedAppliedVideoTrim.startSeconds > 0 ||
+          resolvedAppliedVideoTrim.endSeconds < videoDuration - 0.05)
+      ) {
+        throw new VideoExportFailedError(
+          "Trim is not supported yet for long server exports. Export a shorter source video or use the full length.",
+        );
+      }
+
+      const timedLayerCount = countVideoVisibilityRanges(
+        watermarkSettings.textLayers,
+      );
+
+      if (timedLayerCount > 1) {
+        throw new VideoExportFailedError(
+          "Only one text watermark can have a visibility time range per export.",
+        );
+      }
+
+      if (timedLayerCount > 0 && exportRoute !== "client") {
+        throw new VideoExportFailedError(
+          "Timed text watermarks are available for in-browser export on videos up to 60 seconds. Server export support is coming soon.",
+        );
+      }
+
+      if (hasVideoBlurToExport() && exportRoute !== "client") {
+        throw new VideoExportFailedError(
+          "Timed video blur is available for in-browser export on videos up to 60 seconds. Server export support is coming soon.",
+        );
+      }
+
+      logRealVideoExport("STEP 10/15: building client overlay passes", {
+        durationSeconds: videoDuration,
+        height: videoSize.height,
+        settings: summarizeWatermarkSettingsForExportLog(watermarkSettings),
+        width: videoSize.width,
+      });
+
+      const clientOverlayPasses = await buildClientVideoOverlayPasses({
+        applyStaticFreeExportStamp,
+        durationSeconds: videoDuration,
+        height: videoSize.height,
+        settings: watermarkSettings,
+        videoBlurRegions,
+        videoCaptionLayers: captionsMasterEnabled
+          ? videoCaptionLayers
+          : undefined,
+        videoElement: videoElementRef.current,
+        width: videoSize.width,
+      });
+      const overlayPngBytes = clientOverlayPasses[0]?.overlayPngBytes;
+
+      logRealVideoExport("STEP 12/15: overlay passes built", {
+        overlayPassSummaries: await Promise.all(
+          clientOverlayPasses.map(async (pass, index) => ({
+            index,
+            overlayPngByteLength: pass.overlayPngBytes.byteLength,
+            overlaySample: await sampleOverlayPngBytesCenter(
+              pass.overlayPngBytes,
+              videoSize.width,
+              videoSize.height,
+            ),
+            visibleFromSeconds: pass.visibleFromSeconds ?? null,
+            visibleUntilSeconds: pass.visibleUntilSeconds ?? null,
+          })),
+        ),
+        passCount: clientOverlayPasses.length,
+        settings: summarizeWatermarkSettingsForExportLog(watermarkSettings),
+      });
+
+      if (!overlayPngBytes) {
+        throw new VideoExportFailedError(
+          "Could not prepare the watermark overlay for export.",
+        );
+      }
+
+      setIsServerVideoExport(isServerSideVideoExportRoute(exportRoute));
+      setLongVideoProcessingDetail(null);
+
+      const overlaySampleBeforeEncode = await sampleOverlayPngBytesCenter(
+        overlayPngBytes,
+        videoSize.width,
+        videoSize.height,
+      );
+
+      logRealVideoExport("STEP 13/15: overlay PNG sampled immediately before encode", {
+        overlaySampleBeforeEncode,
+        settings: summarizeWatermarkSettingsForExportLog(watermarkSettings),
+      });
+
+      const encodePath =
+        exportRoute === "long-server"
+          ? "long-server"
+          : exportRoute === "server"
+            ? "server"
+            : "client-ffmpeg";
+
+      logRealVideoExport("STEP 14/15: starting video encode", {
+        encodePath,
+        exportRoute,
+        overlayPassCount: clientOverlayPasses.length,
+        primaryOverlayPngByteLength: overlayPngBytes.byteLength,
+        settings: summarizeWatermarkSettingsForExportLog(watermarkSettings),
+      });
 
       const exportedBlob =
-        exportRoute === "server"
-          ? await exportVideoOnServer({
+        exportRoute === "long-server"
+          ? await exportLongVideoOnServer({
               abortSignal,
               duration: videoDuration,
+              exportId,
               fileSizeBytes: effectiveFileSize,
               height: videoSize.height,
               inputFileName: fileName,
+              onProcessingDetailChange: setLongVideoProcessingDetail,
               onProgress: setExportProgress,
               onStageChange: setExportServerStage,
               overlayPngBytes,
@@ -2637,11 +6838,30 @@ export default function WatermarkPage() {
               videoBlob,
               width: videoSize.width,
             })
+          : exportRoute === "server"
+          ? await exportVideoOnServer({
+              abortSignal,
+              duration: exportVideoDuration,
+              exportId,
+              fileSizeBytes: effectiveFileSize,
+              height: videoSize.height,
+              inputFileName: fileName,
+              onProgress: setExportProgress,
+              onStageChange: setExportServerStage,
+              overlayPngBytes,
+              shouldCancel: () => videoExportCancelRef.current,
+              trimEndSeconds: resolvedAppliedVideoTrim.endSeconds,
+              trimStartSeconds: resolvedAppliedVideoTrim.startSeconds,
+              videoBlob,
+              width: videoSize.width,
+            })
           : await exportVideoWithOverlay({
               inputFileName: fileName,
               onProgress: setExportProgress,
-              overlayPngBytes,
+              overlayPasses: clientOverlayPasses,
               shouldCancel: () => videoExportCancelRef.current,
+              trimEndSeconds: resolvedAppliedVideoTrim.endSeconds,
+              trimStartSeconds: resolvedAppliedVideoTrim.startSeconds,
               videoSource: videoBlob,
             });
 
@@ -2660,13 +6880,26 @@ export default function WatermarkPage() {
       URL.revokeObjectURL(objectUrl);
       setExportProgress(100);
 
+      logRealVideoExport("STEP 15/15: video encode finished and download triggered", {
+        encodePath,
+        exportedBlobByteLength: exportedBlob.size,
+        exportedBlobType: exportedBlob.type,
+      });
+
       if (isCleanExportTier(auth.tier)) {
         await finalizeCleanExportBilling(auth);
       }
     } catch (error) {
+      logRealVideoExport("STEP ERROR: handleVideoExport() failed", {
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
+
       if (videoExportCancelRef.current || error instanceof VideoExportCancelledError) {
         setExportError("");
         setExportNotice((current) => current || "Export cancelled.");
+      } else if (error instanceof ExportCreditCheckError) {
+        setExportError(error.message);
       } else if (error instanceof VideoExportTimeoutError) {
         setExportError(error.message);
       } else if (error instanceof VideoExportFailedError) {
@@ -2680,6 +6913,7 @@ export default function WatermarkPage() {
       setIsExporting(false);
       setExportProgress(null);
       setExportServerStage(null);
+      setLongVideoProcessingDetail(null);
       setIsServerVideoExport(false);
       videoExportCancelRef.current = false;
       videoExportAbortControllerRef.current = null;
@@ -2700,6 +6934,7 @@ export default function WatermarkPage() {
 
     if (!validation.ok) {
       setUploadError(validation.error);
+      resolvePendingDraftRestore();
       return;
     }
 
@@ -2731,7 +6966,112 @@ export default function WatermarkPage() {
     loadMediaFiles([file]);
   }
 
+  function isVideoCaptionInteractionActive() {
+    return (
+      mediaKind === "video" &&
+      activeEditorPanel === "video" &&
+      activeVideoTool === "caption" &&
+      captionsMasterEnabled
+    );
+  }
+
+  function setCaptionLayerCustomPosition(
+    layerId: string,
+    canvas: HTMLCanvasElement,
+    point: { x: number; y: number },
+  ) {
+    updateVideoCaptionLayer(layerId, {
+      customPosition: {
+        xPercent: clamp(point.x / canvas.width, 0, 1),
+        yPercent: clamp(point.y / canvas.height, 0, 1),
+      },
+    });
+  }
+
+  function findCaptionLayerAtPoint(point: { x: number; y: number }) {
+    const boundsMap = captionBoundsRef.current;
+    const activeBounds = boundsMap.get(activeVideoCaptionLayerId);
+
+    if (activeBounds && isPointInBounds(point, activeBounds)) {
+      return activeVideoCaptionLayerId;
+    }
+
+    for (const layer of [...videoCaptionLayers].reverse()) {
+      if (layer.id === activeVideoCaptionLayerId) {
+        continue;
+      }
+
+      const bounds = boundsMap.get(layer.id);
+
+      if (bounds && isPointInBounds(point, bounds)) {
+        return layer.id;
+      }
+    }
+
+    return null;
+  }
+
+  function isPointerOverCaption(point: { x: number; y: number } | null) {
+    if (!point) {
+      return false;
+    }
+
+    return findCaptionLayerAtPoint(point) !== null;
+  }
+
   function handleCanvasPointerDown(event: PointerEvent<HTMLCanvasElement>) {
+    if (isVideoBlurInteractionActive()) {
+      handleVideoBlurPointerDown(event);
+      return;
+    }
+
+    if (isVideoCaptionInteractionActive()) {
+      const point = getCanvasPoint(event);
+      const hitLayerId = point ? findCaptionLayerAtPoint(point) : null;
+
+      if (hitLayerId && point) {
+        event.preventDefault();
+        isDraggingCaptionRef.current = true;
+        draggingCaptionLayerIdRef.current = hitLayerId;
+        setIsDraggingCaption(true);
+        setIsCaptionHovering(true);
+
+        if (hitLayerId !== activeVideoCaptionLayerId) {
+          setActiveVideoCaptionLayerId(hitLayerId);
+        }
+
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setCaptionLayerCustomPosition(hitLayerId, event.currentTarget, point);
+        return;
+      }
+
+      setIsCaptionHovering(false);
+
+      if (tryBeginPreviewPan(event)) {
+        return;
+      }
+
+      if (mediaKind === "video") {
+        forwardPointerEventToElementBelow(event);
+      }
+
+      return;
+    }
+
+    if (mediaKind === "pdf" && pdfDocumentTool === "fill" && isPdfSignFillMode()) {
+      handleFillFieldPointerDown(event);
+      return;
+    }
+
+    if (
+      mediaKind === "pdf" &&
+      pdfDocumentTool === "signature" &&
+      isPdfSignFillMode()
+    ) {
+      handleSignaturePlacementPointerDown(event);
+      return;
+    }
+
     if (activeImageTool === "crop") {
       handleCropPointerDown(event);
       return;
@@ -2742,7 +7082,29 @@ export default function WatermarkPage() {
       return;
     }
 
+    if (activeImageTool === "blur") {
+      handleBlurPointerDown(event);
+      return;
+    }
+
+    if (
+      mediaKind === "video" &&
+      activeEditorPanel === "video" &&
+      !isVideoWatermarkInteractionActive()
+    ) {
+      if (tryBeginPreviewPan(event)) {
+        return;
+      }
+
+      forwardPointerEventToElementBelow(event);
+      return;
+    }
+
     if (watermarkMode === "tile") {
+      if (tryBeginPreviewPan(event)) {
+        return;
+      }
+
       setIsWatermarkHovering(false);
       if (mediaKind === "video") {
         forwardPointerEventToElementBelow(event);
@@ -2766,7 +7128,11 @@ export default function WatermarkPage() {
         event.preventDefault();
         isDraggingRef.current = true;
         draggingLayerIdRef.current = layer.id;
-        clearActiveTemplate();
+        if (watermarkType === "text") {
+          clearActiveTextTemplate();
+        } else if (watermarkType === "logo") {
+          clearActiveLogoTemplate();
+        }
         setIsDraggingWatermark(true);
         setIsWatermarkHovering(true);
         setShowWatermarkDragHint(false);
@@ -2792,6 +7158,10 @@ export default function WatermarkPage() {
     const bounds = textBoundsRef.current;
 
     if (!point || !bounds || !isPointInBounds(point, bounds)) {
+      if (tryBeginPreviewPan(event)) {
+        return;
+      }
+
       setIsWatermarkHovering(false);
       if (mediaKind === "video") {
         forwardPointerEventToElementBelow(event);
@@ -2807,7 +7177,11 @@ export default function WatermarkPage() {
         : watermarkType === "logo"
           ? activeLogoLayerId
           : null;
-    clearActiveTemplate();
+    if (watermarkType === "text") {
+      clearActiveTextTemplate();
+    } else if (watermarkType === "logo") {
+      clearActiveLogoTemplate();
+    }
     setIsDraggingWatermark(true);
     setIsWatermarkHovering(true);
     setShowWatermarkDragHint(false);
@@ -2820,6 +7194,55 @@ export default function WatermarkPage() {
   }
 
   function handleCanvasPointerMove(event: PointerEvent<HTMLCanvasElement>) {
+    if (isVideoBlurInteractionActive()) {
+      handleVideoBlurPointerMove(event);
+      return;
+    }
+
+    if (
+      mediaKind === "pdf" &&
+      pdfDocumentTool === "fill" &&
+      isPdfSignFillMode()
+    ) {
+      handleFillFieldPointerMove(event);
+      return;
+    }
+
+    if (
+      mediaKind === "pdf" &&
+      pdfDocumentTool === "signature" &&
+      isPdfSignFillMode()
+    ) {
+      handleSignaturePlacementPointerMove(event);
+      return;
+    }
+
+    if (updatePreviewPan(event)) {
+      return;
+    }
+
+    if (isDraggingCaptionRef.current) {
+      const point = getCanvasPoint(event);
+
+      if (!point || !draggingCaptionLayerIdRef.current) {
+        return;
+      }
+
+      event.preventDefault();
+      setCaptionLayerCustomPosition(
+        draggingCaptionLayerIdRef.current,
+        event.currentTarget,
+        point,
+      );
+      return;
+    }
+
+    if (isVideoCaptionInteractionActive()) {
+      const point = getCanvasPoint(event);
+      setIsCaptionHovering(isPointerOverCaption(point));
+      return;
+    }
+
     if (activeImageTool === "crop") {
       handleCropPointerMove(event);
       return;
@@ -2827,6 +7250,11 @@ export default function WatermarkPage() {
 
     if (activeImageTool === "resize") {
       handleResizePointerMove(event);
+      return;
+    }
+
+    if (activeImageTool === "blur") {
+      handleBlurPointerMove(event);
       return;
     }
 
@@ -2860,6 +7288,44 @@ export default function WatermarkPage() {
   }
 
   function handleCanvasPointerUp(event: PointerEvent<HTMLCanvasElement>) {
+    if (
+      mediaKind === "pdf" &&
+      pdfDocumentTool === "fill" &&
+      isPdfSignFillMode()
+    ) {
+      handleFillFieldPointerUp(event);
+      return;
+    }
+
+    if (
+      mediaKind === "pdf" &&
+      pdfDocumentTool === "signature" &&
+      isPdfSignFillMode()
+    ) {
+      handleSignaturePlacementPointerUp(event);
+      return;
+    }
+
+    if (endPreviewPan(event)) {
+      return;
+    }
+
+    if (isDraggingCaptionRef.current) {
+      event.preventDefault();
+      isDraggingCaptionRef.current = false;
+      draggingCaptionLayerIdRef.current = null;
+      setIsDraggingCaption(false);
+
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+
+      setIsCaptionHovering(
+        isPointerOverCaption(getCanvasPoint(event)),
+      );
+      return;
+    }
+
     if (activeImageTool === "crop") {
       handleCropPointerUp(event);
       return;
@@ -2867,6 +7333,16 @@ export default function WatermarkPage() {
 
     if (activeImageTool === "resize") {
       handleResizePointerUp(event);
+      return;
+    }
+
+    if (activeImageTool === "blur") {
+      handleBlurPointerUp(event);
+      return;
+    }
+
+    if (isVideoBlurInteractionActive()) {
+      handleVideoBlurPointerUp(event);
       return;
     }
 
@@ -2893,7 +7369,36 @@ export default function WatermarkPage() {
   }
 
   function handleCanvasPointerLeave() {
-    if (activeImageTool === "crop" || activeImageTool === "resize") {
+    if (mediaKind === "pdf" && pdfDocumentTool === "fill") {
+      if (!fillDragRef.current) {
+        setIsFillFieldHovering(false);
+        setFillHoverResizeHandle(null);
+        setFillHoverFrameAction(null);
+      }
+
+      return;
+    }
+
+    if (
+      mediaKind === "pdf" &&
+      pdfDocumentTool === "signature" &&
+      isPdfSignFillMode()
+    ) {
+      if (!signatureDragRef.current) {
+        setIsSignaturePlacementHovering(false);
+        setSignatureHoverResizeHandle(null);
+        setSignatureHoverFrameAction(null);
+      }
+
+      return;
+    }
+
+    if (
+      activeImageTool === "crop" ||
+      activeImageTool === "resize" ||
+      activeImageTool === "blur" ||
+      isVideoBlurInteractionActive()
+    ) {
       return;
     }
 
@@ -2901,18 +7406,38 @@ export default function WatermarkPage() {
       setIsWatermarkHovering(false);
       setShowWatermarkDragHint(false);
       setWatermarkDragHintPos(null);
+
+      if (isVideoCaptionInteractionActive()) {
+        setIsCaptionHovering(false);
+      }
     }
   }
 
   function handleCanvasPointerCancel(event: PointerEvent<HTMLCanvasElement>) {
     cropDragRef.current = null;
     resizeDragRef.current = null;
+    blurDragRef.current = null;
+    videoBlurDragRef.current = null;
+    fillDragRef.current = null;
+    signatureDragRef.current = null;
     isDraggingRef.current = false;
     draggingLayerIdRef.current = null;
+    isDraggingCaptionRef.current = false;
+    draggingCaptionLayerIdRef.current = null;
     setIsDraggingWatermark(false);
+    setIsDraggingCaption(false);
+    setIsFillFieldHovering(false);
+    setFillHoverFrameAction(null);
+    setFillHoverResizeHandle(null);
+    setIsSignaturePlacementHovering(false);
+    setSignatureHoverFrameAction(null);
+    setSignatureHoverResizeHandle(null);
     setIsWatermarkHovering(false);
+    setIsCaptionHovering(false);
     setShowWatermarkDragHint(false);
     setWatermarkDragHintPos(null);
+    previewPanDragRef.current = null;
+    setIsPreviewPanning(false);
 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -2964,6 +7489,7 @@ export default function WatermarkPage() {
   ) {
     if (
       activeImageTool === "crop" ||
+      activeImageTool === "blur" ||
       watermarkMode !== "single" ||
       !hasMedia ||
       !hasDraggableWatermarkContent() ||
@@ -3035,6 +7561,10 @@ export default function WatermarkPage() {
     };
 
     cropDragRef.current = {
+      aspectRatio:
+        isCropAspectRatioLocked && nextRect.height > 0
+          ? nextRect.width / nextRect.height
+          : undefined,
       mode: handle ?? (isMoving ? "move" : "new"),
       origin: point,
       rect: nextRect,
@@ -3063,6 +7593,85 @@ export default function WatermarkPage() {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
+  }
+
+  function handleBlurPointerDown(event: PointerEvent<HTMLCanvasElement>) {
+    const point = getImagePoint(event, { requireInside: true });
+
+    if (!point || !image) {
+      return;
+    }
+
+    event.preventDefault();
+    setIsWatermarkHovering(false);
+    event.currentTarget.setPointerCapture(event.pointerId);
+
+    const strokeId = crypto.randomUUID();
+    blurDragRef.current = { strokeId };
+
+    updateBlurStrokes((current) => [
+      ...current,
+      {
+        brushSize: blurBrushSize,
+        id: strokeId,
+        points: [point],
+      },
+    ]);
+  }
+
+  function handleBlurPointerMove(event: PointerEvent<HTMLCanvasElement>) {
+    const drag = blurDragRef.current;
+    const point = getImagePoint(event);
+
+    if (!drag || !point || !image) {
+      return;
+    }
+
+    event.preventDefault();
+
+    updateBlurStrokes((current) =>
+      current.map((stroke) => {
+        if (stroke.id !== drag.strokeId) {
+          return stroke;
+        }
+
+        const lastPoint = stroke.points[stroke.points.length - 1];
+
+        if (lastPoint) {
+          const deltaX = point.x - lastPoint.x;
+          const deltaY = point.y - lastPoint.y;
+          const minDistance =
+            getBlurBrushRadius(
+              stroke.brushSize,
+              image.naturalWidth,
+              image.naturalHeight,
+            ) * 0.15;
+
+          if (deltaX * deltaX + deltaY * deltaY < minDistance * minDistance) {
+            return stroke;
+          }
+        }
+
+        return {
+          ...stroke,
+          points: [...stroke.points, point],
+        };
+      }),
+    );
+  }
+
+  function handleBlurPointerUp(event: PointerEvent<HTMLCanvasElement>) {
+    if (!blurDragRef.current) {
+      return;
+    }
+
+    blurDragRef.current = null;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    commitSettingsHistorySnapshot(getWatermarkSettingsSnapshot());
   }
 
   function handleResizePointerDown(event: PointerEvent<HTMLCanvasElement>) {
@@ -3206,6 +7815,10 @@ export default function WatermarkPage() {
       resizeDragRef.current = null;
     }
 
+    if (tool !== "blur") {
+      blurDragRef.current = null;
+    }
+
     if (tool === "resize" && image) {
       setResizeWidth((currentWidth) =>
         currentWidth > 0 ? currentWidth : image.naturalWidth,
@@ -3216,7 +7829,7 @@ export default function WatermarkPage() {
     }
   }
 
-  async function openImageToolPanel(tool: ImageTool) {
+  async function openPhotoImageTool(tool: ImageTool) {
     if (mediaKind !== "image") {
       return;
     }
@@ -3225,7 +7838,8 @@ export default function WatermarkPage() {
       await materializeRotationIfNeeded();
     }
 
-    setActiveEditorPanel(tool);
+    setActiveEditorPanel("photos");
+    setActivePhotoTool(tool);
     setActiveImageTool(tool);
     setIsWatermarkHovering(false);
 
@@ -3238,6 +7852,10 @@ export default function WatermarkPage() {
       resizeDragRef.current = null;
     }
 
+    if (tool !== "blur") {
+      blurDragRef.current = null;
+    }
+
     if (tool === "resize" && image) {
       setResizeWidth((currentWidth) =>
         currentWidth > 0 ? currentWidth : image.naturalWidth,
@@ -3246,20 +7864,223 @@ export default function WatermarkPage() {
         currentHeight > 0 ? currentHeight : image.naturalHeight,
       );
     }
+
+    if (tool === "crop" && image) {
+      setCropRect((current) => current ?? createDefaultCropRect(image));
+    }
   }
 
-  function handleEditorPanelSelect(panel: EditorPanelId) {
-    if (panel === "watermark" || panel === "templates" || panel === "effects") {
-      setActiveEditorPanel(panel);
+  function handlePhotoToolSelect(tool: PhotoToolId) {
+    if (tool !== "watermark" && !imageToolsEnabled) {
+      return;
+    }
+
+    if (isPhotoImageTool(tool)) {
+      void openPhotoImageTool(tool);
+      return;
+    }
+
+    setActiveEditorPanel("photos");
+    setActivePhotoTool(tool);
+    setActiveImageTool(null);
+    setIsWatermarkHovering(false);
+    setCropRect(null);
+    cropDragRef.current = null;
+    resizeDragRef.current = null;
+    blurDragRef.current = null;
+  }
+
+  function handleWatermarkToolSelect(tool: WatermarkToolId) {
+    setActiveWatermarkTool(tool);
+
+    if (tool === "text") {
+      handleWatermarkTypeChange("text");
+      return;
+    }
+
+    if (tool === "logo") {
+      handleWatermarkTypeChange("logo");
+    }
+  }
+
+  function handlePdfDocToolSelect(tool: PdfDocToolId) {
+    setActiveEditorPanel("pdfDocs");
+    setActivePdfTool(tool);
     setActiveImageTool(null);
     setCropRect(null);
     cropDragRef.current = null;
     resizeDragRef.current = null;
-      resizeDragRef.current = null;
+    blurDragRef.current = null;
+
+    if (tool === "watermark") {
+      deselectActiveSignaturePlacement();
+      setActiveWatermarkTool("text");
+      if (watermarkType === "signature") {
+        setWatermarkType("text");
+        syncLegacyFromTextLayer(activeTextLayer);
+      }
+    } else if (tool === "signFill") {
+      setPdfDocumentTool("signature");
+      deselectActiveSignaturePlacement();
+    }
+
+    if (tool === "merge") {
+      setFormatUploadPrompt(null);
+      syncLoadedPdfIntoMergeBatch();
+    }
+
+    if (tool === "compress") {
+      setFormatUploadPrompt(null);
+      setLastPdfCompressResult(null);
+    }
+  }
+
+  function clearImageEditToolState() {
+    setActiveImageTool(null);
+    setCropRect(null);
+    cropDragRef.current = null;
+    resizeDragRef.current = null;
+    blurDragRef.current = null;
+  }
+
+  function handleVideoToolSelect(tool: VideoToolId) {
+    setActiveEditorPanel("video");
+    setActiveVideoTool(tool);
+    clearImageEditToolState();
+
+    if (tool === "blur") {
+      ensureVideoBlurRegionsInitialized();
+    }
+
+    if (tool === "watermark") {
+      setActiveWatermarkTool("text");
+      if (watermarkType === "signature") {
+        setWatermarkType("text");
+        syncLegacyFromTextLayer(activeTextLayer);
+      }
+    }
+  }
+
+  function handleEditorPanelSelect(panel: EditorPanelId) {
+    if (!isMainEditorTabAllowed(panel, mediaKind)) {
       return;
     }
 
-    void openImageToolPanel(panel);
+    const editorReady = isEditorToolsReady({
+      image,
+      isPdfLoading,
+      mediaKind,
+      pdfPageCount,
+      videoUrl,
+    });
+
+    if (!editorReady) {
+      if (
+        panel === "pdfDocs" ||
+        panel === "signFill"
+      ) {
+        setActiveEditorPanel("pdfDocs");
+
+        if (activePdfTool !== "merge" && activePdfTool !== "compress") {
+          requestFormatUploadPrompt("pdfDocs");
+        }
+
+        return;
+      }
+
+      if (panel === "video") {
+        requestFormatUploadPrompt("video");
+        return;
+      }
+
+      if (
+        panel === "photos" ||
+        panel === "watermark" ||
+        panel === "effects" ||
+        panel === "blur" ||
+        panel === "crop" ||
+        panel === "resize" ||
+        panel === "rotate"
+      ) {
+        requestFormatUploadPrompt("photos");
+      }
+
+      return;
+    }
+
+    setFormatUploadPrompt(null);
+
+    if (panel === "pdfDocs" || panel === "signFill") {
+      if (activeEditorPanel === "pdfDocs") {
+        setActiveEditorPanel(null);
+        return;
+      }
+
+      setActiveEditorPanel("pdfDocs");
+      setActivePdfTool("signFill");
+      clearImageEditToolState();
+      return;
+    }
+
+    if (panel === "video") {
+      if (activeEditorPanel === "video") {
+        setActiveEditorPanel(null);
+        return;
+      }
+
+      setActiveEditorPanel("video");
+      clearImageEditToolState();
+      return;
+    }
+
+    if (
+      panel === "photos" ||
+      panel === "watermark" ||
+      panel === "effects"
+    ) {
+      if (panel === "photos" && activeEditorPanel === "photos") {
+        setActiveEditorPanel(null);
+        return;
+      }
+
+      if (panel === "effects") {
+        if (!imageToolsEnabled) {
+          return;
+        }
+
+        setActivePhotoTool("filters");
+      } else if (panel === "watermark") {
+        if (mediaKind === "pdf") {
+          setActiveEditorPanel("pdfDocs");
+          setActivePdfTool("watermark");
+          deselectActiveSignaturePlacement();
+          setActiveWatermarkTool("text");
+          if (watermarkType === "signature") {
+            setWatermarkType("text");
+            syncLegacyFromTextLayer(activeTextLayer);
+          }
+          clearImageEditToolState();
+          return;
+        }
+
+        setActivePhotoTool("watermark");
+      } else if (panel === "photos") {
+        setActivePhotoTool("watermark");
+      }
+
+      setActiveEditorPanel("photos");
+      clearImageEditToolState();
+      return;
+    }
+
+    if (
+      panel === "blur" ||
+      panel === "crop" ||
+      panel === "resize" ||
+      panel === "rotate"
+    ) {
+      void openPhotoImageTool(panel);
+    }
   }
 
   function removeLoadedMedia() {
@@ -3268,17 +8089,37 @@ export default function WatermarkPage() {
     clearAllMedia();
   }
 
-  function clearAllMedia() {
+  function handlePreviewMediaRemove() {
+    const confirmed = window.confirm(
+      "Remove this file and return to the upload screen? Your current edits will be cleared.",
+    );
+
+    if (confirmed) {
+      removeLoadedMedia();
+    }
+  }
+
+  function resetEditorMediaStateWithoutPersistence() {
+    mediaLoadGenerationRef.current += 1;
+    setIsPdfLoading(false);
+
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
       objectUrlRef.current = null;
     }
 
     clearImageBatch();
+    clearVideoBatch();
+    clearPdfMergeBatch();
     clearPdfState();
     setImage(null);
     setVideoUrl("");
     setVideoDuration(0);
+    setVideoTrimStartSeconds(0);
+    setVideoTrimEndSeconds(0);
+    setVideoTrimAppliedStartSeconds(0);
+    setVideoTrimAppliedEndSeconds(0);
+    setVideoCropSavedNotice(false);
     setVideoSize(null);
     setVideoFileSize(0);
     setMediaKind(null);
@@ -3288,6 +8129,9 @@ export default function WatermarkPage() {
     setResizeHeight(0);
     setRotationAngle(0);
     setResizeWarning("");
+    setBlurStrokes([]);
+    setBlurBrushSize("medium");
+    blurDragRef.current = null;
     setActiveImageTool(null);
     setCropRect(null);
     setActiveImageEffect("none");
@@ -3297,7 +8141,24 @@ export default function WatermarkPage() {
     setUploadError("");
     setExportError("");
     setExportNotice("");
-    setActiveEditorPanel("watermark");
+    setActiveEditorPanel(null);
+    setFormatUploadPrompt(null);
+    setActivePhotoTool("watermark");
+    setActivePdfTool("signFill");
+    const initialCaptionLayers = createInitialVideoCaptionLayers();
+    setVideoCaptionLayers(initialCaptionLayers);
+    setActiveVideoCaptionLayerId(initialCaptionLayers[0]!.id);
+    setCaptionsMasterEnabled(true);
+    setPreviewZoomPercent(PREVIEW_ZOOM_DEFAULT);
+    resetPreviewPanPosition();
+    sessionRestoreRef.current = null;
+    isRestoringSessionRef.current = false;
+  }
+
+  resetAnonymousEditorEntryRef.current = resetEditorMediaStateWithoutPersistence;
+
+  function clearAllMedia() {
+    resetEditorMediaStateWithoutPersistence();
     void clearEditorSession();
   }
 
@@ -3327,6 +8188,8 @@ export default function WatermarkPage() {
     setIsWatermarkHovering(false);
     setCropRect(null);
     cropDragRef.current = null;
+    setBlurStrokes([]);
+    blurDragRef.current = null;
 
     if (activeBatchImageId && uploadedImageSize) {
       setImageBatch((currentBatch) =>
@@ -3334,6 +8197,7 @@ export default function WatermarkPage() {
           entry.id === activeBatchImageId
             ? {
                 ...entry,
+                blurStrokes: [],
                 image: nextImage,
                 resizeHeight: nextImage.naturalHeight,
                 resizeWidth: nextImage.naturalWidth,
@@ -3367,6 +8231,7 @@ export default function WatermarkPage() {
 
     replaceWorkingImage(nextImage);
     setActiveImageTool(null);
+    setCropRect(createDefaultCropRect(nextImage));
   }
 
   function cancelCrop() {
@@ -3375,8 +8240,85 @@ export default function WatermarkPage() {
     setActiveImageTool(null);
   }
 
+  function handleEditorPanelClose() {
+    if (activeEditorPanel === "photos") {
+      if (activePhotoTool === "crop") {
+        cancelCrop();
+      } else if (activePhotoTool === "resize") {
+        resizeDragRef.current = null;
+        setActiveImageTool(null);
+      } else if (activePhotoTool === "blur") {
+        blurDragRef.current = null;
+        setActiveImageTool(null);
+      } else if (activePhotoTool === "rotate") {
+        setActiveImageTool(null);
+      }
+    }
+
+    setActiveEditorPanel(null);
+  }
+
+  function handleCropWidthChange(value: number) {
+    if (!image || !cropRect) {
+      return;
+    }
+
+    const nextWidth = clamp(
+      Math.round(value),
+      1,
+      image.naturalWidth - cropRect.x,
+    );
+    let nextHeight = cropRect.height;
+
+    if (isCropAspectRatioLocked && cropRect.height > 0) {
+      const ratio = cropRect.width / cropRect.height;
+      nextHeight = clamp(
+        Math.round(nextWidth / ratio),
+        1,
+        image.naturalHeight - cropRect.y,
+      );
+    }
+
+    setCropRect({
+      ...cropRect,
+      height: nextHeight,
+      width: nextWidth,
+    });
+  }
+
+  function handleCropHeightChange(value: number) {
+    if (!image || !cropRect) {
+      return;
+    }
+
+    const nextHeight = clamp(
+      Math.round(value),
+      1,
+      image.naturalHeight - cropRect.y,
+    );
+    let nextWidth = cropRect.width;
+
+    if (isCropAspectRatioLocked && cropRect.width > 0) {
+      const ratio = cropRect.width / cropRect.height;
+      nextWidth = clamp(
+        Math.round(nextHeight * ratio),
+        1,
+        image.naturalWidth - cropRect.x,
+      );
+    }
+
+    setCropRect({
+      ...cropRect,
+      height: nextHeight,
+      width: nextWidth,
+    });
+  }
+
   function handleResizeWidthChange(value: number) {
-    const nextWidth = Math.max(1, Math.round(value));
+    const nextWidth =
+      resizeUnit === "percent" && image
+        ? Math.max(1, Math.round((value / 100) * image.naturalWidth))
+        : Math.max(1, Math.round(value));
     const nextHeight =
       isAspectRatioLocked && image
         ? Math.max(1, Math.round(nextWidth / getImageAspectRatio(image)))
@@ -3392,7 +8334,10 @@ export default function WatermarkPage() {
   }
 
   function handleResizeHeightChange(value: number) {
-    const nextHeight = Math.max(1, Math.round(value));
+    const nextHeight =
+      resizeUnit === "percent" && image
+        ? Math.max(1, Math.round((value / 100) * image.naturalHeight))
+        : Math.max(1, Math.round(value));
     const nextWidth =
       isAspectRatioLocked && image
         ? Math.max(1, Math.round(nextHeight * getImageAspectRatio(image)))
@@ -3429,7 +8374,12 @@ export default function WatermarkPage() {
       return;
     }
 
-    const nextImage = await createResizedImage(image, resizeWidth, resizeHeight);
+    const nextImage = await createResizedImage(
+      image,
+      resizeWidth,
+      resizeHeight,
+      resizeScaleMode,
+    );
 
     replaceWorkingImage(nextImage);
     updateResizeWarning(nextImage.naturalWidth, nextImage.naturalHeight);
@@ -3451,19 +8401,44 @@ export default function WatermarkPage() {
     }
 
     clearImageBatch();
+    clearVideoBatch();
+    clearPdfMergeBatch();
     clearPdfState();
 
     try {
-      const preservedIds = sessionRestoreRef.current?.batchEntryIds ?? [];
+      const draftState = anonymousDraftRestoreRef.current;
+      const preservedIds =
+        draftState?.imageBatch?.map((entry) => entry.id) ??
+        sessionRestoreRef.current?.batchEntryIds ??
+        [];
       const loadedEntries = await Promise.all(
         imageFiles.map(async (file, index) => {
+          const fileKey = file.name.replace(/\.[^.]+$/, "");
+          const preservedId = preservedIds[index] ?? fileKey;
           const loaded = await loadImageElementFromFile(file);
-          return createBatchImageEntry(
+          const saved = draftState?.imageBatch?.find(
+            (entry) => entry.id === preservedId || entry.fileKey === preservedId,
+          );
+          const entry = createBatchImageEntry(
             loaded.file,
             loaded.image,
             loaded.objectUrl,
-            preservedIds[index],
+            preservedId,
           );
+
+          if (!saved) {
+            return entry;
+          }
+
+          return {
+            ...entry,
+            blurStrokes: cloneBlurStrokes(saved.blurStrokes),
+            fileName: saved.fileName,
+            resizeHeight: saved.resizeHeight,
+            resizeWidth: saved.resizeWidth,
+            rotationAngle: saved.rotationAngle,
+            uploadedImageSize: saved.uploadedImageSize ?? entry.uploadedImageSize,
+          };
         }),
       );
 
@@ -3476,17 +8451,20 @@ export default function WatermarkPage() {
 
       const initialEntry =
         loadedEntries.find(
-          (entry) => entry.id === sessionRestoreRef.current?.activeBatchImageId,
+          (entry) =>
+            entry.id === draftState?.activeBatchImageId ||
+            entry.id === sessionRestoreRef.current?.activeBatchImageId,
         ) ?? loadedEntries[0];
 
       applyActiveBatchEntry(initialEntry);
-      finishMediaLoad();
+      finishMediaLoad("image");
     } catch (error) {
       setUploadError(
         error instanceof Error
           ? error.message
           : "We could not load those images. Please try again.",
       );
+      resolvePendingDraftRestore();
     }
   }
 
@@ -3502,7 +8480,10 @@ export default function WatermarkPage() {
       URL.revokeObjectURL(objectUrlRef.current);
     }
 
+    setPreviewZoomPercent(PREVIEW_ZOOM_DEFAULT);
     clearImageBatch();
+    clearVideoBatch();
+    clearPdfMergeBatch();
     clearPdfState();
 
     const objectUrl = URL.createObjectURL(file);
@@ -3531,7 +8512,7 @@ export default function WatermarkPage() {
       setActiveImageTool(null);
       setCropRect(null);
       setIsWatermarkHovering(false);
-      finishMediaLoad();
+      finishMediaLoad("image");
     };
     nextImage.onerror = () => {
       URL.revokeObjectURL(objectUrl);
@@ -3541,7 +8522,7 @@ export default function WatermarkPage() {
     nextImage.src = objectUrl;
   }
 
-  function loadVideoFile(file: File) {
+  async function loadVideoFile(file: File) {
     if (!isVideoFile(file)) {
       setUploadError("Please choose an MP4, MOV, or WebM video.");
       return;
@@ -3551,41 +8532,37 @@ export default function WatermarkPage() {
 
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
     }
 
+    setPreviewZoomPercent(PREVIEW_ZOOM_DEFAULT);
     clearImageBatch();
+    clearVideoBatch();
+    clearPdfMergeBatch();
     clearPdfState();
 
-    const objectUrl = URL.createObjectURL(file);
-    const nextVideo = document.createElement("video");
-
-    objectUrlRef.current = objectUrl;
-    nextVideo.preload = "metadata";
-    nextVideo.onloadedmetadata = () => {
+    try {
+      const entry = await createBatchVideoEntryFromFile(file);
+      objectUrlRef.current = entry.objectUrl;
       setMediaKind("video");
       setImage(null);
       setActiveBatchImageId(null);
-      setVideoUrl(objectUrl);
-      setVideoDuration(nextVideo.duration);
-      setVideoSize({
-        height: nextVideo.videoHeight,
-        width: nextVideo.videoWidth,
-      });
-      setFileName(file.name);
-      setVideoFileSize(file.size);
+      setVideoBatch([entry]);
+      applyActiveBatchVideoEntry(entry);
+      setVideoShortenOriginalFromEntry(entry);
       setUploadError("");
       setResizeWarning("");
       setActiveImageTool(null);
       setCropRect(null);
       setIsWatermarkHovering(false);
-      finishMediaLoad();
-    };
-    nextVideo.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      objectUrlRef.current = null;
-      setUploadError("We could not load that video. Please try another file.");
-    };
-    nextVideo.src = objectUrl;
+      finishMediaLoad("video");
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "We could not load that video. Please try another file.",
+      );
+    }
   }
 
   function loadLogoFile(file: File) {
@@ -3734,18 +8711,27 @@ export default function WatermarkPage() {
   }
 
   function handleWatermarkTypeChange(nextType: WatermarkType) {
-    clearActiveTemplate();
-
     if (nextType === "signature") {
       if (watermarkMode === "tile") {
         setWatermarkMode("single");
       }
 
-      const activeSignature = savedSignatures.find(
-        (signature) => signature.id === activeSignatureId,
-      );
+      if (mediaKind === "pdf" && activePdfPageId) {
+        const pagePlacements = pdfPageSignatures[activePdfPageId] ?? [];
+        const selected =
+          (activeSignaturePlacementId
+            ? pagePlacements.find(
+                (placement) => placement.id === activeSignaturePlacementId,
+              )
+            : null) ?? pagePlacements[pagePlacements.length - 1];
+        applyPdfPageSignaturePlacementToEditor(selected ?? null);
+      } else {
+        const activeSignature = savedSignatures.find(
+          (signature) => signature.id === activeSignatureId,
+        );
 
-      setLogoImage(activeSignature?.image ?? null);
+        setLogoImage(activeSignature?.image ?? null);
+      }
     } else if (nextType === "logo") {
       syncLegacyFromLogoLayer(activeLogoLayer);
     } else if (nextType === "text") {
@@ -3759,6 +8745,11 @@ export default function WatermarkPage() {
   function handleActiveSignatureChange(signature: SavedSignature | null) {
     setActiveSignatureId(signature?.id ?? null);
 
+    if (mediaKind === "pdf") {
+      setIsWatermarkHovering(false);
+      return;
+    }
+
     if (watermarkType === "signature") {
       setLogoImage(signature?.image ?? null);
       setIsWatermarkHovering(false);
@@ -3769,7 +8760,27 @@ export default function WatermarkPage() {
     signature: SavedSignature,
     position?: { xPercent: number; yPercent: number },
   ) {
-    clearActiveTemplate();
+    clearActiveTemplates();
+
+    if (mediaKind === "pdf" && activePdfPageId) {
+      setActiveEditorPanel("pdfDocs");
+      setActivePdfTool("signFill");
+      setPdfDocumentTool("signature");
+
+      const defaultScale = signature.kind === "initials" ? 45 : fontSizeScale;
+      const placement = createPdfPageSignaturePlacement(signature.id, {
+        customPosition: position ?? null,
+        fontSizeScale: defaultScale,
+        opacity: PDF_SIGNATURE_DEFAULT_OPACITY,
+        watermarkPosition,
+      });
+
+      setPdfPageSignatures((currentMap) =>
+        appendPdfPageSignaturePlacement(currentMap, activePdfPageId, placement),
+      );
+      applyPdfPageSignaturePlacementToEditor(placement);
+      return;
+    }
 
     if (watermarkType !== "signature") {
       setWatermarkType("signature");
@@ -3840,28 +8851,237 @@ export default function WatermarkPage() {
       isPdfLoading ||
       (mediaKind === "pdf" && pdfPageCount > 0),
   );
+  const hasPreviewContent =
+    !isPdfLoading &&
+    Boolean(
+      ((mediaKind === "image" || mediaKind === "pdf") && image) ||
+        (mediaKind === "video" && videoUrl),
+    );
+  const previewZoomInDisabled = previewZoomPercent >= PREVIEW_ZOOM_MAX;
+  const previewZoomOutDisabled = previewZoomPercent <= PREVIEW_ZOOM_MIN;
+  const previewZoomResetDisabled =
+    previewZoomPercent === PREVIEW_ZOOM_DEFAULT;
+
+  function handlePreviewZoomIn() {
+    setPreviewZoomPercent((current) =>
+      clampPreviewZoom(current + PREVIEW_ZOOM_STEP),
+    );
+  }
+
+  function handlePreviewZoomOut() {
+    setPreviewZoomPercent((current) =>
+      clampPreviewZoom(current - PREVIEW_ZOOM_STEP),
+    );
+  }
+
+  function handlePreviewZoomReset() {
+    setPreviewZoomPercent(PREVIEW_ZOOM_DEFAULT);
+    resetPreviewPanPosition();
+  }
+
+  function resetPreviewPanPosition() {
+    const container = previewCheckerboardRef.current;
+
+    if (container) {
+      container.scrollLeft = 0;
+      container.scrollTop = 0;
+    }
+
+    previewPanDragRef.current = null;
+    setIsPreviewPanning(false);
+  }
+
+  function shouldEnablePreviewPan() {
+    return (
+      previewZoomPercent > PREVIEW_ZOOM_DEFAULT &&
+      !activeImageTool &&
+      !(
+        mediaKind === "pdf" &&
+        isPdfSignFillMode() &&
+        (pdfDocumentTool === "fill" || pdfDocumentTool === "signature")
+      )
+    );
+  }
+
+  function tryBeginPreviewPan(event: PointerEvent<HTMLElement>) {
+    if (!shouldEnablePreviewPan()) {
+      return false;
+    }
+
+    const container = previewCheckerboardRef.current;
+
+    if (!container) {
+      return false;
+    }
+
+    previewPanDragRef.current = {
+      pointerId: event.pointerId,
+      scrollLeft: container.scrollLeft,
+      scrollTop: container.scrollTop,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+    setIsPreviewPanning(true);
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    return true;
+  }
+
+  function updatePreviewPan(event: PointerEvent<HTMLElement>) {
+    const drag = previewPanDragRef.current;
+    const container = previewCheckerboardRef.current;
+
+    if (!drag || drag.pointerId !== event.pointerId || !container) {
+      return false;
+    }
+
+    container.scrollLeft = drag.scrollLeft - (event.clientX - drag.startX);
+    container.scrollTop = drag.scrollTop - (event.clientY - drag.startY);
+    event.preventDefault();
+    return true;
+  }
+
+  function endPreviewPan(event: PointerEvent<HTMLElement>) {
+    const drag = previewPanDragRef.current;
+
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return false;
+    }
+
+    previewPanDragRef.current = null;
+    setIsPreviewPanning(false);
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    return true;
+  }
+
+  function handlePreviewSurfacePointerDown(event: PointerEvent<HTMLElement>) {
+    tryBeginPreviewPan(event);
+  }
+
+  function handlePreviewSurfacePointerMove(event: PointerEvent<HTMLElement>) {
+    updatePreviewPan(event);
+  }
+
+  function handlePreviewSurfacePointerUp(event: PointerEvent<HTMLElement>) {
+    endPreviewPan(event);
+  }
+
+  function handlePreviewSurfacePointerCancel(event: PointerEvent<HTMLElement>) {
+    endPreviewPan(event);
+  }
+
+  useEffect(() => {
+    if (previewZoomPercent === PREVIEW_ZOOM_DEFAULT) {
+      resetPreviewPanPosition();
+    }
+  }, [previewZoomPercent]);
+
+  useEffect(() => {
+    const node = previewCheckerboardRef.current;
+
+    if (!node || !hasPreviewContent) {
+      return;
+    }
+
+    function handlePreviewWheelZoom(event: WheelEvent) {
+      if (!event.altKey || event.deltaY === 0) {
+        return;
+      }
+
+      event.preventDefault();
+
+      setPreviewZoomPercent((current) =>
+        clampPreviewZoom(
+          current + (event.deltaY < 0 ? PREVIEW_ZOOM_STEP : -PREVIEW_ZOOM_STEP),
+        ),
+      );
+    }
+
+    node.addEventListener("wheel", handlePreviewWheelZoom, { passive: false });
+
+    return () => {
+      node.removeEventListener("wheel", handlePreviewWheelZoom);
+    };
+  }, [hasPreviewContent]);
+
   const isBatchImageMode = mediaKind === "image" && imageBatch.length >= 2;
+  const isBatchVideoMode = mediaKind === "video" && videoBatch.length >= 2;
   const imageToolsEnabled = mediaKind === "image";
+  const videoToolsEnabled = mediaKind === "video" && Boolean(videoUrl);
+  const visibleWatermarkTypes = watermarkTypes.filter(
+    (entry) => entry.value !== "signature",
+  );
   const loadedMediaDetails =
     mediaKind === "video" && videoSize
       ? `${formatDuration(videoDuration)} · ${videoSize.width}x${videoSize.height}`
       : mediaKind === "pdf" && pdfPageCount > 0
         ? `· ${pdfPageCount} ${pdfPageCount === 1 ? "page" : "pages"}`
         : null;
+  const resolvedVideoTrim = resolveVideoTrimRange(
+    videoTrimStartSeconds,
+    videoTrimEndSeconds,
+    videoDuration,
+  );
+  const resolvedAppliedVideoTrim = resolveVideoTrimRange(
+    videoTrimAppliedStartSeconds,
+    videoTrimAppliedEndSeconds,
+    videoDuration,
+  );
+  const exportVideoDuration = getVideoTrimDuration(
+    videoTrimAppliedStartSeconds,
+    videoTrimAppliedEndSeconds,
+    videoDuration,
+  );
+  const draftExportVideoDuration = getVideoTrimDuration(
+    videoTrimStartSeconds,
+    videoTrimEndSeconds,
+    videoDuration,
+  );
+  const hasUnsavedVideoCrop = !areVideoTrimRangesEqual(
+    videoTrimStartSeconds,
+    videoTrimEndSeconds,
+    videoTrimAppliedStartSeconds,
+    videoTrimAppliedEndSeconds,
+    videoDuration,
+  );
+  const showReshortenVideoAction =
+    videoToolsEnabled &&
+    activeVideoTool === "trim" &&
+    !hasUnsavedVideoCrop &&
+    videoCropSavedNotice &&
+    videoDuration > 0;
+  void videoShortenHistoryTick;
+  const currentVideoShortenSnapshot = captureVideoShortenSnapshot();
+  const canUndoVideoShorten = videoShortenUndoRef.current.length > 0;
+  const canRedoVideoShorten = videoShortenRedoRef.current.length > 0;
+  const canRestoreOriginalVideo =
+    videoShortenOriginalRef.current !== null &&
+    !areVideoShortenSnapshotsEqual(
+      currentVideoShortenSnapshot,
+      videoShortenOriginalRef.current,
+    );
+  const showWatermarkHistoryInFooter = !(
+    activeEditorPanel === "video" && activeVideoTool === "trim"
+  );
   const canUndoSettings = settingsHistoryIndex > 0;
   const canRedoSettings = settingsHistoryIndex < settingsHistoryLength - 1;
   const canExportVideo =
     mediaKind === "video" &&
     videoSize !== null &&
+    exportVideoDuration > 0 &&
     (videoFileSize > 0
       ? isAnyVideoExportEligible(
-          videoDuration,
+          exportVideoDuration,
           videoSize.width,
           videoSize.height,
           videoFileSize,
         )
       : getVideoExportRoute(
-          videoDuration,
+          exportVideoDuration,
           videoSize.width,
           videoSize.height,
           Number.MAX_SAFE_INTEGER,
@@ -3873,13 +9093,33 @@ export default function WatermarkPage() {
         : "Reload the video before exporting."
       : undefined;
   const exportDisabledReason = videoExportDisabledReason;
+  const videoServerCostEstimate =
+    mediaKind === "video" && videoSize && videoFileSize > 0
+      ? getVideoServerCostEstimate(getVideoExportFileMeta())
+      : null;
+  const currentVideoExportRoute =
+    mediaKind === "video" && videoSize
+      ? getVideoExportRoute(
+          exportVideoDuration,
+          videoSize.width,
+          videoSize.height,
+          videoFileSize > 0 ? videoFileSize : Number.MAX_SAFE_INTEGER,
+        )
+      : "reject";
+  const showVideoServerProcessingPanel =
+    mediaKind === "video" &&
+    videoServerCostEstimate !== null &&
+    isServerSideVideoExportRoute(currentVideoExportRoute);
   const videoExportStageLabel =
     exportServerStage === "preparing"
       ? "Preparing server export..."
       : exportServerStage === "uploading"
         ? "Uploading video..."
         : exportServerStage === "processing"
-          ? "Processing on our servers — this may take longer"
+          ? longVideoProcessingDetail ??
+            (currentVideoExportRoute === "long-server"
+              ? "Processing long video on our servers — keep this tab open"
+              : "Processing on our servers — this may take longer")
           : exportServerStage === "downloading"
             ? "Downloading processed video..."
             : "Export progress";
@@ -3901,6 +9141,7 @@ export default function WatermarkPage() {
             : "Export JPEG";
   const isExportDisabled =
     isExporting ||
+    isRestoringAnonymousDraft ||
     isPdfLoading ||
     (mediaKind === "video"
       ? !canExportVideo
@@ -3908,8 +9149,47 @@ export default function WatermarkPage() {
         ? pdfPageCount === 0
         : !image);
   const canvasCursor =
-    activeImageTool === "crop" || activeImageTool === "resize"
+    activeImageTool === "crop" ||
+    activeImageTool === "resize" ||
+    activeImageTool === "blur" ||
+    isVideoBlurInteractionActive()
       ? "crosshair"
+      : mediaKind === "pdf" &&
+          pdfDocumentTool === "signature" &&
+          isPdfSignFillMode()
+        ? signatureDragRef.current?.mode === "resize" &&
+          signatureDragRef.current.resizeHandle
+          ? getPlacementResizeCursor(signatureDragRef.current.resizeHandle)
+          : signatureHoverFrameAction
+            ? "pointer"
+            : signatureHoverResizeHandle
+              ? getPlacementResizeCursor(signatureHoverResizeHandle)
+              : signatureDragRef.current
+                ? "grabbing"
+                : isSignaturePlacementHovering
+                  ? "grab"
+                  : "auto"
+        : mediaKind === "pdf" && pdfDocumentTool === "fill"
+        ? fillDragRef.current?.mode === "resize" && fillDragRef.current.resizeHandle
+          ? getFillResizeCursor(fillDragRef.current.resizeHandle)
+          : fillHoverFrameAction
+            ? "pointer"
+            : fillHoverResizeHandle
+              ? getFillResizeCursor(fillHoverResizeHandle)
+              : fillDragRef.current
+                ? "grabbing"
+                : isFillFieldHovering
+                  ? "grab"
+                  : "auto"
+      : mediaKind === "video" &&
+          activeEditorPanel === "video" &&
+          activeVideoTool === "caption" &&
+          captionsMasterEnabled
+        ? isDraggingCaption
+          ? "grabbing"
+          : isCaptionHovering
+            ? "grab"
+            : "auto"
       : watermarkMode === "single"
       ? isDraggingWatermark
         ? "grabbing"
@@ -3917,6 +9197,28 @@ export default function WatermarkPage() {
           ? "grab"
           : "auto"
       : "auto";
+  const resolvedCanvasCursor =
+    canvasCursor === "auto" && shouldEnablePreviewPan()
+      ? isPreviewPanning
+        ? "grabbing"
+        : "grab"
+      : canvasCursor;
+
+  useEffect(() => {
+    if (mediaKind !== "pdf" && activeEditorPanel === "pdfDocs") {
+      setActiveEditorPanel(null);
+    }
+  }, [activeEditorPanel, mediaKind]);
+
+  useEffect(() => {
+    if (mediaKind !== "video" && activeEditorPanel === "video") {
+      setActiveEditorPanel(null);
+    }
+  }, [activeEditorPanel, mediaKind]);
+
+  useEffect(() => {
+    syncLoadedPdfIntoMergeBatch();
+  }, [activeEditorPanel, activePdfTool, mediaKind, fileName, pdfPageCount]);
 
   useEffect(() => {
     if (!hasMedia || isRestoringSessionRef.current) {
@@ -3933,48 +9235,221 @@ export default function WatermarkPage() {
   }, [
     activeEditorPanel,
     activeBatchImageId,
+    activeFillFieldId,
     activePdfPageId,
     activeSignatureId,
-    activeTemplate,
+    activeSignaturePlacementId,
+    activeLogoTemplate,
+    activeTextTemplate,
     customPosition,
     fileName,
+    fontSizeScale,
     hasMedia,
     imageBatch,
     mediaKind,
+    pdfDocumentTool,
+    pdfPageFillMap,
+    pdfPageSignatures,
     savedSignatures,
     videoUrl,
     watermarkMode,
+    watermarkOpacity,
     watermarkType,
   ]);
 
-  const showEditorPanel = activeEditorPanel !== null;
+  function renderWatermarkAdjustSliders(layerType: "text" | "logo") {
+    const layer = layerType === "text" ? activeTextLayer : activeLogoLayer;
+    const layerId =
+      layerType === "text" ? activeTextLayerId : activeLogoLayerId;
+
+    return (
+      <EditorPanelSection title="Adjust">
+        <div className="mb-3 grid grid-cols-2 gap-0.5 editor-segment-track">
+          {watermarkModes.map(({ label, value }) => (
+            <EditorSegment
+              active={watermarkMode === value}
+              groupId={`watermark-mode-${layerType}`}
+              key={value}
+              onClick={() => {
+                clearActiveTemplates();
+                setWatermarkMode(value);
+                setIsWatermarkHovering(false);
+              }}
+            >
+              {label}
+            </EditorSegment>
+          ))}
+        </div>
+        <WatermarkAdjustSliders
+          fontSizeScale={layer.fontSizeScale}
+          mode={watermarkMode}
+          onFontSizeScaleChange={(value) => {
+            if (shouldIgnoreManualSettingsChange()) {
+              return;
+            }
+
+            if (layerType === "text") {
+              clearActiveTextTemplate();
+            } else {
+              clearActiveLogoTemplate();
+            }
+
+            if (layerType === "text") {
+              updateTextLayer(layerId, { fontSizeScale: value });
+            } else {
+              updateLogoLayer(layerId, { fontSizeScale: value });
+            }
+
+            handleFontSizeScaleChange(value);
+          }}
+          onTileAngleChange={(value) => {
+            if (shouldIgnoreManualSettingsChange()) {
+              return;
+            }
+
+            if (layerType === "text") {
+              clearActiveTextTemplate();
+            } else {
+              clearActiveLogoTemplate();
+            }
+            setTileAngle(value);
+          }}
+          onTileDensityChange={(value) => {
+            if (shouldIgnoreManualSettingsChange()) {
+              return;
+            }
+
+            if (layerType === "text") {
+              clearActiveTextTemplate();
+            } else {
+              clearActiveLogoTemplate();
+            }
+            setTileDensity(value);
+          }}
+          onTileGapChange={(value) => {
+            if (shouldIgnoreManualSettingsChange()) {
+              return;
+            }
+
+            if (layerType === "text") {
+              clearActiveTextTemplate();
+            } else {
+              clearActiveLogoTemplate();
+            }
+            setTileGap(value);
+          }}
+          onWatermarkOpacityChange={(value) => {
+            if (shouldIgnoreManualSettingsChange()) {
+              return;
+            }
+
+            if (layerType === "text") {
+              clearActiveTextTemplate();
+            } else {
+              clearActiveLogoTemplate();
+            }
+
+            if (layerType === "text") {
+              updateTextLayer(layerId, { opacity: value });
+            } else {
+              updateLogoLayer(layerId, { opacity: value });
+            }
+
+            handleWatermarkOpacityChange(value);
+          }}
+          tileAngle={tileAngle}
+          tileDensity={tileDensity}
+          tileGap={tileGap}
+          watermarkOpacity={layer.opacity}
+          watermarkType={layerType}
+        />
+      </EditorPanelSection>
+    );
+  }
+
+  function renderWatermarkPreviewAside() {
+    const presetNameInputId =
+      watermarkAdjustLayerType === "logo"
+        ? "logo-preset-name"
+        : "text-preset-name";
+
+    return (
+      <>
+        {renderWatermarkAdjustSliders(watermarkAdjustLayerType)}
+        {renderPresetControls(presetNameInputId)}
+      </>
+    );
+  }
+
+  function renderPresetControls(presetNameInputId: string) {
+    return (
+      <WatermarkPresetControls
+        isSavingPreset={isSavingPreset}
+        onApplyPreset={(presetId) => {
+          const preset = savedPresets.find((entry) => entry.id === presetId);
+
+          if (preset) {
+            applyWatermarkSettingsSnapshot(preset.snapshot);
+          }
+        }}
+        onReset={resetWatermarkSettingsToDefaults}
+        onSavePreset={saveCurrentPreset}
+        presetName={presetName}
+        presetNameInputId={presetNameInputId}
+        presets={savedPresets}
+        setIsSavingPreset={setIsSavingPreset}
+        setPresetName={setPresetName}
+      />
+    );
+  }
+
+  function renderQuickTemplates<T extends { icon: QuickTemplateIcon; id: string; label: string }>(
+    layoutId: string,
+    templates: readonly T[],
+    activeTemplateId: string | null,
+    onApply: (template: T) => void,
+  ) {
+    return (
+      <WatermarkQuickTemplates
+        activeTemplate={activeTemplateId}
+        layoutId={layoutId}
+        onApplyTemplate={(templateId) => {
+          const template = templates.find((entry) => entry.id === templateId);
+
+          if (template) {
+            onApply(template);
+          }
+        }}
+        quickTemplates={templates}
+      />
+    );
+  }
+
+  const editorToolsReady = isEditorToolsReady({
+    image,
+    isPdfLoading,
+    mediaKind,
+    pdfPageCount,
+    videoUrl,
+  });
+  const showEditorPanel =
+    activeEditorPanel !== null &&
+    (editorToolsReady || activeEditorPanel === "pdfDocs");
   const editorPanelTitle =
-    activeEditorPanel === "templates"
-      ? "Templates"
-      : activeEditorPanel === "watermark"
-        ? "Watermark"
-        : activeEditorPanel === "crop"
-          ? "Crop"
-          : activeEditorPanel === "resize"
-            ? "Resize"
-            : activeEditorPanel === "rotate"
-              ? "Rotate"
-              : activeEditorPanel === "effects"
-                ? "Effects"
-                : "";
+    activeEditorPanel === "photos"
+      ? "Photos"
+      : activeEditorPanel === "pdfDocs"
+        ? "Pdf Docs"
+        : activeEditorPanel === "video"
+          ? "Videos"
+          : "";
   const editorPanelIcon =
-    activeEditorPanel === "templates" ? (
-      <Star className="h-4 w-4" strokeWidth={2} />
-    ) : activeEditorPanel === "watermark" ? (
-      <Droplets className="h-4 w-4" strokeWidth={2} />
-    ) : activeEditorPanel === "crop" ? (
-      <Crop className="h-4 w-4" strokeWidth={2} />
-    ) : activeEditorPanel === "resize" ? (
-      <Maximize2 className="h-4 w-4" strokeWidth={2} />
-    ) : activeEditorPanel === "rotate" ? (
-      <RotateCw className="h-4 w-4" strokeWidth={2} />
-    ) : activeEditorPanel === "effects" ? (
-      <Sparkles className="h-4 w-4" strokeWidth={2} />
+    activeEditorPanel === "photos" ? (
+      <Images className="h-4 w-4" strokeWidth={2} />
+    ) : activeEditorPanel === "pdfDocs" ? (
+      <FileText className="h-4 w-4" strokeWidth={2} />
+    ) : activeEditorPanel === "video" ? (
+      <Video className="h-4 w-4" strokeWidth={2} />
     ) : null;
   const canvasMetaLabel =
     fileName && uploadedImageSize
@@ -3982,6 +9457,139 @@ export default function WatermarkPage() {
       : fileName
         ? `${fileName}${loadedMediaDetails ?? ""}`
         : null;
+  const activeVideoCaptionLayer =
+    videoCaptionLayers.find((layer) => layer.id === activeVideoCaptionLayerId) ??
+    videoCaptionLayers[0];
+  const showCaptionTimelineDock =
+    activeEditorPanel === "video" &&
+    activeVideoTool === "caption" &&
+    captionsMasterEnabled &&
+    activeVideoCaptionLayer &&
+    isCaptionLayerActive(activeVideoCaptionLayer) &&
+    videoDuration > 0;
+  const isPhotosWatermarkActive =
+    activeEditorPanel === "photos" && activePhotoTool === "watermark";
+  const isPdfDocsWatermarkActive =
+    activeEditorPanel === "pdfDocs" && activePdfTool === "watermark";
+  const isVideoWatermarkActive =
+    activeEditorPanel === "video" && activeVideoTool === "watermark";
+  const isWatermarkPanelActive =
+    isPhotosWatermarkActive ||
+    isPdfDocsWatermarkActive ||
+    isVideoWatermarkActive;
+  const showWatermarkTimelineDock =
+    isWatermarkPanelActive &&
+    watermarkType === "text" &&
+    videoDuration > 0;
+  const showVideoOverviewPreview =
+    activeEditorPanel === "video" &&
+    activeVideoTool === "overview" &&
+    videoToolsEnabled &&
+    videoDuration > 0;
+  const showVideoTrimDock =
+    activeEditorPanel === "video" &&
+    activeVideoTool === "trim" &&
+    videoToolsEnabled &&
+    videoDuration > 0;
+  const activeVideoBlurRegion = getActiveVideoBlurRegion();
+  const showVideoBlurTimelineDock =
+    activeEditorPanel === "video" &&
+    activeVideoTool === "blur" &&
+    videoToolsEnabled &&
+    activeVideoBlurRegion &&
+    videoDuration > 0;
+  const showVideoTimelineDock =
+    showVideoTrimDock ||
+    showCaptionTimelineDock ||
+    showWatermarkTimelineDock ||
+    showVideoBlurTimelineDock;
+  const showWatermarkAdjustAside =
+    isWatermarkPanelActive &&
+    hasMedia &&
+    (activeWatermarkTool === "text" || activeWatermarkTool === "logo");
+  const showCaptionHeadlineAside =
+    activeEditorPanel === "video" &&
+    activeVideoTool === "caption" &&
+    videoToolsEnabled;
+  const showPreviewSplitAside =
+    showWatermarkAdjustAside || showCaptionHeadlineAside;
+  const watermarkAdjustLayerType =
+    activeWatermarkTool === "logo" ? "logo" : "text";
+
+  function updateVideoCaptionLayer(
+    layerId: string,
+    patch: Partial<VideoCaptionLayer>,
+  ) {
+    setVideoCaptionLayers((current) =>
+      current.map((layer) =>
+        layer.id === layerId ? { ...layer, ...patch } : layer,
+      ),
+    );
+  }
+
+  function updateActiveVideoCaptionLayer(patch: Partial<VideoCaptionLayer>) {
+    updateVideoCaptionLayer(activeVideoCaptionLayerId, patch);
+  }
+
+  function handleCaptionPresetSelect(
+    layerId: string,
+    presetId: CaptionPresetId,
+  ) {
+    setVideoCaptionLayers((current) =>
+      current.map((layer) =>
+        layer.id === layerId
+          ? { ...applyCaptionPreset(layer, presetId), id: layer.id }
+          : layer,
+      ),
+    );
+  }
+
+  function addVideoCaptionLayer() {
+    const positions: CaptionVerticalPosition[] = ["bottom", "center", "top"];
+    const nextPosition = positions[videoCaptionLayers.length % 3];
+    const nextLayer = createDefaultVideoCaptionLayer({
+      customPosition: {
+        xPercent: 0.5,
+        yPercent:
+          nextPosition === "top"
+            ? 0.15
+            : nextPosition === "center"
+              ? 0.5
+              : 0.85,
+      },
+      enabled: true,
+      presetId: "karaoke",
+      text: `Caption ${videoCaptionLayers.length + 1}`,
+      verticalPosition: nextPosition,
+    });
+
+    setVideoCaptionLayers((current) => [...current, nextLayer]);
+    setActiveVideoCaptionLayerId(nextLayer.id);
+  }
+
+  function removeVideoCaptionLayer(layerId: string) {
+    if (videoCaptionLayers.length <= 1) {
+      return;
+    }
+
+    const remaining = videoCaptionLayers.filter((layer) => layer.id !== layerId);
+    setVideoCaptionLayers(remaining);
+
+    if (activeVideoCaptionLayerId === layerId) {
+      setActiveVideoCaptionLayerId(remaining[0]!.id);
+    }
+  }
+
+  const highlightedEditorPanel =
+    showEditorPanel && activeEditorPanel
+      ? activeEditorPanel
+      : formatUploadPrompt === "photos"
+        ? "photos"
+        : formatUploadPrompt === "pdfDocs"
+          ? "pdfDocs"
+          : formatUploadPrompt === "video"
+            ? "video"
+            : null;
 
   return (
     <div className="flex h-[100svh] w-full flex-col overflow-hidden">
@@ -4029,6 +9637,50 @@ export default function WatermarkPage() {
             type="file"
           />
           <input
+            accept={acceptedImageInputTypes}
+            className="hidden"
+            multiple
+            onChange={(event) => {
+              handleFormatUploadFiles(
+                Array.from(event.target.files ?? []),
+                "photos",
+              );
+              event.target.value = "";
+            }}
+            ref={formatPhotosInputRef}
+            type="file"
+          />
+          <input
+            accept={acceptedPdfInputTypes}
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.item(0);
+
+              if (file) {
+                handleFormatUploadFiles([file], "pdfDocs");
+              }
+
+              event.target.value = "";
+            }}
+            ref={formatPdfInputRef}
+            type="file"
+          />
+          <input
+            accept={acceptedVideoInputTypes}
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.item(0);
+
+              if (file) {
+                handleFormatUploadFiles([file], "video");
+              }
+
+              event.target.value = "";
+            }}
+            ref={formatVideoInputRef}
+            type="file"
+          />
+          <input
             accept="image/jpeg,image/png,image/webp"
             className="hidden"
             multiple
@@ -4042,6 +9694,38 @@ export default function WatermarkPage() {
               event.target.value = "";
             }}
             ref={appendImagesInputRef}
+            type="file"
+          />
+          <input
+            accept="video/mp4,video/quicktime,video/webm,.mov,.mp4,.webm"
+            className="hidden"
+            multiple
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+
+              if (files.length) {
+                void appendVideoBatchFiles(files);
+              }
+
+              event.target.value = "";
+            }}
+            ref={appendVideosInputRef}
+            type="file"
+          />
+          <input
+            accept={acceptedPdfInputTypes}
+            className="hidden"
+            multiple
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+
+              if (files.length) {
+                void appendPdfMergeBatchFiles(files);
+              }
+
+              event.target.value = "";
+            }}
+            ref={appendPdfsInputRef}
             type="file"
           />
           <input
@@ -4059,70 +9743,115 @@ export default function WatermarkPage() {
           />
 
           <ToolIconRail
-            activePanel={activeEditorPanel}
-            imageToolsEnabled={imageToolsEnabled}
+            activePanel={highlightedEditorPanel}
+            mediaKind={mediaKind}
             onSelectPanel={handleEditorPanelSelect}
           />
 
           {showEditorPanel ? (
             <EditorToolPanel
               icon={editorPanelIcon}
-              onClose={() => setActiveEditorPanel(null)}
+              instant
+              onClose={handleEditorPanelClose}
               title={editorPanelTitle}
-            >
-          {activeEditorPanel === "watermark" ? (
-            <div className="space-y-2">
-              {hasMedia ? (
-                <div className="flex items-center gap-1.5 rounded-md border border-beige/10 bg-night-card/80 px-1.5 py-1">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[11px] font-medium text-beige">
-                      {isPdfLoading
-                        ? "Loading PDF..."
-                        : isBatchImageMode
-                          ? `${imageBatch.length} images`
-                          : fileName}
-                      {loadedMediaDetails ? (
-                        <span className="ml-1 font-normal text-beige-dim">
-                          {loadedMediaDetails}
-                        </span>
-                      ) : null}
-                    </p>
-                  </div>
-
-                  <div className="flex shrink-0 items-center gap-0.5">
-                    {!isPdfLoading ? (
-                      <>
-                        <button
-                          aria-label="Replace loaded media"
-                          className="flex h-6 w-6 items-center justify-center rounded border border-beige/10 text-beige-dim transition hover:border-sand hover:text-sand"
-                          onClick={openReplaceMediaPicker}
-                          type="button"
-                        >
-                          <RefreshCw className="h-3 w-3" strokeWidth={2} />
-                        </button>
-
-                        {mediaKind === "image" ? (
-                          <button
-                            aria-label="Add more images"
-                            className="flex h-6 w-6 items-center justify-center rounded border border-beige/10 text-beige-dim transition hover:border-sand hover:text-sand"
-                            onClick={openAddMoreImagesPicker}
-                            type="button"
-                          >
-                            <Images className="h-3 w-3" strokeWidth={2} />
-                          </button>
-                        ) : null}
-                      </>
+              toolRail={
+                activeEditorPanel === "photos" ? (
+                  <div className="flex shrink-0">
+                    <PhotosToolRail
+                      activeTool={activePhotoTool}
+                      imageToolsEnabled={imageToolsEnabled}
+                      onSelectTool={handlePhotoToolSelect}
+                    />
+                    {activePhotoTool === "watermark" ? (
+                      <WatermarkToolRail
+                        activeTool={activeWatermarkTool}
+                        hasMedia={hasMedia}
+                        onSelectTool={handleWatermarkToolSelect}
+                      />
                     ) : null}
-
-                    <button
-                      aria-label="Remove loaded media"
-                      className="flex h-6 w-6 items-center justify-center rounded border border-beige/10 text-beige-dim transition hover:border-signal/40 hover:text-signal"
-                      onClick={removeLoadedMedia}
-                      type="button"
-                    >
-                      <Trash2 className="h-3 w-3" strokeWidth={2} />
-                    </button>
                   </div>
+                ) : activeEditorPanel === "pdfDocs" ? (
+                  <div className="flex shrink-0">
+                    <PdfDocsToolRail
+                      activeTool={activePdfTool}
+                      onSelectTool={handlePdfDocToolSelect}
+                    />
+                    {activePdfTool === "watermark" ? (
+                      <WatermarkToolRail
+                        activeTool={activeWatermarkTool}
+                        hasMedia={hasMedia}
+                        onSelectTool={handleWatermarkToolSelect}
+                      />
+                    ) : null}
+                  </div>
+                ) : activeEditorPanel === "video" ? (
+                  <div className="flex shrink-0">
+                    <VideoToolRail
+                      activeTool={activeVideoTool}
+                      hasVideo={videoToolsEnabled}
+                      onReshortenVideo={beginReshortenSession}
+                      onSelectTool={handleVideoToolSelect}
+                      showReshortenOnTrim={showReshortenVideoAction}
+                    />
+                    {activeVideoTool === "watermark" ? (
+                      <WatermarkToolRail
+                        activeTool={activeWatermarkTool}
+                        hasMedia={hasMedia}
+                        onSelectTool={handleWatermarkToolSelect}
+                      />
+                    ) : null}
+                  </div>
+                ) : undefined
+              }
+            >
+          {isWatermarkPanelActive ? (
+            <div className="space-y-2">
+              {activeWatermarkTool === "upload" ? (
+                <>
+              {!hasMedia ? (
+                <EditorCard>
+                  <p className="text-sm leading-6 text-ed-fg-muted">
+                    Upload an image, PDF, or video to start watermarking.
+                  </p>
+                  <button
+                    className="editor-secondary-button mt-3 w-full rounded-xl border-dashed px-4 py-3 text-sm font-semibold text-ed-fg hover:border-signal/50"
+                    onClick={openFilePicker}
+                    type="button"
+                  >
+                    Choose file
+                  </button>
+                </EditorCard>
+              ) : null}
+
+              {hasMedia &&
+              !isBatchImageMode &&
+              mediaKind === "pdf" &&
+              (isPdfLoading || pdfPages.length === 0) ? (
+                <div className="flex justify-end rounded-lg border border-ed-border bg-ed-bg-card px-2 py-1.5">
+                  <EditorMediaActionButtons
+                    isPdfLoading={isPdfLoading}
+                    mediaKind={mediaKind}
+                    onAddMoreImages={openAddMoreImagesPicker}
+                    onRemove={removeLoadedMedia}
+                    onReplace={openReplaceMediaPicker}
+                  />
+                </div>
+              ) : null}
+
+              {hasMedia &&
+              !isBatchImageMode &&
+              !isBatchVideoMode &&
+              mediaKind !== "pdf" &&
+              !isPdfLoading ? (
+                <div className="flex justify-end rounded-lg border border-ed-border bg-ed-bg-card px-2 py-1.5">
+                  <EditorMediaActionButtons
+                    isPdfLoading={false}
+                    mediaKind={mediaKind}
+                    onAddMoreImages={openAddMoreImagesPicker}
+                    onAddMoreVideos={openAddMoreVideosPicker}
+                    onRemove={removeLoadedMedia}
+                    onReplace={openReplaceMediaPicker}
+                  />
                 </div>
               ) : null}
 
@@ -4130,14 +9859,58 @@ export default function WatermarkPage() {
                 <ImageBatchStrip
                   activeId={activeBatchImageId}
                   entries={imageBatch}
+                  headerActions={
+                    hasMedia ? (
+                      <EditorMediaActionButtons
+                        isPdfLoading={false}
+                        mediaKind={mediaKind}
+                        onAddMoreImages={openAddMoreImagesPicker}
+                        onAddMoreVideos={openAddMoreVideosPicker}
+                        onRemove={removeLoadedMedia}
+                        onReplace={openReplaceMediaPicker}
+                      />
+                    ) : null
+                  }
                   onRemove={removeBatchImage}
                   onSelect={selectBatchImage}
+                />
+              ) : null}
+
+              {isBatchVideoMode ? (
+                <VideoBatchStrip
+                  activeId={activeBatchVideoId}
+                  entries={videoBatch}
+                  headerActions={
+                    hasMedia ? (
+                      <EditorMediaActionButtons
+                        isPdfLoading={false}
+                        mediaKind={mediaKind}
+                        onAddMoreImages={openAddMoreImagesPicker}
+                        onAddMoreVideos={openAddMoreVideosPicker}
+                        onRemove={removeLoadedMedia}
+                        onReplace={openReplaceMediaPicker}
+                      />
+                    ) : null
+                  }
+                  onRemove={removeBatchVideo}
+                  onSelect={selectBatchVideo}
                 />
               ) : null}
 
               {mediaKind === "pdf" && pdfPages.length > 0 ? (
                 <PdfPageStrip
                   activeId={activePdfPageId}
+                  headerActions={
+                    hasMedia && !isPdfLoading ? (
+                      <EditorMediaActionButtons
+                        isPdfLoading={isPdfLoading}
+                        mediaKind={mediaKind}
+                        onAddMoreImages={openAddMoreImagesPicker}
+                        onRemove={removeLoadedMedia}
+                        onReplace={openReplaceMediaPicker}
+                      />
+                    ) : null
+                  }
                   onSelect={(id) => {
                     void selectPdfPage(id);
                   }}
@@ -4145,37 +9918,26 @@ export default function WatermarkPage() {
                 />
               ) : null}
 
-              {showRestoredSettingsNotice ? (
-                <div className="rounded-md border border-beige/10 bg-beige/5 px-1.5 py-1 text-[9px] text-beige">
-                  <p>Settings restored.</p>
-                  <div className="mt-0.5 flex items-center gap-2">
-                    <button
-                      className="font-medium text-signal transition hover:text-beige"
-                      onClick={() => setShowRestoredSettingsNotice(false)}
-                      type="button"
-                    >
-                      OK
-                    </button>
-                    <button
-                      className="font-medium text-beige-dim transition hover:text-beige"
-                      onClick={resetWatermarkSettingsToDefaults}
-                      type="button"
-                    >
-                      Reset
-                    </button>
-                  </div>
-                </div>
+              {showVideoServerProcessingPanel && videoServerCostEstimate ? (
+                <VideoServerProcessingPanel estimate={videoServerCostEstimate} />
               ) : null}
 
-              {isExporting && isBatchImageMode && batchExportProgress ? (
-                <div className="rounded-lg border border-beige/10 bg-night-card px-2.5 py-2">
-                  <p className="text-xs font-medium text-beige-dim">
+              {isExporting && isExportPreparing ? (
+                <LoadingIndicator label="Preparing export..." size="sm" />
+              ) : null}
+
+              {isExporting &&
+              !isExportPreparing &&
+              isBatchImageMode &&
+              batchExportProgress ? (
+                <div className="rounded-lg border border-ed-border bg-ed-bg-card px-2.5 py-2">
+                  <p className="text-xs font-medium text-ed-fg-muted">
                     Processing {batchExportProgress.current} of{" "}
                     {batchExportProgress.total}...
                   </p>
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-beige/10">
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-ed-fg/10">
                     <div
-                      className="h-full rounded-full bg-signal transition-[width] duration-200"
+                      className="h-full rounded-full bg-ed-accent transition-[width] duration-200"
                       style={{
                         width: `${
                           (batchExportProgress.current /
@@ -4188,15 +9950,18 @@ export default function WatermarkPage() {
                 </div>
               ) : null}
 
-              {isExporting && mediaKind === "pdf" && pdfExportProgress ? (
-                <div className="rounded-lg border border-beige/10 bg-night-card px-2.5 py-2">
-                  <p className="text-xs font-medium text-beige-dim">
+              {isExporting &&
+              !isExportPreparing &&
+              mediaKind === "pdf" &&
+              pdfExportProgress ? (
+                <div className="rounded-lg border border-ed-border bg-ed-bg-card px-2.5 py-2">
+                  <p className="text-xs font-medium text-ed-fg-muted">
                     Processing page {pdfExportProgress.current} of{" "}
                     {pdfExportProgress.total}...
                   </p>
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-beige/10">
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-ed-fg/10">
                     <div
-                      className="h-full rounded-full bg-signal transition-[width] duration-200"
+                      className="h-full rounded-full bg-ed-accent transition-[width] duration-200"
                       style={{
                         width: `${
                           (pdfExportProgress.current /
@@ -4210,9 +9975,9 @@ export default function WatermarkPage() {
               ) : null}
 
               {isExporting && mediaKind === "video" && exportProgress !== null ? (
-                <div className="rounded-lg border border-beige/10 bg-night-card px-2.5 py-2">
+                <div className="rounded-lg border border-ed-border bg-ed-bg-card px-2.5 py-2">
                   {isServerVideoExport ? (
-                    <p className="text-xs font-medium text-beige-dim">
+                    <p className="text-xs font-medium text-ed-fg-muted">
                       {videoExportStageLabel}
                     </p>
                   ) : null}
@@ -4221,14 +9986,14 @@ export default function WatermarkPage() {
                       isServerVideoExport ? "mt-1.5" : ""
                     }`}
                   >
-                    <span className="font-medium text-beige-dim">
+                    <span className="font-medium text-ed-fg-muted">
                       {isServerVideoExport ? "Estimated progress" : "Export progress"}
                     </span>
-                    <span className="font-semibold text-beige">{exportProgress}%</span>
+                    <span className="font-semibold text-ed-fg">{exportProgress}%</span>
                   </div>
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-beige/10">
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-ed-fg/10">
                     <div
-                      className={`h-full rounded-full bg-signal transition-[width] duration-200 ${
+                      className={`h-full rounded-full bg-ed-accent transition-[width] duration-200 ${
                         isServerVideoExport && exportServerStage === "processing"
                           ? "animate-pulse"
                           : ""
@@ -4237,7 +10002,7 @@ export default function WatermarkPage() {
                     />
                   </div>
                   <button
-                    className="mt-2 w-full rounded-full border border-signal/30 bg-night-card px-3 py-2 text-xs font-semibold text-signal transition hover:border-signal hover:bg-signal/5"
+                    className="editor-secondary-button mt-2 w-full rounded-full border-signal/30 px-3 py-2 text-xs font-semibold text-signal hover:bg-signal/5"
                     onClick={handleCancelExport}
                     type="button"
                   >
@@ -4247,17 +10012,17 @@ export default function WatermarkPage() {
               ) : null}
 
               {creditBalance !== null && !(authChecked && isAuthenticated) ? (
-                <div className="rounded-lg border border-beige/10 bg-beige/5 px-2.5 py-2 text-xs text-beige-dim">
+                <div className="rounded-lg border border-ed-border bg-ed-fg/5 px-2.5 py-2 text-xs text-ed-fg-muted">
                   Credits: {formatCreditBalance(creditBalance)}
                 </div>
               ) : null}
 
               {exportNotice ? (
-                <div className="rounded-lg border border-beige/10 bg-beige/5 px-2.5 py-2 text-xs text-beige">
+                <div className="rounded-lg border border-ed-border bg-ed-fg/5 px-2.5 py-2 text-xs text-ed-fg">
                   <div className="flex items-center justify-between gap-2">
                     <p>{exportNotice}</p>
                     <button
-                      className="shrink-0 font-medium text-beige-dim transition hover:text-beige"
+                      className="shrink-0 font-medium text-ed-fg-muted transition hover:text-ed-fg"
                       onClick={() => setExportNotice("")}
                       type="button"
                     >
@@ -4268,13 +10033,16 @@ export default function WatermarkPage() {
               ) : null}
 
               {exportError ? (
-                <div className="rounded-lg border border-signal/30 bg-signal/10 px-2.5 py-2 text-xs text-beige">
+                <div className="rounded-lg border border-ed-accent/30 bg-ed-accent/10 px-2.5 py-2 text-xs text-ed-fg">
                   <p>{exportError}</p>
                   <div className="mt-2 flex items-center gap-3">
                     {mediaKind === "video" && canExportVideo ? (
                       <button
-                        className="font-medium text-signal transition hover:text-beige"
+                        className="font-medium text-signal transition hover:text-ed-fg"
                         onClick={() => {
+                          logRealVideoExport(
+                            "STEP 1/15: Retry export button clicked (video)",
+                          );
                           setExportError("");
                           void handleVideoExport();
                         }}
@@ -4283,8 +10051,20 @@ export default function WatermarkPage() {
                         Retry export
                       </button>
                     ) : null}
+                    {mediaKind === "pdf" && pdfPageCount > 0 ? (
+                      <button
+                        className="font-medium text-signal transition hover:text-ed-fg"
+                        onClick={() => {
+                          setExportError("");
+                          void handlePdfExport();
+                        }}
+                        type="button"
+                      >
+                        Retry export
+                      </button>
+                    ) : null}
                     <button
-                      className="font-medium text-beige-dim transition hover:text-beige"
+                      className="font-medium text-ed-fg-muted transition hover:text-ed-fg"
                       onClick={() => setExportError("")}
                       type="button"
                     >
@@ -4293,42 +10073,31 @@ export default function WatermarkPage() {
                   </div>
                 </div>
               ) : null}
+                </>
+              ) : null}
 
-              <div className="space-y-1">
-                <div className="grid grid-cols-3 gap-0.5 rounded-md bg-night-card/60 p-0.5">
-                  {watermarkTypes.map(({ label, value }) => (
-                    <EditorSegment
-                      active={watermarkType === value}
-                      groupId="watermark-type"
-                      key={value}
-                      onClick={() => handleWatermarkTypeChange(value)}
+              {activeWatermarkTool === "text" ? (
+                !hasMedia ? (
+                  <EditorCard>
+                    <p className="text-sm leading-6 text-ed-fg-muted">
+                      Upload a file first, then add your text watermark here.
+                    </p>
+                    <button
+                      className="editor-secondary-button mt-3 w-full rounded-xl border-dashed px-4 py-2.5 text-sm font-semibold text-ed-fg hover:border-signal/50"
+                      onClick={() => setActiveWatermarkTool("upload")}
+                      type="button"
                     >
-                      {label}
-                    </EditorSegment>
-                  ))}
-                </div>
-
-                {watermarkType !== "signature" ? (
-                  <div className="grid grid-cols-2 gap-0.5 rounded-md bg-night-card/60 p-0.5">
-                    {watermarkModes.map(({ label, value }) => (
-                      <EditorSegment
-                        active={watermarkMode === value}
-                        groupId="watermark-mode"
-                        key={value}
-                        onClick={() => {
-                          clearActiveTemplate();
-                          setWatermarkMode(value);
-                          setIsWatermarkHovering(false);
-                        }}
-                      >
-                        {label}
-                      </EditorSegment>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-
-              {watermarkType === "text" ? (
+                      Go to upload
+                    </button>
+                  </EditorCard>
+                ) : (
+                <>
+                {renderQuickTemplates(
+                  "text-template-selection",
+                  watermarkTemplates,
+                  activeTextTemplate,
+                  applyTextTemplate,
+                )}
                 <WatermarkLayersPanel
                   activeLayerId={activeTextLayerId}
                       fontFamilyGroups={watermarkFontFamilyGroups}
@@ -4389,7 +10158,7 @@ export default function WatermarkPage() {
                           return;
                         }
 
-                        clearActiveTemplate();
+                        clearActiveTextTemplate();
                         setTileAngle(value);
                       }}
                       onTileDensityChange={(value) => {
@@ -4397,7 +10166,7 @@ export default function WatermarkPage() {
                           return;
                         }
 
-                        clearActiveTemplate();
+                        clearActiveTextTemplate();
                         setTileDensity(value);
                       }}
                       onTileGapChange={(value) => {
@@ -4405,19 +10174,56 @@ export default function WatermarkPage() {
                           return;
                         }
 
-                        clearActiveTemplate();
+                        clearActiveTextTemplate();
                         setTileGap(value);
                       }}
                       onWatermarkOpacityChange={(value) => {
                         updateTextLayer(activeTextLayerId, { opacity: value });
                         handleWatermarkOpacityChange(value);
                       }}
+                      onVisibleFromSecondsChange={(value) => {
+                        updateTextLayer(activeTextLayerId, {
+                          visibleFromSeconds: value,
+                        });
+                      }}
+                      onVisibleUntilSecondsChange={(value) => {
+                        updateTextLayer(activeTextLayerId, {
+                          visibleUntilSeconds: value,
+                        });
+                      }}
+                      showVideoVisibilityControls={mediaKind === "video"}
                       tileAngle={tileAngle}
                       tileDensity={tileDensity}
                       tileGap={tileGap}
+                      videoDurationSeconds={videoDuration}
                   type="text"
                 />
-              ) : watermarkType === "logo" ? (
+                </>
+                )
+              ) : null}
+
+              {activeWatermarkTool === "logo" ? (
+                !hasMedia ? (
+                  <EditorCard>
+                    <p className="text-sm leading-6 text-ed-fg-muted">
+                      Upload a file first, then add your logo watermark here.
+                    </p>
+                    <button
+                      className="editor-secondary-button mt-3 w-full rounded-xl border-dashed px-4 py-2.5 text-sm font-semibold text-ed-fg hover:border-signal/50"
+                      onClick={() => setActiveWatermarkTool("upload")}
+                      type="button"
+                    >
+                      Go to upload
+                    </button>
+                  </EditorCard>
+                ) : (
+                <>
+                {renderQuickTemplates(
+                  "logo-template-selection",
+                  logoWatermarkTemplates,
+                  activeLogoTemplate,
+                  applyLogoTemplate,
+                )}
                 <WatermarkLayersPanel
                   activeLayerId={activeLogoLayerId}
                       fontFamilyGroups={watermarkFontFamilyGroups}
@@ -4457,7 +10263,7 @@ export default function WatermarkPage() {
                           return;
                         }
 
-                        clearActiveTemplate();
+                        clearActiveLogoTemplate();
                         setTileAngle(value);
                       }}
                       onTileDensityChange={(value) => {
@@ -4465,7 +10271,7 @@ export default function WatermarkPage() {
                           return;
                         }
 
-                        clearActiveTemplate();
+                        clearActiveLogoTemplate();
                         setTileDensity(value);
                       }}
                       onTileGapChange={(value) => {
@@ -4473,7 +10279,7 @@ export default function WatermarkPage() {
                           return;
                         }
 
-                        clearActiveTemplate();
+                        clearActiveLogoTemplate();
                         setTileGap(value);
                       }}
                       onWatermarkOpacityChange={(value) => {
@@ -4485,406 +10291,293 @@ export default function WatermarkPage() {
                       tileGap={tileGap}
                   type="logo"
                 />
-              ) : (
-                <SignatureControls
-                  activeSignatureId={activeSignatureId}
-                  hasDocument={hasMedia}
-                  onActiveSignatureChange={handleActiveSignatureChange}
-                  onPlaceSignature={placeSignatureOnDocument}
-                  onSignaturesChange={setSavedSignatures}
-                  savedSignatures={savedSignatures}
-                />
-              )}
-
-              {watermarkMode === "single" && hasMedia && watermarkType === "signature" ? (
-                <p className="text-[9px] leading-3 text-beige-dim/80">
-                  Drag a saved signature onto the preview, or drag it on the canvas
-                  to reposition.
-                </p>
+                </>
+                )
               ) : null}
 
-              {!showRestoredSettingsNotice ? (
-                <button
-                  className="block text-xs font-medium text-beige-dim transition hover:text-beige"
-                  onClick={resetWatermarkSettingsToDefaults}
-                  type="button"
-                >
-                  Reset to defaults
-                </button>
-              ) : null}
+            </div>
+          ) : null}
 
-              {!hasMedia ? (
+          {activeEditorPanel === "pdfDocs" && activePdfTool === "signFill" ? (
+            <div className="space-y-2">
+              {mediaKind !== "pdf" || pdfPageCount === 0 ? (
                 <EditorCard>
-                  <p className="text-sm leading-6 text-beige-dim">
-                    Upload an image, PDF, or video to start watermarking.
+                  <p className="text-sm leading-6 text-ed-fg-muted">
+                    Sign & Fill is available for PDF documents. Upload a PDF to
+                    get started.
                   </p>
                   <button
-                    className="mt-3 w-full rounded-xl border border-dashed border-beige/10 bg-night-card/70 px-4 py-3 text-sm font-semibold text-beige transition hover:border-sand hover:bg-night-card"
+                    className="editor-secondary-button mt-3 w-full rounded-xl border-dashed px-4 py-3 text-sm font-semibold text-ed-fg hover:border-signal/50"
                     onClick={openFilePicker}
                     type="button"
                   >
-                    Choose file
+                    Choose PDF
                   </button>
                 </EditorCard>
-              ) : null}
-            </div>
-          ) : null}
-
-          {activeEditorPanel === "templates" ? (
-            <div className="space-y-3">
-              <EditorPanelSection title="Quick templates">
-                <div className="grid grid-cols-3 gap-2">
-                  {watermarkTemplates.map((template) => {
-                    const isSelected = activeTemplate === template.id;
-
-                    return (
-                      <motion.button
-                        aria-pressed={isSelected}
-                        className={`relative rounded-xl border px-1.5 py-2 text-left transition-colors ${
-                          isSelected
-                            ? "border-signal text-white"
-                            : "border-beige/10 bg-night-card text-beige-dim hover:border-signal hover:text-beige"
-                        }`}
-                        key={template.id}
-                        onPointerDown={(event) => event.preventDefault()}
-                        onClick={() => applyTemplate(template)}
-                        type="button"
-                        whileTap={{ scale: 0.96 }}
-                        transition={{ type: "spring", stiffness: 420, damping: 28 }}
-                      >
-                        {isSelected ? (
-                          <motion.span
-                            className="absolute inset-0 rounded-xl border border-signal bg-signal shadow-md"
-                            layoutId="template-selection"
-                            transition={{
-                              type: "spring",
-                              stiffness: 380,
-                              damping: 32,
-                            }}
-                          />
-                        ) : null}
-                        <span className="relative z-10">
-                          <TemplateIcon
-                            isSelected={isSelected}
-                            variant={template.icon}
-                          />
-                          <span className="mt-1 block truncate text-[10px] font-semibold leading-tight">
-                            {template.label}
-                          </span>
-                        </span>
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              </EditorPanelSection>
-
-              {watermarkMode === "tile" ? (
-                <div className="space-y-2">
-                  <EditorPanelSection title="Density">
-                    <div className="grid grid-cols-3 gap-1">
-                      {tileDensities.map(({ label, value }) => (
-                        <EditorPill
-                          active={tileDensity === value}
-                          groupId="template-tile-density"
-                          key={value}
-                          onClick={() => {
-                            if (shouldIgnoreManualSettingsChange()) {
-                              return;
-                            }
-
-                            clearActiveTemplate();
-                            setTileDensity(value);
-                          }}
-                        >
-                          {label}
-                        </EditorPill>
-                      ))}
-                    </div>
-                  </EditorPanelSection>
-
-                  <EditorPanelSection title="Angle">
-                    <div className="grid grid-cols-4 gap-1">
-                      {tileAngles.map(({ label, value }) => (
-                        <EditorPill
-                          active={tileAngle === value}
-                          groupId="template-tile-angle"
-                          key={value}
-                          onClick={() => {
-                            if (shouldIgnoreManualSettingsChange()) {
-                              return;
-                            }
-
-                            clearActiveTemplate();
-                            setTileAngle(value);
-                          }}
-                        >
-                          {label}
-                        </EditorPill>
-                      ))}
-                    </div>
-                  </EditorPanelSection>
-
-                  <EditorPanelSection title="Gap">
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-xs font-semibold text-beige">
-                        {tileGap}%
-                      </span>
-                    </div>
-                    <input
-                      className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-signal"
-                      id="template-tile-gap"
-                      max={300}
-                      min={50}
-                      onChange={(event) => {
-                        if (shouldIgnoreManualSettingsChange()) {
-                          return;
-                        }
-
-                        clearActiveTemplate();
-                        setTileGap(Number(event.target.value));
+              ) : (
+                <>
+                  {mediaKind === "pdf" && pdfPages.length > 0 ? (
+                    <PdfPageStrip
+                      activeId={activePdfPageId}
+                      onSelect={(id) => {
+                        void selectPdfPage(id);
                       }}
-                      step={10}
-                      type="range"
-                      value={tileGap}
+                      pages={pdfPages}
                     />
-                  </EditorPanelSection>
-                </div>
-              ) : null}
+                  ) : null}
 
-              <WatermarkStyleControls
-                fontFamilyGroups={watermarkFontFamilyGroups}
-                fontFamily={fontFamily}
-                fontSizeScale={fontSizeScale}
-                fontWeight={fontWeight}
-                onFontFamilyChange={(value) => {
-                  if (watermarkType === "text") {
-                    updateTextLayer(activeTextLayerId, { fontFamily: value });
-                  }
-
-                  handleFontFamilyChange(value);
-                }}
-                onFontSizeScaleChange={handleFontSizeScaleChange}
-                onFontWeightChange={(value) => {
-                  if (watermarkType === "text") {
-                    updateTextLayer(activeTextLayerId, { fontWeight: value });
-                  }
-
-                  handleFontWeightChange(value);
-                }}
-                onTextColorChange={(value) => {
-                  if (watermarkType === "text") {
-                    updateTextLayer(activeTextLayerId, { textColor: value });
-                  }
-
-                  handleTextColorChange(value);
-                }}
-                onWatermarkOpacityChange={handleWatermarkOpacityChange}
-                textColor={textColor}
-                watermarkOpacity={watermarkOpacity}
-                watermarkType={watermarkType}
-              />
-
-              {savedPresets.length ? (
-                <EditorPanelSection title="Saved presets">
-                  <div className="flex flex-wrap gap-1.5">
-                    {savedPresets.map((preset) => (
+                  {pdfDocumentTool === "fill" ? (
+                    <>
                       <button
-                        className="rounded-full border border-beige/10 bg-night-card px-2.5 py-1 text-[11px] font-semibold text-beige-dim transition hover:border-sand hover:text-beige"
-                        key={preset.id}
-                        onClick={() =>
-                          applyWatermarkSettingsSnapshot(preset.snapshot)
-                        }
+                        className="editor-secondary-button inline-flex w-full items-center justify-center px-3 py-2 text-xs font-semibold text-ed-fg hover:border-signal/50"
+                        onClick={() => setPdfDocumentTool("signature")}
                         type="button"
                       >
-                        {preset.name}
+                        Back to Sign & Fill
                       </button>
-                    ))}
-                  </div>
-                </EditorPanelSection>
-              ) : null}
-
-              <EditorPanelSection title="Save preset">
-                <button
-                  aria-label="Save watermark preset"
-                  className={`flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] transition ${
-                    isSavingPreset
-                      ? "border-signal bg-signal text-white"
-                      : "border-beige/10 bg-night-card text-beige-dim hover:border-signal hover:text-beige"
-                  }`}
-                  onClick={() => setIsSavingPreset((value) => !value)}
-                  type="button"
-                >
-                  <BookmarkPlus size={15} />
-                  Save current settings
-                </button>
-
-                {isSavingPreset ? (
-                  <EditorCard className="mt-2">
-                    <label
-                      className="text-xs font-medium text-beige-dim"
-                      htmlFor="preset-name"
-                    >
-                      Name this preset
-                    </label>
-                    <input
-                      className="mt-1 w-full rounded-lg border border-beige/10 bg-night-card px-2 py-1.5 text-xs text-beige outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/20"
-                      id="preset-name"
-                      onChange={(event) => setPresetName(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          saveCurrentPreset();
+                      <FillDocumentControls
+                        activeFieldId={activeFillFieldId}
+                        fields={getActivePdfPageFillFields()}
+                        onAddField={() => {
+                          const newField = createDefaultFillField();
+                          syncActivePdfPageFillFields((fields) => [
+                            ...fields,
+                            newField,
+                          ]);
+                          setActiveFillFieldId(newField.id);
+                        }}
+                        onFieldSelect={setActiveFillFieldId}
+                        onRemoveField={(fieldId) => {
+                          syncActivePdfPageFillFields((fields) =>
+                            fields.filter((field) => field.id !== fieldId),
+                          );
+                          setActiveFillFieldId((currentId) =>
+                            currentId === fieldId ? null : currentId,
+                          );
+                        }}
+                        onUpdateField={(fieldId, patch) => {
+                          syncActivePdfPageFillFields((fields) =>
+                            fields.map((field) =>
+                              field.id === fieldId ? { ...field, ...patch } : field,
+                            ),
+                          );
+                        }}
+                        pdfPageLabel={
+                          activePdfPageId && pdfPageCount > 0
+                            ? `Page ${
+                                pdfPages.find((page) => page.id === activePdfPageId)
+                                  ?.pageNumber ?? 1
+                              } of ${pdfPageCount}`
+                            : null
                         }
-                      }}
-                      placeholder="e.g. My brand mark"
-                      type="text"
-                      value={presetName}
-                    />
-                    <div className="mt-2 grid grid-cols-2 gap-1.5">
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <SignatureControls
+                        activeSignatureId={activeSignatureId}
+                        hasDocument={hasMedia}
+                        hasSignatureOnPage={Boolean(
+                          activePdfPageId &&
+                            (pdfPageSignatures[activePdfPageId]?.length ?? 0) > 0,
+                        )}
+                        onActiveSignatureChange={handleActiveSignatureChange}
+                        onPlaceSignature={placeSignatureOnDocument}
+                        onRemoveFromPage={removeSignatureFromActivePdfPage}
+                        onSignaturesChange={handleSavedSignaturesChange}
+                        pdfPageLabel={
+                          activePdfPageId && pdfPageCount > 0
+                            ? `Page ${
+                                pdfPages.find((page) => page.id === activePdfPageId)
+                                  ?.pageNumber ?? 1
+                              } of ${pdfPageCount}`
+                            : null
+                        }
+                        savedSignatures={savedSignatures}
+                      />
                       <button
-                        className="rounded-lg bg-signal px-2.5 py-1.5 text-xs font-semibold text-white transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={!presetName.trim()}
-                        onClick={saveCurrentPreset}
-                        type="button"
-                      >
-                        Save
-                      </button>
-                      <button
-                        className="rounded-lg border border-beige/10 px-2.5 py-1.5 text-xs font-semibold text-beige-dim transition hover:text-beige"
+                        className="editor-secondary-button inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-ed-fg hover:border-signal/50"
                         onClick={() => {
-                          setPresetName("");
-                          setIsSavingPreset(false);
+                          void handleAddTextClick();
                         }}
                         type="button"
                       >
-                        Cancel
+                        Add Text
                       </button>
-                    </div>
-                  </EditorCard>
-                ) : null}
-              </EditorPanelSection>
+                    </>
+                  )}
+
+                  {pdfDocumentTool !== "fill" ? (
+                    <p className="text-[9px] leading-3 text-ed-fg-muted/80">
+                      Each page can hold multiple signatures, initials, and
+                      fill-text fields. Select a placement to resize it, use Done
+                      when finished, or × to remove one instance.
+                    </p>
+                  ) : null}
+                </>
+              )}
             </div>
           ) : null}
 
-          {activeEditorPanel === "crop" ? (
+          {activeEditorPanel === "pdfDocs" && activePdfTool === "merge" ? (
+            <div className="space-y-2">
+              {mediaKind === "pdf" && pdfPages.length > 0 ? (
+                <PdfPageStrip
+                  activeId={activePdfPageId}
+                  onSelect={(id) => {
+                    void selectPdfPage(id);
+                  }}
+                  pages={pdfPages}
+                />
+              ) : mediaKind === "pdf" && isPdfLoading ? (
+                <EditorCard>
+                  <p className="text-sm text-ed-fg-muted">Loading PDF pages…</p>
+                </EditorCard>
+              ) : null}
+
+              <PdfMergePanel
+                entries={pdfMergeBatch}
+                hasLoadedPdf={mediaKind === "pdf" && pdfPageCount > 0}
+                isProcessing={isPdfMergeProcessing}
+                onAddPdfs={openAddMorePdfsPicker}
+                onMergePdfs={() => {
+                  void mergePdfBatchDocuments();
+                }}
+                onMoveEntry={movePdfMergeEntry}
+                onRemoveEntry={removePdfMergeEntry}
+                onUploadPdf={openFilePicker}
+              />
+            </div>
+          ) : null}
+
+          {activeEditorPanel === "pdfDocs" && activePdfTool === "compress" ? (
+            <div className="space-y-2">
+              {mediaKind === "pdf" && pdfPages.length > 0 ? (
+                <PdfPageStrip
+                  activeId={activePdfPageId}
+                  onSelect={(id) => {
+                    void selectPdfPage(id);
+                  }}
+                  pages={pdfPages}
+                />
+              ) : mediaKind === "pdf" && isPdfLoading ? (
+                <EditorCard>
+                  <p className="text-sm text-ed-fg-muted">Loading PDF pages…</p>
+                </EditorCard>
+              ) : null}
+
+              <PdfCompressPanel
+                fileName={fileName}
+                fileSize={pdfBytesRef.current?.byteLength ?? 0}
+                hasLoadedPdf={mediaKind === "pdf" && pdfPageCount > 0}
+                isProcessing={isPdfCompressProcessing}
+                lastResult={lastPdfCompressResult}
+                onCompress={() => {
+                  void compressLoadedPdf();
+                }}
+                onUploadPdf={openFilePicker}
+                pageCount={pdfPageCount}
+              />
+            </div>
+          ) : null}
+
+          {activeEditorPanel === "photos" && activePhotoTool === "crop" ? (
             <div className="space-y-3">
               {mediaKind !== "image" ? (
                 <EditorCard>
-                  <p className="text-sm text-beige-dim">
+                  <p className="text-sm text-ed-fg-muted">
                     Crop is not available for video or PDF yet.
                   </p>
                 </EditorCard>
               ) : (
-                <>
-                  <EditorCard>
-                    <p className="text-sm leading-6 text-beige-dim">
-                      Drag on the canvas to select a crop. Move the box or drag
-                      a corner handle to resize it.
-                    </p>
-                  </EditorCard>
-                  <EditorApplyButton
-                    disabled={!cropRect || cropRect.width < 4 || cropRect.height < 4}
-                    onClick={applyCrop}
-                  >
-                    Apply crop
-                  </EditorApplyButton>
-                  <button
-                    className="w-full rounded-xl border border-beige/10 bg-night-card/70 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-beige-dim transition hover:text-beige"
-                    onClick={cancelCrop}
-                    type="button"
-                  >
-                    Cancel
-                  </button>
-                </>
+                <CropControlsPanel
+                  cropHeight={Math.round(cropRect?.height ?? 0)}
+                  cropWidth={Math.round(cropRect?.width ?? 0)}
+                  disabled={
+                    !cropRect || cropRect.width < 4 || cropRect.height < 4
+                  }
+                  isAspectRatioLocked={isCropAspectRatioLocked}
+                  onApply={() => void applyCrop()}
+                  onAspectRatioChange={() =>
+                    setIsCropAspectRatioLocked((value) => !value)
+                  }
+                  onHeightChange={handleCropHeightChange}
+                  onWidthChange={handleCropWidthChange}
+                />
               )}
             </div>
           ) : null}
 
-          {activeEditorPanel === "resize" ? (
+          {activeEditorPanel === "photos" && activePhotoTool === "resize" ? (
             <div className="space-y-3">
               {mediaKind !== "image" ? (
                 <EditorCard>
-                  <p className="text-sm text-beige-dim">
+                  <p className="text-sm text-ed-fg-muted">
                     Resize is not available for video or PDF yet.
                   </p>
                 </EditorCard>
               ) : (
-                <>
-                  <EditorCard>
-                    <p className="text-sm leading-6 text-beige-dim">
-                      Drag the corner or edge handles on the photo to resize it, or
-                      enter exact dimensions below.
-                    </p>
-                  </EditorCard>
-                  <div className="grid grid-cols-2 gap-2">
-                    <EditorCard>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-beige-dim">
-                        Width
-                      </p>
-                      <input
-                        className="mt-1 w-full bg-transparent text-lg font-semibold text-beige outline-none"
-                        min={1}
-                        onChange={(event) =>
-                          handleResizeWidthChange(Number(event.target.value))
-                        }
-                        type="number"
-                        value={resizeWidth}
-                      />
-                      <span className="text-xs text-beige-dim">px</span>
-                    </EditorCard>
-                    <EditorCard>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-beige-dim">
-                        Height
-                      </p>
-                      <input
-                        className="mt-1 w-full bg-transparent text-lg font-semibold text-beige outline-none"
-                        min={1}
-                        onChange={(event) =>
-                          handleResizeHeightChange(Number(event.target.value))
-                        }
-                        type="number"
-                        value={resizeHeight}
-                      />
-                      <span className="text-xs text-beige-dim">px</span>
-                    </EditorCard>
-                  </div>
-                  <EditorToggleRow
-                    checked={isAspectRatioLocked}
-                    label="Aspect ratio"
-                    onChange={() => setIsAspectRatioLocked((value) => !value)}
-                  />
-                  {resizeWarning ? (
-                    <p className="text-xs leading-4 text-signal">{resizeWarning}</p>
-                  ) : null}
-                  <EditorApplyButton onClick={applyResize}>Apply resize</EditorApplyButton>
-                </>
+                <ResizeControlsPanel
+                  disabled={!resizeWidth || !resizeHeight}
+                  displayHeight={
+                    resizeUnit === "percent" && image
+                      ? Math.max(
+                          1,
+                          Math.round(
+                            (resizeHeight / image.naturalHeight) * 100,
+                          ),
+                        )
+                      : resizeHeight
+                  }
+                  displayWidth={
+                    resizeUnit === "percent" && image
+                      ? Math.max(
+                          1,
+                          Math.round((resizeWidth / image.naturalWidth) * 100),
+                        )
+                      : resizeWidth
+                  }
+                  isAspectRatioLocked={isAspectRatioLocked}
+                  onApply={() => void applyResize()}
+                  onAspectRatioChange={() =>
+                    setIsAspectRatioLocked((value) => !value)
+                  }
+                  onHeightChange={handleResizeHeightChange}
+                  onScaleModeChange={setResizeScaleMode}
+                  onUnitChange={setResizeUnit}
+                  onWidthChange={handleResizeWidthChange}
+                  scaleMode={resizeScaleMode}
+                  unit={resizeUnit}
+                  warning={resizeWarning}
+                />
               )}
             </div>
           ) : null}
 
-          {activeEditorPanel === "rotate" ? (
+          {activeEditorPanel === "photos" && activePhotoTool === "rotate" ? (
             <div className="space-y-3">
               {mediaKind !== "image" ? (
                 <EditorCard>
-                  <p className="text-sm text-beige-dim">
+                  <p className="text-sm text-ed-fg-muted">
                     Rotate is not available for video or PDF yet.
                   </p>
                 </EditorCard>
               ) : (
                 <>
                   <EditorCard>
-                    <p className="text-sm leading-6 text-beige-dim">
+                    <p className="text-sm leading-6 text-ed-fg-muted">
                       Rotate the base image. Watermark settings stay unchanged.
                     </p>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <button
-                        className="rounded-xl border border-beige/10 bg-night-card px-3 py-2 text-xs font-semibold text-beige transition hover:border-sand"
+                        className="editor-secondary-button rounded-xl px-3 py-2 text-xs font-semibold text-ed-fg hover:border-signal/50"
                         onClick={() => rotateBaseImage("left")}
                         type="button"
                       >
                         90° left
                       </button>
                       <button
-                        className="rounded-xl border border-beige/10 bg-night-card px-3 py-2 text-xs font-semibold text-beige transition hover:border-sand"
+                        className="editor-secondary-button rounded-xl px-3 py-2 text-xs font-semibold text-ed-fg hover:border-signal/50"
                         onClick={() => rotateBaseImage("right")}
                         type="button"
                       >
@@ -4894,13 +10587,13 @@ export default function WatermarkPage() {
                     <div className="mt-3">
                       <div className="flex items-center justify-between gap-3">
                         <label
-                          className="text-xs font-medium text-beige-dim"
+                          className="text-xs font-medium text-ed-fg"
                           htmlFor="base-rotation"
                         >
                           Manual angle
                         </label>
                         <input
-                          className="w-16 rounded-lg border border-beige/10 bg-night-card px-2 py-1 text-right text-xs text-beige outline-none"
+                          className="editor-field-sm w-16 text-right"
                           id="base-rotation-value"
                           max={360}
                           min={0}
@@ -4914,7 +10607,7 @@ export default function WatermarkPage() {
                         />
                       </div>
                       <input
-                        className="mt-2 h-2 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-signal"
+                        className="editor-range mt-2"
                         id="base-rotation"
                         max={360}
                         min={0}
@@ -4935,12 +10628,67 @@ export default function WatermarkPage() {
             </div>
           ) : null}
 
-          {activeEditorPanel === "effects" ? (
+          {activeEditorPanel === "photos" && activePhotoTool === "blur" ? (
             <div className="space-y-3">
               {mediaKind !== "image" ? (
                 <EditorCard>
-                  <p className="text-sm text-beige-dim">
-                    Effects are not available for video or PDF yet.
+                  <p className="text-sm text-ed-fg-muted">
+                    Blur Brush is available for photos only.
+                  </p>
+                </EditorCard>
+              ) : (
+                <>
+                  <EditorCard>
+                    <p className="text-sm leading-6 text-ed-fg-muted">
+                      Click and drag on the photo to pixelate faces or other
+                      sensitive areas with a mosaic redaction effect. Each stroke
+                      is saved to your edit history.
+                    </p>
+                  </EditorCard>
+                  <EditorPanelSection title="Brush size">
+                    <div className="grid grid-cols-3 gap-2">
+                      {(
+                        [
+                          { id: "small", label: "Small" },
+                          { id: "medium", label: "Medium" },
+                          { id: "large", label: "Large" },
+                        ] as const
+                      ).map((option) => (
+                        <button
+                          className={`rounded-xl border px-3 py-2 text-xs font-semibold transition shadow-sm ${
+                            blurBrushSize === option.id
+                              ? "border-2 border-signal bg-signal/15 text-ed-fg ring-2 ring-signal/30"
+                              : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:text-ed-fg"
+                          }`}
+                          key={option.id}
+                          onClick={() => setBlurBrushSize(option.id)}
+                          type="button"
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </EditorPanelSection>
+                  {blurStrokes.length > 0 ? (
+                    <button
+                      className="editor-secondary-button w-full rounded-xl px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-ed-fg-muted hover:text-ed-fg"
+                      onClick={() => updateBlurStrokes(() => [])}
+                      type="button"
+                    >
+                      Clear all pixelation
+                    </button>
+                  ) : null}
+                </>
+              )}
+            </div>
+          ) : null}
+
+          {activeEditorPanel === "photos" && activePhotoTool === "filters" ? (
+            <div className="space-y-3">
+              {mediaKind !== "image" ? (
+                <EditorCard>
+                  <p className="text-sm text-ed-fg-muted">
+                    Filters are not available for video or PDF yet.
                   </p>
                 </EditorCard>
               ) : (
@@ -4959,11 +10707,110 @@ export default function WatermarkPage() {
             </div>
           ) : null}
 
+          {activeEditorPanel === "video" ? (
+            <div className="space-y-2">
+              {!videoToolsEnabled ? (
+                <EditorCard>
+                  <p className="text-sm leading-6 text-ed-fg-muted">
+                    Upload a video to open the video editor. Add captions, trim
+                    length on the timeline, and export your clip.
+                  </p>
+                  <button
+                    className="editor-secondary-button mt-3 w-full rounded-xl border-dashed px-4 py-3 text-sm font-semibold text-ed-fg hover:border-signal/50"
+                    onClick={openFilePicker}
+                    type="button"
+                  >
+                    Choose video
+                  </button>
+                </EditorCard>
+              ) : activeVideoTool === "overview" ? (
+                <VideoOverviewPanel
+                  durationSeconds={videoDuration}
+                  fileName={fileName}
+                  fileSizeBytes={videoFileSize}
+                  height={videoSize?.height}
+                  width={videoSize?.width}
+                />
+              ) : activeVideoTool === "caption" ? (
+                <VideoCaptionPanel
+                  activeLayerId={activeVideoCaptionLayerId}
+                  captionsEnabled={captionsMasterEnabled}
+                  fontFamilyGroups={watermarkFontFamilyGroups}
+                  layers={videoCaptionLayers}
+                  onActiveLayerSelect={setActiveVideoCaptionLayerId}
+                  onAddLayer={addVideoCaptionLayer}
+                  onCaptionsEnabledChange={setCaptionsMasterEnabled}
+                  onLayerChange={(layerId, patch) => {
+                    updateVideoCaptionLayer(layerId, patch);
+
+                    if (patch.fontFamily) {
+                      void loadWatermarkFont(patch.fontFamily, 700);
+                    }
+                  }}
+                  onPresetSelect={handleCaptionPresetSelect}
+                  onRemoveLayer={removeVideoCaptionLayer}
+                  videoDurationSeconds={videoDuration}
+                />
+              ) : activeVideoTool === "trim" ? (
+                <VideoTrimPanel
+                  canRedoVideoShorten={canRedoVideoShorten}
+                  canRestoreOriginal={canRestoreOriginalVideo}
+                  canUndoVideoShorten={canUndoVideoShorten}
+                  durationSeconds={videoDuration}
+                  exportDurationSeconds={draftExportVideoDuration}
+                  hasUnsavedCrop={hasUnsavedVideoCrop}
+                  isProcessing={isVideoEditProcessing}
+                  onApplyShorten={saveVideoCrop}
+                  onRedoVideoShorten={() => {
+                    void redoVideoShorten();
+                  }}
+                  onReshorten={beginReshortenSession}
+                  onRestoreOriginal={() => {
+                    void restoreOriginalVideoLength();
+                  }}
+                  onUndoVideoShorten={() => {
+                    void undoVideoShorten();
+                  }}
+                  savedExportDurationSeconds={exportVideoDuration}
+                  showReshortenAction={showReshortenVideoAction}
+                  showSavedConfirmation={
+                    videoCropSavedNotice && !hasUnsavedVideoCrop
+                  }
+                  trimEndSeconds={resolvedVideoTrim.endSeconds}
+                  trimStartSeconds={resolvedVideoTrim.startSeconds}
+                />
+              ) : activeVideoTool === "blur" ? (
+                <VideoBlurPanel
+                  activeRegionId={activeVideoBlurRegionId}
+                  brushSize={videoBlurBrushSize}
+                  durationSeconds={videoDuration}
+                  onActiveRegionSelect={setActiveVideoBlurRegionId}
+                  onAddRegion={addVideoBlurRegion}
+                  onBrushSizeChange={setVideoBlurBrushSize}
+                  onClearRegionStrokes={(regionId) => {
+                    updateVideoBlurRegionStrokes(regionId, () => []);
+                  }}
+                  onRemoveRegion={removeVideoBlurRegion}
+                  regions={videoBlurRegions}
+                />
+              ) : activeVideoTool === "merge" ? (
+                <VideoMergePanel
+                  entries={videoBatch}
+                  isProcessing={isVideoEditProcessing}
+                  onAddVideos={openAddMoreVideosPicker}
+                  onMergeVideos={() => {
+                    void mergeVideoBatchClips();
+                  }}
+                />
+              ) : null}
+            </div>
+          ) : null}
+
             </EditorToolPanel>
           ) : null}
 
           {uploadError ? (
-            <div className="absolute bottom-20 left-[4.5rem] z-10 max-w-xs rounded-xl border border-signal/30 bg-signal/10 px-4 py-3 text-sm text-beige">
+            <div className="absolute bottom-20 left-[5rem] z-10 max-w-xs rounded-xl border border-ed-accent/30 bg-ed-accent/10 px-4 py-3 text-sm text-ed-fg">
               {uploadError}
             </div>
           ) : null}
@@ -4973,17 +10820,57 @@ export default function WatermarkPage() {
           className="relative flex min-h-[320px] min-w-0 flex-col overflow-hidden md:min-h-0"
           ref={previewPanelRef}
         >
-          <div className="editor-checkerboard flex min-h-0 flex-1 items-center justify-center p-4 md:p-6">
+          {isRestoringAnonymousDraft ? (
+            <ProcessingOverlay label="Restoring your saved work…" />
+          ) : null}
+
+          {isVideoEditProcessing ? (
+            <ProcessingOverlay label="Processing video…" />
+          ) : null}
+
+          {isPdfMergeProcessing ? (
+            <ProcessingOverlay label="Merging PDFs…" />
+          ) : null}
+
+          {isPdfCompressProcessing ? (
+            <ProcessingOverlay label="Compressing PDF…" />
+          ) : null}
+
+          <div
+            className={`flex min-h-0 min-w-0 flex-1 ${
+              showPreviewSplitAside ? "flex-row" : "flex-col"
+            }`}
+          >
+            <div
+              className={`flex min-h-0 min-w-0 flex-1 flex-col ${
+                showVideoTimelineDock ? "overflow-hidden" : ""
+              }`}
+            >
+              <div
+                ref={previewCheckerboardRef}
+                className={`editor-checkerboard group relative flex min-h-0 flex-1 items-center justify-center ${
+                  showVideoTimelineDock || showPreviewSplitAside
+                    ? previewZoomPercent > PREVIEW_ZOOM_DEFAULT && hasPreviewContent
+                      ? "overflow-auto p-4 md:p-6"
+                      : "overflow-hidden p-4 md:p-6"
+                    : hasPreviewContent
+                      ? "overflow-auto p-4 md:p-6"
+                      : "p-4 md:p-6"
+                }`}
+              >
             {isPdfLoading ? (
               <div className="text-center">
-                <p className="text-lg font-semibold text-beige">Loading PDF...</p>
-                <p className="mt-2 text-sm text-beige-dim">
+                <p className="text-lg font-semibold text-ed-fg">Loading PDF...</p>
+                <p className="mt-2 text-sm text-ed-fg-muted">
                   Rendering pages in your browser.
                 </p>
               </div>
-            ) : (mediaKind === "image" || mediaKind === "pdf") && image ? (
+            ) : hasPreviewContent ? (
+              <>
+                <div className="flex shrink-0 items-center justify-center">
+            {(mediaKind === "image" || mediaKind === "pdf") && image ? (
               <canvas
-                className={`max-h-full max-w-full touch-none shadow-lg ${
+                className={`touch-none shadow-lg ${
                   isSignatureDropTarget ? "ring-2 ring-signal ring-offset-2" : ""
                 }`}
                 onDragLeave={handleSignatureDragLeave}
@@ -4995,21 +10882,83 @@ export default function WatermarkPage() {
                 onPointerMove={handleCanvasPointerMove}
                 onPointerUp={handleCanvasPointerUp}
                 ref={canvasRef}
-                style={{ cursor: canvasCursor }}
+                style={{ cursor: resolvedCanvasCursor }}
               />
             ) : mediaKind === "video" && videoUrl ? (
+              showVideoOverviewPreview ? (
+                <div
+                  className="flex max-h-full max-w-full touch-none"
+                  onPointerCancel={handlePreviewSurfacePointerCancel}
+                  onPointerDown={handlePreviewSurfacePointerDown}
+                  onPointerMove={handlePreviewSurfacePointerMove}
+                  onPointerUp={handlePreviewSurfacePointerUp}
+                  ref={videoPreviewRef}
+                  style={{
+                    cursor:
+                      resolvedCanvasCursor === "auto" ? undefined : resolvedCanvasCursor,
+                  }}
+                >
+                  <VideoOverviewPlayer
+                    currentTimeSeconds={videoPreviewTime}
+                    durationSeconds={videoDuration}
+                    isPlaying={isVideoPlaying}
+                    onPause={() => {
+                      videoElementRef.current?.pause();
+                    }}
+                    onSeek={seekVideoPreview}
+                    onTogglePlay={() => {
+                      const video = videoElementRef.current;
+
+                      if (!video) {
+                        return;
+                      }
+
+                      if (video.paused) {
+                        void video.play();
+                      } else {
+                        video.pause();
+                      }
+                    }}
+                  >
+                    <video
+                      className="block max-h-full max-w-full"
+                      controls={false}
+                      key={videoUrl}
+                      playsInline
+                      ref={videoElementRef}
+                      src={videoUrl}
+                    />
+                  </VideoOverviewPlayer>
+                </div>
+              ) : (
               <div
-                className="relative max-h-full max-w-full overflow-hidden shadow-lg"
+                className="relative touch-none shadow-lg"
                 ref={videoPreviewRef}
+                style={{
+                  height: Math.floor(
+                    (previewPanelRef.current?.clientHeight ?? 320) *
+                      (previewZoomPercent / 100),
+                  ),
+                  width: Math.floor(
+                    (previewPanelRef.current?.clientWidth ?? 320) *
+                      (previewZoomPercent / 100),
+                  ),
+                }}
               >
                 <video
                   className="block max-h-full max-w-full"
-                  controls
+                  controls={watermarkType !== "text"}
+                  key={videoUrl}
                   playsInline
+                  ref={videoElementRef}
                   src={videoUrl}
                 />
                 <canvas
                   className={`absolute inset-0 h-full w-full touch-none ${
+                    mediaKind === "video" && !isVideoCanvasInteractionActive()
+                      ? "pointer-events-none"
+                      : ""
+                  } ${
                     isSignatureDropTarget
                       ? "ring-2 ring-inset ring-signal"
                       : ""
@@ -5023,9 +10972,26 @@ export default function WatermarkPage() {
                   onPointerMove={handleCanvasPointerMove}
                   onPointerUp={handleCanvasPointerUp}
                   ref={videoOverlayCanvasRef}
-                  style={{ cursor: canvasCursor }}
+                  style={{ cursor: resolvedCanvasCursor }}
                 />
               </div>
+              )
+            ) : null}
+                </div>
+                <PreviewZoomControls
+                  className="absolute bottom-4 right-4 z-20"
+                  mediaKind={mediaKind}
+                  onAddMoreVideos={openAddMoreVideosPicker}
+                  onRemove={handlePreviewMediaRemove}
+                  onReplace={openReplaceMediaPicker}
+                  onReset={handlePreviewZoomReset}
+                  onZoomIn={handlePreviewZoomIn}
+                  onZoomOut={handlePreviewZoomOut}
+                  resetDisabled={previewZoomResetDisabled}
+                  zoomInDisabled={previewZoomInDisabled}
+                  zoomOutDisabled={previewZoomOutDisabled}
+                />
+              </>
             ) : (
               <div className="w-full max-w-xl">
                 <UploadZone
@@ -5035,11 +11001,169 @@ export default function WatermarkPage() {
                 />
               </div>
             )}
+              </div>
+
+              {showVideoTrimDock ? (
+                <VideoVisibilityTimeline
+                  currentTimeSeconds={videoPreviewTime}
+                  durationSeconds={videoDuration}
+                  isPlaying={isVideoPlaying}
+                  layout="dock"
+                  onPauseVideo={() => {
+                    videoElementRef.current?.pause();
+                  }}
+                  onResetRange={resetVideoTrim}
+                  onSeek={(seconds) => seekVideoPreview(seconds, true)}
+                  onTogglePlay={() => {
+                    const video = videoElementRef.current;
+
+                    if (!video) {
+                      return;
+                    }
+
+                    if (video.paused) {
+                      if (video.currentTime >= resolvedVideoTrim.endSeconds - 0.05) {
+                        video.currentTime = resolvedVideoTrim.startSeconds;
+                      }
+
+                      void video.play();
+                    } else {
+                      video.pause();
+                    }
+                  }}
+                  onVisibleFromChange={(value) => {
+                    setVideoCropSavedNotice(false);
+                    setVideoTrimStartSeconds(value ?? 0);
+                  }}
+                  onVisibleUntilChange={(value) => {
+                    setVideoCropSavedNotice(false);
+                    setVideoTrimEndSeconds(value ?? videoDuration);
+                  }}
+                  variant="trim"
+                  videoUrl={videoUrl}
+                  visibleFromSeconds={resolvedVideoTrim.startSeconds}
+                  visibleUntilSeconds={resolvedVideoTrim.endSeconds}
+                />
+              ) : null}
+
+              {showCaptionTimelineDock ||
+              showWatermarkTimelineDock ||
+              showVideoBlurTimelineDock ? (
+                <VideoVisibilityTimeline
+                  currentTimeSeconds={videoPreviewTime}
+                  durationSeconds={videoDuration}
+                  isPlaying={isVideoPlaying}
+                  layerLabel={
+                    showCaptionTimelineDock
+                      ? activeVideoCaptionLayer?.text.trim() || "Caption"
+                      : showVideoBlurTimelineDock
+                        ? activeVideoBlurRegion?.label || "Blur"
+                        : activeTextLayer.text.trim() || "Text watermark"
+                  }
+                  layout="dock"
+                  onPauseVideo={() => {
+                    videoElementRef.current?.pause();
+                  }}
+                  onSeek={seekVideoPreview}
+                  onTogglePlay={() => {
+                    const video = videoElementRef.current;
+
+                    if (!video) {
+                      return;
+                    }
+
+                    if (video.paused) {
+                      void video.play();
+                    } else {
+                      video.pause();
+                    }
+                  }}
+                  onVisibleFromChange={(value) => {
+                    if (showCaptionTimelineDock) {
+                      updateActiveVideoCaptionLayer({
+                        visibleFromSeconds: value,
+                      });
+                      return;
+                    }
+
+                    if (showVideoBlurTimelineDock && activeVideoBlurRegion) {
+                      updateActiveVideoBlurRegion((region) =>
+                        updateVideoBlurRegionTiming(
+                          region,
+                          { visibleFromSeconds: value },
+                          videoDuration,
+                        ),
+                      );
+                      return;
+                    }
+
+                    updateTextLayer(activeTextLayerId, {
+                      visibleFromSeconds: value,
+                    });
+                  }}
+                  onVisibleUntilChange={(value) => {
+                    if (showCaptionTimelineDock) {
+                      updateActiveVideoCaptionLayer({
+                        visibleUntilSeconds: value,
+                      });
+                      return;
+                    }
+
+                    if (showVideoBlurTimelineDock && activeVideoBlurRegion) {
+                      updateActiveVideoBlurRegion((region) =>
+                        updateVideoBlurRegionTiming(
+                          region,
+                          { visibleUntilSeconds: value },
+                          videoDuration,
+                        ),
+                      );
+                      return;
+                    }
+
+                    updateTextLayer(activeTextLayerId, {
+                      visibleUntilSeconds: value,
+                    });
+                  }}
+                  videoUrl={videoUrl}
+                  visibleFromSeconds={
+                    showCaptionTimelineDock
+                      ? activeVideoCaptionLayer?.visibleFromSeconds
+                      : showVideoBlurTimelineDock
+                        ? activeVideoBlurRegion?.visibleFromSeconds
+                        : activeTextLayer.visibleFromSeconds
+                  }
+                  visibleUntilSeconds={
+                    showCaptionTimelineDock
+                      ? activeVideoCaptionLayer?.visibleUntilSeconds
+                      : showVideoBlurTimelineDock
+                        ? activeVideoBlurRegion?.visibleUntilSeconds
+                        : activeTextLayer.visibleUntilSeconds
+                  }
+                />
+              ) : null}
+            </div>
+
+            {showWatermarkAdjustAside ? (
+              <aside className="flex h-full w-[17rem] shrink-0 flex-col overflow-y-auto border-l border-ed-border bg-ed-panel px-2.5 py-2">
+                <div className="space-y-2">{renderWatermarkPreviewAside()}</div>
+              </aside>
+            ) : null}
+
+            {showCaptionHeadlineAside ? (
+              <aside className="flex h-full w-[17rem] shrink-0 flex-col overflow-y-auto border-l border-ed-border bg-ed-panel px-2.5 py-2">
+                <VideoCaptionHeadlinePanel
+                  caption={activeVideoCaptionLayer!}
+                  onCaptionChange={(patch) => {
+                    updateActiveVideoCaptionLayer(patch);
+                  }}
+                />
+              </aside>
+            ) : null}
           </div>
 
           {showWatermarkDragHint && watermarkDragHintPos ? (
             <div
-              className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[calc(100%+0.5rem)] rounded-md border border-beige/15 bg-night/95 px-2 py-1 text-[10px] font-medium text-beige shadow-md backdrop-blur-sm"
+              className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-[calc(100%+0.5rem)] rounded-md border border-ed-border bg-ed-fg/90 px-2 py-1 text-[10px] font-medium text-ed-bg shadow-md backdrop-blur-sm"
               style={{
                 left: watermarkDragHintPos.x,
                 top: watermarkDragHintPos.y,
@@ -5050,7 +11174,7 @@ export default function WatermarkPage() {
           ) : null}
 
           {canvasMetaLabel ? (
-            <p className="border-t border-beige/10 bg-night-card py-2 text-center text-xs text-beige-dim">
+            <p className="border-t border-ed-border bg-ed-bg-card py-2 text-center text-xs text-ed-fg-muted">
               {canvasMetaLabel}
             </p>
           ) : null}
@@ -5067,12 +11191,55 @@ export default function WatermarkPage() {
         onExport={handleExport}
         onRedo={redoWatermarkSettings}
         onUndo={undoWatermarkSettings}
+        onZoomIn={hasPreviewContent ? handlePreviewZoomIn : undefined}
+        onZoomOut={hasPreviewContent ? handlePreviewZoomOut : undefined}
+        showHistoryControls={showWatermarkHistoryInFooter}
+        zoomInDisabled={previewZoomInDisabled}
+        zoomLabel={formatPreviewZoomLabel(previewZoomPercent)}
+        zoomOutDisabled={previewZoomOutDisabled}
       />
 
       <WatermarkedExportUpsellModal
+        onClose={handleDismissWatermarkedExportUpsell}
         onContinue={handleContinueWithWatermarkedExport}
         open={showWatermarkedExportUpsell}
       />
+
+      {showUnsignedPdfExportConfirm ? (
+        <UnsignedPdfExportConfirmModal
+          onCancel={() => setShowUnsignedPdfExportConfirm(false)}
+          onConfirm={() => {
+            setShowUnsignedPdfExportConfirm(false);
+            void handlePdfExport(true);
+          }}
+          pageCount={pdfPageCount}
+        />
+      ) : null}
+
+      <ExportLoginGateModal
+        errorMessage={loginGateError}
+        onAuthenticated={() => {
+          void handleLoginGateAuthenticated();
+        }}
+        onClose={handleDismissExportLoginGate}
+        open={showExportLoginGate}
+        phase={loginGatePhase}
+      />
+
+      <SignFillCreditsRequiredModal
+        description="Videos over 60 seconds, above 1080p, or processed on our servers require credits. Buy credits to export, or use a shorter clip within in-browser limits for a free watermarked export."
+        onClose={handleDismissServerVideoCreditGate}
+        open={showServerVideoCreditGate}
+        title="Server video export requires credits"
+      />
+
+      {formatUploadPrompt ? (
+        <EditorFormatUploadModal
+          kind={formatUploadPrompt}
+          onClose={() => setFormatUploadPrompt(null)}
+          onUploadClick={() => openFormatUploadPicker(formatUploadPrompt)}
+        />
+      ) : null}
     </main>
     </div>
   );
@@ -5087,6 +11254,7 @@ type UploadZoneProps = {
 type ImageBatchStripProps = {
   activeId: string | null;
   entries: BatchImageEntry[];
+  headerActions?: ReactNode;
   onRemove: (id: string) => void;
   onSelect: (id: string) => void;
 };
@@ -5159,7 +11327,7 @@ function PaginatedThreeColumnStrip<T>({
         <div className="mt-2 flex items-center justify-between gap-2">
           <button
             aria-label="Show previous items"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-beige/10 bg-night-elevated text-beige-dim transition hover:border-sand/40 hover:text-beige disabled:cursor-not-allowed disabled:opacity-35"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-ed-border bg-ed-bg-card text-ed-fg-muted transition hover:border-sand/40 hover:text-ed-fg disabled:cursor-not-allowed disabled:opacity-35"
             disabled={!canGoLeft}
             onClick={() => setStartIndex((index) => Math.max(0, index - 1))}
             type="button"
@@ -5167,7 +11335,7 @@ function PaginatedThreeColumnStrip<T>({
             <ChevronLeft className="h-4 w-4" strokeWidth={2} />
           </button>
 
-          <p className="text-center text-[10px] font-medium tabular-nums text-beige-dim">
+          <p className="text-center text-[10px] font-medium tabular-nums text-ed-fg-muted">
             {safeStartIndex + 1}–
             {Math.min(safeStartIndex + stripVisibleCount, items.length)} of{" "}
             {items.length}
@@ -5175,7 +11343,7 @@ function PaginatedThreeColumnStrip<T>({
 
           <button
             aria-label="Show next items"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-beige/10 bg-night-elevated text-beige-dim transition hover:border-sand/40 hover:text-beige disabled:cursor-not-allowed disabled:opacity-35"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-ed-border bg-ed-bg-card text-ed-fg-muted transition hover:border-sand/40 hover:text-ed-fg disabled:cursor-not-allowed disabled:opacity-35"
             disabled={!canGoRight}
             onClick={() =>
               setStartIndex((index) => Math.min(maxStartIndex, index + 1))
@@ -5193,14 +11361,18 @@ function PaginatedThreeColumnStrip<T>({
 function ImageBatchStrip({
   activeId,
   entries,
+  headerActions,
   onRemove,
   onSelect,
 }: ImageBatchStripProps) {
   return (
-    <div className="rounded-lg border border-beige/10 bg-night-card p-2">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-beige-dim">
-        Batch images
-      </p>
+    <div className="rounded-lg border border-ed-border bg-ed-bg-card p-2">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ed-fg">
+          Batch images
+        </p>
+        {headerActions}
+      </div>
       <PaginatedThreeColumnStrip
         activeId={activeId}
         getItemId={(entry) => entry.id}
@@ -5213,8 +11385,8 @@ function ImageBatchStrip({
               <button
                 className={`group relative block w-full overflow-hidden rounded-lg border transition ${
                   isActive
-                    ? "border-signal ring-2 ring-signal/20"
-                    : "border-beige/10 hover:border-signal/60"
+                    ? "border-2 border-signal ring-2 ring-signal/35"
+                    : "border-ed-border hover:border-signal/50"
                 }`}
                 onClick={() => onSelect(entry.id)}
                 title={entry.fileName}
@@ -5226,13 +11398,81 @@ function ImageBatchStrip({
                   className="aspect-square w-full object-cover"
                   src={entry.objectUrl}
                 />
-                <span className="block truncate px-1 py-1 text-[10px] text-beige-dim">
+                <span className="block truncate px-1 py-1 text-[10px] text-ed-fg-muted">
                   {entry.fileName}
                 </span>
               </button>
               <button
                 aria-label={`Remove ${entry.fileName}`}
-                className="absolute right-1 top-1 rounded-full bg-night-card/90 p-0.5 text-beige-dim shadow-sm transition hover:bg-signal hover:text-white"
+                className="absolute right-1 top-1 rounded-full bg-ed-bg-card/90 p-0.5 text-ed-fg-muted shadow-sm transition hover:bg-signal hover:text-white"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRemove(entry.id);
+                }}
+                type="button"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          );
+        }}
+      />
+    </div>
+  );
+}
+
+type VideoBatchStripProps = {
+  activeId: string | null;
+  entries: BatchVideoEntry[];
+  headerActions?: ReactNode;
+  onRemove: (id: string) => void;
+  onSelect: (id: string) => void;
+};
+
+function VideoBatchStrip({
+  activeId,
+  entries,
+  headerActions,
+  onRemove,
+  onSelect,
+}: VideoBatchStripProps) {
+  return (
+    <div className="rounded-lg border border-ed-border bg-ed-bg-card p-2">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ed-fg">
+          Video batch
+        </p>
+        {headerActions}
+      </div>
+      <PaginatedThreeColumnStrip
+        activeId={activeId}
+        getItemId={(entry) => entry.id}
+        items={entries}
+        renderItem={(entry) => {
+          const isActive = entry.id === activeId;
+
+          return (
+            <div className="relative">
+              <button
+                className={`group relative block w-full overflow-hidden rounded-lg border transition ${
+                  isActive
+                    ? "border-2 border-signal ring-2 ring-signal/35"
+                    : "border-ed-border hover:border-signal/50"
+                }`}
+                onClick={() => onSelect(entry.id)}
+                title={entry.fileName}
+                type="button"
+              >
+                <div className="flex aspect-square w-full items-center justify-center bg-ed-bg">
+                  <Video className="h-8 w-8 text-signal/80" strokeWidth={1.75} />
+                </div>
+                <span className="block truncate px-1 py-1 text-[10px] text-ed-fg-muted">
+                  {entry.fileName}
+                </span>
+              </button>
+              <button
+                aria-label={`Remove ${entry.fileName}`}
+                className="absolute right-1 top-1 rounded-full bg-ed-bg-card/90 p-0.5 text-ed-fg-muted shadow-sm transition hover:bg-signal hover:text-white"
                 onClick={(event) => {
                   event.stopPropagation();
                   onRemove(entry.id);
@@ -5251,16 +11491,25 @@ function ImageBatchStrip({
 
 type PdfPageStripProps = {
   activeId: string | null;
+  headerActions?: ReactNode;
   onSelect: (id: string) => void;
   pages: PdfPageThumbnail[];
 };
 
-function PdfPageStrip({ activeId, onSelect, pages }: PdfPageStripProps) {
+function PdfPageStrip({
+  activeId,
+  headerActions,
+  onSelect,
+  pages,
+}: PdfPageStripProps) {
   return (
-    <div className="rounded-lg border border-beige/10 bg-night-card p-2">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-beige-dim">
-        PDF pages
-      </p>
+    <div className="rounded-lg border border-ed-border bg-ed-bg-card p-2">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ed-fg">
+          PDF pages
+        </p>
+        {headerActions}
+      </div>
       <PaginatedThreeColumnStrip
         activeId={activeId}
         getItemId={(page) => page.id}
@@ -5270,10 +11519,10 @@ function PdfPageStrip({ activeId, onSelect, pages }: PdfPageStripProps) {
 
           return (
             <button
-              className={`block w-full overflow-hidden rounded-lg border transition ${
+              className={`block w-full overflow-hidden rounded-lg border transition shadow-sm ${
                 isActive
-                  ? "border-signal ring-2 ring-signal/20"
-                  : "border-beige/10 hover:border-signal/60"
+                  ? "border-2 border-signal ring-2 ring-signal/35"
+                  : "border-ed-border hover:border-signal/50"
               }`}
               onClick={() => onSelect(page.id)}
               title={`Page ${page.pageNumber}`}
@@ -5282,10 +11531,10 @@ function PdfPageStrip({ activeId, onSelect, pages }: PdfPageStripProps) {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 alt={`Page ${page.pageNumber}`}
-                className="aspect-[3/4] w-full bg-beige/10 object-contain"
+                className="aspect-[3/4] w-full bg-ed-bg-muted object-contain"
                 src={page.thumbnailUrl}
               />
-              <span className="block truncate px-1 py-1 text-[10px] text-beige-dim">
+              <span className="block truncate px-1 py-1 text-[10px] text-ed-fg-muted">
                 Page {page.pageNumber}
               </span>
             </button>
@@ -5296,84 +11545,92 @@ function PdfPageStrip({ activeId, onSelect, pages }: PdfPageStripProps) {
   );
 }
 
+type EditorMediaActionButtonsProps = {
+  isPdfLoading: boolean;
+  mediaKind: MediaKind | null;
+  onAddMoreImages: () => void;
+  onAddMoreVideos?: () => void;
+  onRemove: () => void;
+  onReplace: () => void;
+};
+
+function EditorMediaActionButtons({
+  isPdfLoading,
+  mediaKind,
+  onAddMoreImages,
+  onAddMoreVideos,
+  onRemove,
+  onReplace,
+}: EditorMediaActionButtonsProps) {
+  return (
+    <div className="flex shrink-0 items-center gap-0.5">
+      {!isPdfLoading ? (
+        <>
+          <button
+            aria-label="Replace loaded media"
+            className="editor-secondary-button flex h-6 w-6 items-center justify-center rounded text-ed-fg-muted hover:text-ed-fg"
+            onClick={onReplace}
+            type="button"
+          >
+            <RefreshCw className="h-3 w-3" strokeWidth={2} />
+          </button>
+
+          {mediaKind === "image" ? (
+            <button
+              aria-label="Add more images"
+              className="editor-secondary-button flex h-6 w-6 items-center justify-center rounded text-ed-fg-muted hover:text-ed-fg"
+              onClick={onAddMoreImages}
+              type="button"
+            >
+              <Images className="h-3 w-3" strokeWidth={2} />
+            </button>
+          ) : null}
+
+          {mediaKind === "video" && onAddMoreVideos ? (
+            <button
+              aria-label="Add more videos"
+              className="editor-secondary-button flex h-6 w-6 items-center justify-center rounded text-ed-fg-muted hover:text-ed-fg"
+              onClick={onAddMoreVideos}
+              type="button"
+            >
+              <Video className="h-3 w-3" strokeWidth={2} />
+            </button>
+          ) : null}
+        </>
+      ) : null}
+
+      <button
+        aria-label="Remove loaded media"
+        className="editor-secondary-button flex h-6 w-6 items-center justify-center rounded text-ed-fg-muted hover:border-signal/50 hover:text-signal"
+        onClick={onRemove}
+        type="button"
+      >
+        <Trash2 className="h-3 w-3" strokeWidth={2} />
+      </button>
+    </div>
+  );
+}
+
 function UploadZone({ onClick, onDragOver, onDrop }: UploadZoneProps) {
   return (
     <div
-      className="cursor-pointer rounded-2xl border border-dashed border-beige/20 bg-night-card/80 px-6 py-12 text-center transition hover:border-sand hover:bg-night-elevated"
+      className="cursor-pointer rounded-2xl border border-dashed border-ed-border bg-ed-bg-card px-6 py-12 text-center transition hover:border-sand hover:bg-ed-bg-card"
       onClick={onClick}
       onDragOver={onDragOver}
       onDrop={onDrop}
       role="button"
       tabIndex={0}
     >
-      <p className="text-lg font-semibold text-beige">
+      <p className="text-lg font-semibold text-ed-fg">
         Drop your images, PDF, or video here
       </p>
-      <p className="mt-2 text-sm text-beige-dim">
+      <p className="mt-2 text-sm text-ed-fg-muted">
         Select multiple images for batch watermarking, one PDF, or one video
       </p>
-      <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-beige-dim">
+      <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-ed-fg-muted">
         JPG, PNG, WebP, PDF, MP4, MOV, WebM
       </p>
     </div>
-  );
-}
-
-type TemplateIconProps = {
-  isSelected: boolean;
-  variant: WatermarkTemplate["icon"];
-};
-
-function TemplateIcon({ isSelected, variant }: TemplateIconProps) {
-  const markColor = isSelected ? "bg-signal" : "bg-beige-dim";
-  const lineColor = isSelected ? "bg-signal" : "bg-beige-dim/70";
-
-  return (
-    <span className="relative block h-6 rounded-md border border-beige/10 bg-beige/5">
-      {variant === "corner" ? (
-        <span
-          className={`absolute bottom-1 right-1 h-1.5 w-3 rounded-full ${markColor}`}
-        />
-      ) : null}
-      {variant === "center" ? (
-        <span
-          className={`absolute left-1/2 top-1/2 h-2 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full ${markColor}`}
-        />
-      ) : null}
-      {variant === "dense" ? (
-        <>
-          {[0, 1, 2, 3, 4, 5].map((index) => (
-            <span
-              className={`absolute h-1 w-3 rotate-[-35deg] rounded-full ${lineColor}`}
-              key={index}
-              style={{
-                left: `${4 + (index % 3) * 11}px`,
-                top: `${5 + Math.floor(index / 3) * 9}px`,
-              }}
-            />
-          ))}
-        </>
-      ) : null}
-      {variant === "sparse" ? (
-        <>
-          {[0, 1, 2].map((index) => (
-            <span
-              className={`absolute h-1 w-4 rotate-[-35deg] rounded-full ${lineColor}`}
-              key={index}
-              style={{
-                left: `${4 + index * 11}px`,
-                top: `${5 + index * 4}px`,
-              }}
-            />
-          ))}
-        </>
-      ) : null}
-      {variant === "signature" ? (
-        <span
-          className={`absolute bottom-1 left-1/2 h-1.5 w-6 -translate-x-1/2 rounded-full ${markColor}`}
-        />
-      ) : null}
-    </span>
   );
 }
 
@@ -5396,23 +11653,32 @@ function imageElementToDataUrl(image: HTMLImageElement): Promise<string> {
   return Promise.resolve(canvas.toDataURL("image/png"));
 }
 
+function getCanvasLogicalSize(canvas: HTMLCanvasElement) {
+  return {
+    height: canvas.clientHeight || canvas.height,
+    width: canvas.clientWidth || canvas.width,
+  };
+}
+
 function getCanvasPoint(event: PointerEvent<HTMLCanvasElement>) {
   const canvas = event.currentTarget;
   const rect = canvas.getBoundingClientRect();
+  const logicalWidth = canvas.clientWidth || rect.width;
+  const logicalHeight = canvas.clientHeight || rect.height;
 
-  if (!rect.width || !rect.height) {
+  if (!logicalWidth || !logicalHeight) {
     return null;
   }
 
   const x = clamp(
-    ((event.clientX - rect.left) / rect.width) * canvas.width,
+    ((event.clientX - rect.left) / logicalWidth) * logicalWidth,
     0,
-    canvas.width,
+    logicalWidth,
   );
   const y = clamp(
-    ((event.clientY - rect.top) / rect.height) * canvas.height,
+    ((event.clientY - rect.top) / logicalHeight) * logicalHeight,
     0,
-    canvas.height,
+    logicalHeight,
   );
 
   return { x, y };
@@ -5423,14 +11689,16 @@ function getCanvasPlacementFromDrag(
   canvas: HTMLCanvasElement,
 ) {
   const rect = canvas.getBoundingClientRect();
+  const logicalWidth = canvas.clientWidth || rect.width;
+  const logicalHeight = canvas.clientHeight || rect.height;
 
-  if (!rect.width || !rect.height) {
+  if (!logicalWidth || !logicalHeight) {
     return null;
   }
 
   return {
-    xPercent: clamp((event.clientX - rect.left) / rect.width, 0, 1),
-    yPercent: clamp((event.clientY - rect.top) / rect.height, 0, 1),
+    xPercent: clamp((event.clientX - rect.left) / logicalWidth, 0, 1),
+    yPercent: clamp((event.clientY - rect.top) / logicalHeight, 0, 1),
   };
 }
 
@@ -5559,6 +11827,72 @@ function getRotatedBounds(width: number, height: number, degrees: number) {
   };
 }
 
+type PreviewImageFrame = {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+};
+
+function computeLetterboxedPreviewImageFrame({
+  canvasHeight,
+  canvasWidth,
+  previewImageHeight,
+  previewImageWidth,
+  referenceHeight,
+  referenceWidth,
+  rotationAngle,
+}: {
+  canvasHeight: number;
+  canvasWidth: number;
+  previewImageHeight: number;
+  previewImageWidth: number;
+  referenceHeight: number;
+  referenceWidth: number;
+  rotationAngle: number;
+}): PreviewImageFrame {
+  const rotatedPreviewBounds = getRotatedBounds(
+    previewImageWidth,
+    previewImageHeight,
+    rotationAngle,
+  );
+  const imageScale = Math.min(
+    canvasWidth / Math.max(referenceWidth, rotatedPreviewBounds.width),
+    canvasHeight / Math.max(referenceHeight, rotatedPreviewBounds.height),
+  );
+  const imageWidth = rotatedPreviewBounds.width * imageScale;
+  const imageHeight = rotatedPreviewBounds.height * imageScale;
+
+  return {
+    height: imageHeight,
+    width: imageWidth,
+    x: (canvasWidth - imageWidth) / 2,
+    y: (canvasHeight - imageHeight) / 2,
+  };
+}
+
+function mapPreviewCustomPositionToExportSpace(
+  position: CustomPosition,
+  previewCanvasWidth: number,
+  previewCanvasHeight: number,
+  previewFrame: PreviewImageFrame,
+  exportWidth: number,
+  exportHeight: number,
+) {
+  return {
+    textAlign: "center" as CanvasTextAlign,
+    textBaseline: "middle" as CanvasTextBaseline,
+    x:
+      ((position.xPercent * previewCanvasWidth - previewFrame.x) /
+        previewFrame.width) *
+      exportWidth,
+    y:
+      ((position.yPercent * previewCanvasHeight - previewFrame.y) /
+        previewFrame.height) *
+      exportHeight,
+  };
+}
+
 function getImageAspectRatio(image: HTMLImageElement) {
   return image.naturalWidth / image.naturalHeight;
 }
@@ -5625,6 +11959,7 @@ function createResizedImage(
   image: HTMLImageElement,
   width: number,
   height: number,
+  mode: ResizeScaleMode = "stretch",
 ): Promise<HTMLImageElement> {
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
@@ -5634,7 +11969,17 @@ function createResizedImage(
 
   if (context) {
     context.imageSmoothingQuality = "high";
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    drawImageWithResizeMode(
+      context,
+      image,
+      image.naturalWidth,
+      image.naturalHeight,
+      mode,
+      0,
+      0,
+      canvas.width,
+      canvas.height,
+    );
   }
 
   return createImageFromCanvas(canvas);
@@ -5653,6 +11998,7 @@ function createImageFromCanvas(canvas: HTMLCanvasElement) {
 type ExportRenderInput = {
   activeLogoLayerId: string;
   activeTextLayerId: string;
+  blurStrokes: BlurStroke[];
   customPosition: CustomPosition | null;
   fontFamily: string;
   fontSizeScale: number;
@@ -5660,6 +12006,8 @@ type ExportRenderInput = {
   imageEffectSettings: ImageEffectSettings;
   logoImage: HTMLImageElement | null;
   logoLayers: LogoWatermarkLayer[];
+  previewCanvasSize: CanvasSize;
+  referenceImageSize: CanvasSize;
   resizeHeight: number;
   resizeWidth: number;
   rotationAngle: number;
@@ -5673,6 +12021,16 @@ type ExportRenderInput = {
   watermarkPosition: WatermarkPosition;
   watermarkText: string;
   watermarkType: WatermarkType;
+};
+
+type SignaturePlacementPaintEntry = {
+  customPosition: CustomPosition | null;
+  fontSizeScale: number;
+  id: string;
+  image: HTMLImageElement;
+  isActive: boolean;
+  opacity: number;
+  watermarkPosition: WatermarkPosition;
 };
 
 type WatermarkLayerPaintInput = {
@@ -5697,11 +12055,14 @@ type WatermarkLayerPaintInput = {
   signatureFontSizeScale: number;
   signatureImage: HTMLImageElement | null;
   signatureOpacity: number;
+  signaturePlacements?: SignaturePlacementPaintEntry[];
   signaturePosition: WatermarkPosition;
   textLayers: TextWatermarkLayer[];
   tileAngle: TileAngle;
   tileDensity: TileDensity;
   tileGap: number;
+  videoDurationSeconds?: number;
+  videoPreviewTimeSeconds?: number;
   watermarkMode: WatermarkMode;
   watermarkType: WatermarkType;
 };
@@ -5724,11 +12085,14 @@ function paintWatermarkLayers({
   signatureFontSizeScale,
   signatureImage,
   signatureOpacity,
+  signaturePlacements,
   signaturePosition,
   textLayers,
   tileAngle,
   tileDensity,
   tileGap,
+  videoDurationSeconds,
+  videoPreviewTimeSeconds,
   watermarkMode,
   watermarkType,
 }: WatermarkLayerPaintInput): {
@@ -5861,6 +12225,18 @@ function paintWatermarkLayers({
         continue;
       }
 
+      if (
+        videoPreviewTimeSeconds !== undefined &&
+        videoDurationSeconds !== undefined &&
+        !isElementVisibleAt(
+          layer,
+          videoPreviewTimeSeconds,
+          videoDurationSeconds,
+        )
+      ) {
+        continue;
+      }
+
       drawLayer({
         customPosition: layer.customPosition,
         fontFamily: layer.fontFamily,
@@ -5879,7 +12255,7 @@ function paintWatermarkLayers({
     }
   } else if (watermarkType === "logo") {
     for (const layer of logoLayers) {
-      if (!layer.logoImage) {
+      if (!layer.logoImage || layer.id === FORCED_TILE_LAYER_ID) {
         continue;
       }
 
@@ -5899,25 +12275,170 @@ function paintWatermarkLayers({
         layerType: "logo",
       });
     }
-  } else if (watermarkType === "signature" && signatureImage) {
-    drawLayer({
-      customPosition: signatureCustomPosition,
-      fontFamily: defaultWatermarkFontFamily,
-      fontSizeScale: signatureFontSizeScale,
-      fontWeight: DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
-      isActive: true,
-      layerId: "signature",
-      logoImage: signatureImage,
-      opacity: signatureOpacity,
-      textColor: DEFAULT_TEXT_WATERMARK_COLOR,
-      textShadowEnabled: DEFAULT_TEXT_SHADOW_ENABLED,
-      watermarkPosition: signaturePosition,
-      watermarkText: "",
-      layerType: "logo",
+  } else if (watermarkType === "signature") {
+    if (signaturePlacements?.length) {
+      for (const placement of signaturePlacements) {
+        drawLayer({
+          customPosition: placement.customPosition,
+          fontFamily: defaultWatermarkFontFamily,
+          fontSizeScale: placement.fontSizeScale,
+          fontWeight: DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
+          isActive: placement.isActive,
+          layerId: placement.id,
+          logoImage: placement.image,
+          opacity: placement.opacity,
+          textColor: DEFAULT_TEXT_WATERMARK_COLOR,
+          textShadowEnabled: DEFAULT_TEXT_SHADOW_ENABLED,
+          watermarkPosition: placement.watermarkPosition,
+          watermarkText: "",
+          layerType: "logo",
+        });
+
+        if (placement.isActive) {
+          const bounds = boundsByLayer.get(placement.id);
+
+          if (bounds) {
+            drawPlacementSelectionFrame(context, bounds);
+            drawPlacementFrameActions(context, bounds);
+          }
+        }
+      }
+    } else if (signatureImage) {
+      drawLayer({
+        customPosition: signatureCustomPosition,
+        fontFamily: defaultWatermarkFontFamily,
+        fontSizeScale: signatureFontSizeScale,
+        fontWeight: DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
+        isActive: true,
+        layerId: "signature",
+        logoImage: signatureImage,
+        opacity: signatureOpacity,
+        textColor: DEFAULT_TEXT_WATERMARK_COLOR,
+        textShadowEnabled: DEFAULT_TEXT_SHADOW_ENABLED,
+        watermarkPosition: signaturePosition,
+        watermarkText: "",
+        layerType: "logo",
+      });
+    }
+  }
+
+  const forcedOverlayLayer = logoLayers.find(
+    (layer) => layer.id === FORCED_TILE_LAYER_ID && layer.logoImage,
+  );
+
+  if (forcedOverlayLayer) {
+    paintForcedExportStampLayer({
+      canvasHeight,
+      canvasWidth,
+      context,
+      forcedOverlayLayer,
+      imageHeight,
+      imageWidth,
+      imageX,
+      imageY,
+      resolveCustomPosition,
     });
   }
 
   return { activeBounds, boundsByLayer };
+}
+
+function paintForcedExportStampLayer({
+  canvasHeight,
+  canvasWidth,
+  context,
+  forcedOverlayLayer,
+  imageHeight,
+  imageWidth,
+  imageX,
+  imageY,
+  resolveCustomPosition,
+}: {
+  canvasHeight: number;
+  canvasWidth: number;
+  context: CanvasRenderingContext2D;
+  forcedOverlayLayer: LogoWatermarkLayer;
+  imageHeight: number;
+  imageWidth: number;
+  imageX: number;
+  imageY: number;
+  resolveCustomPosition?: WatermarkLayerPaintInput["resolveCustomPosition"];
+}) {
+  const logoImage = forcedOverlayLayer.logoImage;
+
+  if (!logoImage || logoImage.naturalWidth <= 0 || logoImage.naturalHeight <= 0) {
+    logRealVideoExport("STEP 11x/15: forced stamp SKIPPED — logo image not ready", {
+      naturalHeight: logoImage?.naturalHeight ?? null,
+      naturalWidth: logoImage?.naturalWidth ?? null,
+    });
+    return;
+  }
+
+  const resolvePosition = (position: CustomPosition) => {
+    if (resolveCustomPosition) {
+      return resolveCustomPosition(position);
+    }
+
+    return {
+      textAlign: "center" as CanvasTextAlign,
+      textBaseline: "middle" as CanvasTextBaseline,
+      x: position.xPercent * canvasWidth,
+      y: position.yPercent * canvasHeight,
+    };
+  };
+
+  const drawable = getDrawableWatermark({
+    context,
+    fontFamily: defaultWatermarkFontFamily,
+    fontSizeScale: forcedOverlayLayer.fontSizeScale,
+    fontWeight: DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
+    imageWidth,
+    logoImage,
+    textColor: DEFAULT_TEXT_WATERMARK_COLOR,
+    textShadowEnabled: DEFAULT_TEXT_SHADOW_ENABLED,
+    watermarkText: "",
+    watermarkType: "logo",
+  });
+
+  if (!drawable) {
+    logRealVideoExport("STEP 11x/15: forced stamp SKIPPED — drawable unavailable");
+    return;
+  }
+
+  const alpha = forcedOverlayLayer.opacity / 100;
+  const { x, y, textAlign, textBaseline } = forcedOverlayLayer.customPosition
+    ? resolvePosition(forcedOverlayLayer.customPosition)
+    : getWatermarkCoordinates({
+        fontSize: drawable.height,
+        imageHeight,
+        imageWidth,
+        imageX,
+        imageY,
+        padding: Math.max(24, drawable.height * 0.9),
+        position: forcedOverlayLayer.watermarkPosition,
+      });
+
+  context.save();
+  drawWatermarkDrawable({
+    alpha,
+    context,
+    drawable,
+    textAlign,
+    textBaseline,
+    x,
+    y,
+  });
+  context.restore();
+
+  logRealVideoExport("STEP 11x/15: forced stamp painted onto overlay canvas", {
+    drawableHeight: drawable.height,
+    drawableWidth: drawable.width,
+    forcedLayerId: forcedOverlayLayer.id,
+    naturalHeight: logoImage.naturalHeight,
+    naturalWidth: logoImage.naturalWidth,
+    x,
+    y,
+  });
 }
 
 type WatermarkOnlyRenderInput = {
@@ -6021,31 +12542,62 @@ function drawWatermarkOnly({
   return activeBounds;
 }
 
-type WatermarkOverlayCanvasInput = Omit<WatermarkOnlyRenderInput, "context">;
+type BuildClientVideoOverlayPassesInput = {
+  applyStaticFreeExportStamp?: boolean;
+  durationSeconds: number;
+  height: number;
+  settings: Omit<WatermarkOverlayCanvasInput, "height" | "width">;
+  videoBlurRegions?: VideoBlurRegion[];
+  videoCaptionLayers?: VideoCaptionLayer[];
+  videoElement?: HTMLVideoElement | null;
+  width: number;
+};
 
-function renderWatermarkOverlayCanvas({
-  activeLogoLayerId,
-  activeTextLayerId,
-  customPosition,
-  fontFamily,
-  fontSizeScale,
-  fontWeight = DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
-  height,
-  logoImage,
-  logoLayers,
-  textColor = DEFAULT_TEXT_WATERMARK_COLOR,
-  textLayers,
-  textShadowEnabled = DEFAULT_TEXT_SHADOW_ENABLED,
-  tileAngle,
-  tileDensity,
-  tileGap,
-  watermarkMode,
-  watermarkOpacity,
-  watermarkPosition,
-  watermarkText,
-  watermarkType,
-  width,
-}: WatermarkOverlayCanvasInput) {
+async function finalizeClientVideoOverlayPasses(
+  passes: VideoOverlayPass[],
+  {
+    height,
+    videoBlurRegions,
+    videoElement,
+    width,
+  }: Pick<
+    BuildClientVideoOverlayPassesInput,
+    "height" | "videoBlurRegions" | "videoElement" | "width"
+  >,
+) {
+  let result = passes;
+
+  if (
+    videoBlurRegions?.some((region) => region.strokes.length > 0) &&
+    videoElement
+  ) {
+    result = await appendVideoBlurRegionPasses(
+      result,
+      videoBlurRegions,
+      videoElement,
+      width,
+      height,
+      canvasToPngBytes,
+    );
+  }
+
+  if (
+    result.length === 0 ||
+    !result.some((pass) => pass.overlayPngBytes.length > 0)
+  ) {
+    throw new VideoExportFailedError(
+      "Could not prepare the watermark overlay for export.",
+    );
+  }
+
+  return result;
+}
+
+function renderCaptionOverlayCanvas(
+  caption: VideoCaptionLayer,
+  height: number,
+  width: number,
+) {
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
 
@@ -6053,10 +12605,355 @@ function renderWatermarkOverlayCanvas({
   canvas.height = Math.max(1, height);
 
   if (!context) {
-    throw new Error("Could not create watermark overlay canvas.");
+    throw new Error("Could not create caption overlay canvas.");
   }
 
   context.clearRect(0, 0, canvas.width, canvas.height);
+  drawVideoCaption(context, canvas.width, canvas.height, caption);
+
+  return canvas;
+}
+
+function renderUntimedCaptionsOverlayCanvas(
+  layers: VideoCaptionLayer[],
+  height: number,
+  width: number,
+) {
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  canvas.width = Math.max(1, width);
+  canvas.height = Math.max(1, height);
+
+  if (!context) {
+    throw new Error("Could not create caption overlay canvas.");
+  }
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (const layer of getUntimedCaptionLayers(layers)) {
+    drawVideoCaption(context, canvas.width, canvas.height, layer);
+  }
+
+  return canvas;
+}
+
+type WatermarkOverlayCanvasInput = Omit<WatermarkOnlyRenderInput, "context"> & {
+  applyStaticFreeExportStamp?: boolean;
+  includeCaptionOnPass?: boolean;
+  videoCaptionLayers?: VideoCaptionLayer[];
+};
+
+async function appendTimedCaptionLayerPasses(
+  passes: VideoOverlayPass[],
+  layers: VideoCaptionLayer[] | undefined,
+  durationSeconds: number,
+  height: number,
+  width: number,
+) {
+  const timedLayers = layers ? getTimedCaptionLayers(layers) : [];
+
+  for (const layer of timedLayers) {
+    const start = layer.visibleFromSeconds ?? 0;
+    const end = layer.visibleUntilSeconds ?? durationSeconds;
+
+    if (start >= end) {
+      throw new VideoExportFailedError(
+        "Set a valid caption visibility time range. Start must be before end.",
+      );
+    }
+
+    const captionCanvas = renderCaptionOverlayCanvas(layer, height, width);
+
+    passes.push({
+      overlayPngBytes: await canvasToPngBytes(captionCanvas),
+      visibleFromSeconds: start,
+      visibleUntilSeconds: end,
+    });
+  }
+
+  return passes;
+}
+
+async function buildClientVideoOverlayPasses({
+  applyStaticFreeExportStamp = false,
+  durationSeconds,
+  height,
+  settings,
+  videoBlurRegions,
+  videoCaptionLayers,
+  videoElement,
+  width,
+}: BuildClientVideoOverlayPassesInput): Promise<VideoOverlayPass[]> {
+  logRealVideoExport("STEP 10a/15: buildClientVideoOverlayPasses() entered", {
+    applyStaticFreeExportStamp,
+    durationSeconds,
+    height,
+    settings: summarizeWatermarkSettingsForExportLog(settings),
+    width,
+  });
+
+  const untimedCaptionLayers = videoCaptionLayers
+    ? getUntimedCaptionLayers(videoCaptionLayers)
+    : [];
+  const includeUntimedCaptions = untimedCaptionLayers.length > 0;
+
+  if (settings.watermarkType !== "text") {
+    const canvas = await renderWatermarkOverlayCanvas({
+      ...settings,
+      applyStaticFreeExportStamp,
+      height,
+      includeCaptionOnPass: includeUntimedCaptions,
+      videoCaptionLayers: includeUntimedCaptions
+        ? videoCaptionLayers
+        : undefined,
+      width,
+    });
+
+    logRealVideoExport("STEP 11/15: renderWatermarkOverlayCanvas() completed (non-text path)", {
+      height,
+      settings: summarizeWatermarkSettingsForExportLog(settings),
+      width,
+    });
+
+    const passes = [{ overlayPngBytes: await canvasToPngBytes(canvas) }];
+    const withCaption = await appendTimedCaptionLayerPasses(
+      passes,
+      videoCaptionLayers,
+      durationSeconds,
+      height,
+      width,
+    );
+
+    if (
+      withCaption.length === 0 ||
+      !withCaption.some((pass) => pass.overlayPngBytes.length > 0)
+    ) {
+      if (videoCaptionLayers?.some((layer) => isCaptionLayerActive(layer))) {
+        const captionOnlyPasses: VideoOverlayPass[] = [];
+
+        if (untimedCaptionLayers.length > 0) {
+          const untimedCanvas = renderUntimedCaptionsOverlayCanvas(
+            videoCaptionLayers,
+            height,
+            width,
+          );
+
+          captionOnlyPasses.push({
+            overlayPngBytes: await canvasToPngBytes(untimedCanvas),
+          });
+        }
+
+        return finalizeClientVideoOverlayPasses(
+          await appendTimedCaptionLayerPasses(
+            captionOnlyPasses,
+            videoCaptionLayers,
+            durationSeconds,
+            height,
+            width,
+          ),
+          { height, videoBlurRegions, videoElement, width },
+        );
+      }
+
+      if (videoBlurRegions?.some((region) => region.strokes.length > 0)) {
+        return finalizeClientVideoOverlayPasses([], {
+          height,
+          videoBlurRegions,
+          videoElement,
+          width,
+        });
+      }
+
+      throw new VideoExportFailedError(
+        "Could not prepare the watermark overlay for export.",
+      );
+    }
+
+    return finalizeClientVideoOverlayPasses(withCaption, {
+      height,
+      videoBlurRegions,
+      videoElement,
+      width,
+    });
+  }
+
+  const textLayers = settings.textLayers ?? [];
+  const timedLayers = textLayers.filter(hasVideoVisibilityRange);
+  const untimedLayers = textLayers.filter(
+    (layer) => !hasVideoVisibilityRange(layer),
+  );
+
+  if (timedLayers.length > 1) {
+    throw new VideoExportFailedError(
+      "Only one text watermark can have a visibility time range per export.",
+    );
+  }
+
+  logRealVideoExport("STEP 10b/15: buildClientVideoOverlayPasses() text path", {
+    settings: summarizeWatermarkSettingsForExportLog(settings),
+    timedLayerCount: timedLayers.length,
+    untimedLayerCount: untimedLayers.length,
+  });
+
+  const passes: VideoOverlayPass[] = [];
+
+  const pushPass = async (
+    layers: TextWatermarkLayer[],
+    timing?: { end: number; start: number },
+  ) => {
+    if (!layers.some((layer) => layer.text.trim())) {
+      return;
+    }
+
+    const canvas = await renderWatermarkOverlayCanvas({
+      ...settings,
+      applyStaticFreeExportStamp,
+      height,
+      includeCaptionOnPass: includeUntimedCaptions,
+      textLayers: layers,
+      videoCaptionLayers: includeUntimedCaptions
+        ? videoCaptionLayers
+        : undefined,
+      width,
+    });
+
+    logRealVideoExport("STEP 11/15: renderWatermarkOverlayCanvas() completed for pass", {
+      height,
+      passLayerIds: layers.map((layer) => layer.id),
+      passLayerTexts: layers.map((layer) => layer.text.slice(0, 80)),
+      settings: summarizeWatermarkSettingsForExportLog({
+        ...settings,
+        textLayers: layers,
+      }),
+      width,
+    });
+
+    passes.push({
+      overlayPngBytes: await canvasToPngBytes(canvas),
+      ...(timing
+        ? {
+            visibleFromSeconds: timing.start,
+            visibleUntilSeconds: timing.end,
+          }
+        : {}),
+    });
+  };
+
+  const timedLayer = timedLayers[0];
+
+  if (!timedLayer) {
+    await pushPass(textLayers);
+
+    const withCaption = await appendTimedCaptionLayerPasses(
+      passes,
+      videoCaptionLayers,
+      durationSeconds,
+      height,
+      width,
+    );
+
+    if (withCaption.length === 0) {
+      if (videoBlurRegions?.some((region) => region.strokes.length > 0)) {
+        return finalizeClientVideoOverlayPasses([], {
+          height,
+          videoBlurRegions,
+          videoElement,
+          width,
+        });
+      }
+
+      throw new VideoExportFailedError(
+        "Could not prepare the watermark overlay for export.",
+      );
+    }
+
+    return finalizeClientVideoOverlayPasses(withCaption, {
+      height,
+      videoBlurRegions,
+      videoElement,
+      width,
+    });
+  }
+
+  const range = resolveVideoVisibilityRange(timedLayer, durationSeconds);
+
+  if (!range || range.start >= range.end) {
+    throw new VideoExportFailedError(
+      "Set a valid visibility time range. Start must be before end.",
+    );
+  }
+
+  await pushPass(untimedLayers);
+  await pushPass([timedLayer], range);
+
+  const withCaption = await appendTimedCaptionLayerPasses(
+    passes,
+    videoCaptionLayers,
+    durationSeconds,
+    height,
+    width,
+  );
+
+  if (withCaption.length === 0) {
+    if (videoBlurRegions?.some((region) => region.strokes.length > 0)) {
+      return finalizeClientVideoOverlayPasses([], {
+        height,
+        videoBlurRegions,
+        videoElement,
+        width,
+      });
+    }
+
+    throw new VideoExportFailedError(
+      "Could not prepare the watermark overlay for export.",
+    );
+  }
+
+  return finalizeClientVideoOverlayPasses(withCaption, {
+    height,
+    videoBlurRegions,
+    videoElement,
+    width,
+  });
+}
+
+type WatermarkOverlayCanvasPaintInput = Omit<
+  WatermarkOverlayCanvasInput,
+  "height" | "width"
+>;
+
+async function paintWatermarkOverlayCanvasContent(
+  context: CanvasRenderingContext2D,
+  contentWidth: number,
+  contentHeight: number,
+  {
+    activeLogoLayerId,
+    activeTextLayerId,
+    applyStaticFreeExportStamp = false,
+    customPosition,
+    fontFamily,
+    fontSizeScale,
+    fontWeight = DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
+    includeCaptionOnPass = true,
+    logoImage,
+    logoLayers,
+    textColor = DEFAULT_TEXT_WATERMARK_COLOR,
+    textLayers,
+    textShadowEnabled = DEFAULT_TEXT_SHADOW_ENABLED,
+    tileAngle,
+    tileDensity,
+    tileGap,
+    videoCaptionLayers,
+    watermarkMode,
+    watermarkOpacity,
+    watermarkPosition,
+    watermarkText,
+    watermarkType,
+  }: WatermarkOverlayCanvasPaintInput,
+) {
+  applyHighQualityCanvasDefaults(context);
+  context.clearRect(0, 0, contentWidth, contentHeight);
   drawWatermarkOnly({
     activeLogoLayerId,
     activeTextLayerId,
@@ -6065,7 +12962,7 @@ function renderWatermarkOverlayCanvas({
     fontFamily,
     fontSizeScale,
     fontWeight,
-    height: canvas.height,
+    height: contentHeight,
     logoImage,
     logoLayers,
     textColor,
@@ -6078,6 +12975,138 @@ function renderWatermarkOverlayCanvas({
     watermarkOpacity,
     watermarkPosition,
     watermarkText,
+    watermarkType,
+    width: contentWidth,
+  });
+
+  if (includeCaptionOnPass && videoCaptionLayers?.length) {
+    for (const layer of getUntimedCaptionLayers(videoCaptionLayers)) {
+      drawVideoCaption(context, contentWidth, contentHeight, layer);
+    }
+  }
+
+  if (applyStaticFreeExportStamp) {
+    await paintClientVideoFreeExportStamp(
+      context,
+      contentWidth,
+      contentHeight,
+    );
+  }
+}
+
+async function renderWatermarkOverlayCanvas({
+  activeLogoLayerId,
+  activeTextLayerId,
+  applyStaticFreeExportStamp = false,
+  customPosition,
+  fontFamily,
+  fontSizeScale,
+  fontWeight = DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
+  height,
+  includeCaptionOnPass = true,
+  logoImage,
+  logoLayers,
+  textColor = DEFAULT_TEXT_WATERMARK_COLOR,
+  textLayers,
+  textShadowEnabled = DEFAULT_TEXT_SHADOW_ENABLED,
+  tileAngle,
+  tileDensity,
+  tileGap,
+  videoCaptionLayers,
+  watermarkMode,
+  watermarkOpacity,
+  watermarkPosition,
+  watermarkText,
+  watermarkType,
+  width,
+}: WatermarkOverlayCanvasInput) {
+  const logicalWidth = Math.max(1, width);
+  const logicalHeight = Math.max(1, height);
+  const watermarkScale = getImageWatermarkExportScale(
+    logicalWidth,
+    logicalHeight,
+  );
+  const paintInput: WatermarkOverlayCanvasPaintInput = {
+    activeLogoLayerId,
+    activeTextLayerId,
+    applyStaticFreeExportStamp,
+    customPosition,
+    fontFamily,
+    fontSizeScale,
+    fontWeight,
+    includeCaptionOnPass,
+    logoImage,
+    logoLayers,
+    textColor,
+    textLayers,
+    textShadowEnabled,
+    tileAngle,
+    tileDensity,
+    tileGap,
+    videoCaptionLayers,
+    watermarkMode,
+    watermarkOpacity,
+    watermarkPosition,
+    watermarkText,
+    watermarkType,
+  };
+
+  const canvas = document.createElement("canvas");
+  canvas.width = logicalWidth;
+  canvas.height = logicalHeight;
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Could not create watermark overlay canvas.");
+  }
+
+  if (watermarkScale > 1) {
+    const supersampleCanvas = document.createElement("canvas");
+    supersampleCanvas.width = logicalWidth * watermarkScale;
+    supersampleCanvas.height = logicalHeight * watermarkScale;
+    const supersampleContext = supersampleCanvas.getContext("2d");
+
+    if (!supersampleContext) {
+      throw new Error("Could not create watermark overlay supersample canvas.");
+    }
+
+    supersampleContext.scale(watermarkScale, watermarkScale);
+    await paintWatermarkOverlayCanvasContent(
+      supersampleContext,
+      logicalWidth,
+      logicalHeight,
+      paintInput,
+    );
+
+    applyHighQualityCanvasDefaults(context);
+    context.clearRect(0, 0, logicalWidth, logicalHeight);
+    context.drawImage(
+      supersampleCanvas,
+      0,
+      0,
+      logicalWidth,
+      logicalHeight,
+    );
+  } else {
+    await paintWatermarkOverlayCanvasContent(
+      context,
+      logicalWidth,
+      logicalHeight,
+      paintInput,
+    );
+  }
+
+  logRealVideoExport("STEP 11a/15: renderWatermarkOverlayCanvas() painted pixels", {
+    applyStaticFreeExportStamp,
+    centerAlpha: context.getImageData(
+      Math.floor(canvas.width / 2),
+      Math.floor(canvas.height / 2),
+      1,
+      1,
+    ).data[3],
+    height: canvas.height,
+    textLayerCount: textLayers?.length ?? 0,
+    watermarkScale,
     watermarkType,
     width: canvas.width,
   });
@@ -6261,6 +13290,7 @@ function paintWatermarkOnExportCanvas({
   fontSizeScale,
   logoImage,
   logoLayers,
+  resolveCustomPosition,
   textLayers,
   tileAngle,
   tileDensity,
@@ -6281,6 +13311,7 @@ function paintWatermarkOnExportCanvas({
   fontSizeScale: number;
   logoImage: HTMLImageElement | null;
   logoLayers: LogoWatermarkLayer[];
+  resolveCustomPosition?: WatermarkLayerPaintInput["resolveCustomPosition"];
   textLayers: TextWatermarkLayer[];
   tileAngle: TileAngle;
   tileDensity: TileDensity;
@@ -6308,6 +13339,7 @@ function paintWatermarkOnExportCanvas({
     imageX: 0,
     imageY: 0,
     logoLayers,
+    resolveCustomPosition,
     signatureCustomPosition: customPosition,
     signatureFontSizeScale: fontSizeScale,
     signatureImage: watermarkType === "signature" ? logoImage : null,
@@ -6325,6 +13357,7 @@ function paintWatermarkOnExportCanvas({
 function renderExportCanvas({
   activeLogoLayerId,
   activeTextLayerId,
+  blurStrokes,
   customPosition,
   fontFamily,
   fontSizeScale,
@@ -6332,6 +13365,8 @@ function renderExportCanvas({
   imageEffectSettings,
   logoImage,
   logoLayers,
+  previewCanvasSize,
+  referenceImageSize,
   resizeHeight,
   resizeWidth,
   rotationAngle,
@@ -6353,6 +13388,24 @@ function renderExportCanvas({
   const outputBounds = getRotatedBounds(sourceWidth, sourceHeight, rotationAngle);
   const logicalWidth = Math.max(1, Math.ceil(outputBounds.width));
   const logicalHeight = Math.max(1, Math.ceil(outputBounds.height));
+  const previewFrame = computeLetterboxedPreviewImageFrame({
+    canvasHeight: previewCanvasSize.height,
+    canvasWidth: previewCanvasSize.width,
+    previewImageHeight: sourceHeight,
+    previewImageWidth: sourceWidth,
+    referenceHeight: referenceImageSize.height,
+    referenceWidth: referenceImageSize.width,
+    rotationAngle,
+  });
+  const resolveCustomPosition = (position: CustomPosition) =>
+    mapPreviewCustomPositionToExportSpace(
+      position,
+      previewCanvasSize.width,
+      previewCanvasSize.height,
+      previewFrame,
+      logicalWidth,
+      logicalHeight,
+    );
   const outputScale = getImageExportOutputScale(logicalWidth, logicalHeight);
   const exportCanvas = document.createElement("canvas");
   const context = exportCanvas.getContext("2d");
@@ -6373,15 +13426,49 @@ function renderExportCanvas({
   context.save();
   context.translate(logicalWidth / 2, logicalHeight / 2);
   context.rotate((rotationAngle * Math.PI) / 180);
-  drawBaseImageWithEffect(
-    context,
-    image,
-    -sourceWidth / 2,
-    -sourceHeight / 2,
-    sourceWidth,
-    sourceHeight,
-    imageEffectSettings,
-  );
+  const effectedCanvas = document.createElement("canvas");
+  effectedCanvas.width = sourceWidth;
+  effectedCanvas.height = sourceHeight;
+  const effectedContext = effectedCanvas.getContext("2d");
+
+  if (effectedContext) {
+    drawBaseImageWithEffect(
+      effectedContext,
+      image,
+      0,
+      0,
+      sourceWidth,
+      sourceHeight,
+      imageEffectSettings,
+    );
+    context.drawImage(
+      effectedCanvas,
+      -sourceWidth / 2,
+      -sourceHeight / 2,
+      sourceWidth,
+      sourceHeight,
+    );
+    applyBlurStrokes(context, {
+      destHeight: sourceHeight,
+      destWidth: sourceWidth,
+      destX: -sourceWidth / 2,
+      destY: -sourceHeight / 2,
+      source: effectedCanvas,
+      sourceHeight,
+      sourceWidth,
+      strokes: blurStrokes,
+    });
+  } else {
+    drawBaseImageWithEffect(
+      context,
+      image,
+      -sourceWidth / 2,
+      -sourceHeight / 2,
+      sourceWidth,
+      sourceHeight,
+      imageEffectSettings,
+    );
+  }
   context.restore();
 
   const watermarkInput = {
@@ -6394,6 +13481,7 @@ function renderExportCanvas({
     fontSizeScale,
     logoImage,
     logoLayers,
+    resolveCustomPosition,
     textLayers,
     tileAngle,
     tileDensity,
@@ -6436,12 +13524,23 @@ function renderExportCanvas({
   return exportCanvas;
 }
 
+type PdfPageSignatureRenderInput = {
+  customPosition: CustomPosition | null;
+  fontSizeScale: number;
+  id: string;
+  image: HTMLImageElement;
+  opacity: number;
+  watermarkPosition: WatermarkPosition;
+};
+
 type PdfPageWatermarkOverlayInput = Omit<
   WatermarkOverlayCanvasInput,
   "height" | "width"
 > & {
   canvasSize: CanvasSize;
+  pageFillFields?: PdfFillTextField[];
   pageHeight: number;
+  pageSignatures?: PdfPageSignatureRenderInput[];
   pageWidth: number;
 };
 
@@ -6454,7 +13553,9 @@ function renderWatermarkOverlayForPdfPage({
   fontSizeScale,
   logoImage,
   logoLayers,
+  pageFillFields = [],
   pageHeight,
+  pageSignatures = [],
   pageWidth,
   textLayers,
   tileAngle,
@@ -6492,6 +13593,27 @@ function renderWatermarkOverlayForPdfPage({
   const imageHeight = pageH * imageScale;
   const imageX = (canvasSize.width - imageWidth) / 2;
   const imageY = (canvasSize.height - imageHeight) / 2;
+  const previewFrame = { height: imageHeight, width: imageWidth, x: imageX, y: imageY };
+  const signatureImage =
+    watermarkType === "signature" && pageSignatures.length === 0
+      ? logoImage
+      : null;
+  const signatureCustomPosition =
+    pageSignatures.length > 0 ? null : customPosition;
+  const signatureFontSizeScale = fontSizeScale;
+  const signatureOpacity = watermarkOpacity;
+  const signaturePosition = watermarkPosition;
+  const signaturePlacementsForPaint = pageSignatures.length
+    ? pageSignatures.map((placement) => ({
+        customPosition: placement.customPosition,
+        fontSizeScale: placement.fontSizeScale,
+        id: placement.id,
+        image: placement.image,
+        isActive: false,
+        opacity: placement.opacity,
+        watermarkPosition: placement.watermarkPosition,
+      }))
+    : undefined;
 
   paintWatermarkLayers({
     activeLayerId:
@@ -6508,26 +13630,39 @@ function renderWatermarkOverlayForPdfPage({
     imageX: 0,
     imageY: 0,
     logoLayers: logoLayers ?? [],
-    resolveCustomPosition: (position) => ({
-      textAlign: "center" as CanvasTextAlign,
-      textBaseline: "middle" as CanvasTextBaseline,
-      x: ((position.xPercent * canvasSize.width - imageX) / imageWidth) * pageW,
-      y:
-        ((position.yPercent * canvasSize.height - imageY) / imageHeight) *
+    resolveCustomPosition: (position) =>
+      mapPreviewCustomPositionToExportSpace(
+        position,
+        canvasSize.width,
+        canvasSize.height,
+        previewFrame,
+        pageW,
         pageH,
-    }),
-    signatureCustomPosition: customPosition,
-    signatureFontSizeScale: fontSizeScale,
-    signatureImage: watermarkType === "signature" ? logoImage : null,
-    signatureOpacity: watermarkOpacity,
-    signaturePosition: watermarkPosition,
+      ),
+    signatureCustomPosition,
+    signatureFontSizeScale,
+    signatureImage,
+    signatureOpacity,
+    signaturePlacements: signaturePlacementsForPaint,
+    signaturePosition,
     textLayers: textLayers ?? [],
     tileAngle,
     tileDensity,
     tileGap,
     watermarkMode,
-    watermarkType,
+    watermarkType:
+      signaturePlacementsForPaint?.length ? "signature" : watermarkType,
   });
+
+  if (pageFillFields.length) {
+    paintFillFieldsForPdfExport({
+      canvasSize,
+      context,
+      fields: pageFillFields,
+      pageHeight: pageH,
+      pageWidth: pageW,
+    });
+  }
 
   return canvas;
 }
@@ -6550,6 +13685,8 @@ function areWatermarkSnapshotsEqual(
     first.activeLogoLayerId === second.activeLogoLayerId &&
     first.activeTextLayerId === second.activeTextLayerId &&
     first.backgroundRemovedLogoImage === second.backgroundRemovedLogoImage &&
+    (first.blurBrushSize ?? "medium") === (second.blurBrushSize ?? "medium") &&
+    areBlurStrokesEqual(first.blurStrokes ?? [], second.blurStrokes ?? []) &&
     areCustomPositionsEqual(first.customPosition, second.customPosition) &&
     first.fontFamily === second.fontFamily &&
     first.fontSizeScale === second.fontSizeScale &&
@@ -6572,8 +13709,98 @@ function areWatermarkSnapshotsEqual(
     first.watermarkOpacity === second.watermarkOpacity &&
     first.watermarkPosition === second.watermarkPosition &&
     first.watermarkText === second.watermarkText &&
-    first.watermarkType === second.watermarkType
+    first.watermarkType === second.watermarkType &&
+    first.pdfDocumentTool === second.pdfDocumentTool &&
+    arePdfPageFillMapsEqual(first.pdfPageFillMap, second.pdfPageFillMap) &&
+    arePdfPageSignatureMapsEqual(first.pdfPageSignatures, second.pdfPageSignatures)
   );
+}
+
+function arePdfPageFillMapsEqual(
+  first?: ReturnType<typeof serializePdfPageFillMap>,
+  second?: ReturnType<typeof serializePdfPageFillMap>,
+) {
+  if (!first && !second) {
+    return true;
+  }
+
+  if (!first || !second) {
+    return false;
+  }
+
+  const firstKeys = Object.keys(first);
+  const secondKeys = Object.keys(second);
+
+  if (firstKeys.length !== secondKeys.length) {
+    return false;
+  }
+
+  return firstKeys.every((key) => {
+    const left = first[key] ?? [];
+    const right = second[key] ?? [];
+
+    if (left.length !== right.length) {
+      return false;
+    }
+
+    return left.every((field, index) => {
+      const other = right[index];
+
+      return (
+        field.id === other.id &&
+        field.text === other.text &&
+        field.color === other.color &&
+        field.fontFamily === other.fontFamily &&
+        field.fontSize === other.fontSize &&
+        field.heightPercent === other.heightPercent &&
+        field.widthPercent === other.widthPercent &&
+        field.xPercent === other.xPercent &&
+        field.yPercent === other.yPercent
+      );
+    });
+  });
+}
+
+function arePdfPageSignatureMapsEqual(
+  first?: ReturnType<typeof serializePdfPageSignatureMap>,
+  second?: ReturnType<typeof serializePdfPageSignatureMap>,
+) {
+  if (!first && !second) {
+    return true;
+  }
+
+  if (!first || !second) {
+    return false;
+  }
+
+  const firstKeys = Object.keys(first);
+  const secondKeys = Object.keys(second);
+
+  if (firstKeys.length !== secondKeys.length) {
+    return false;
+  }
+
+  return firstKeys.every((key) => {
+    const left = first[key] ?? [];
+    const right = second[key] ?? [];
+
+    if (left.length !== right.length) {
+      return false;
+    }
+
+    return left.every((placement, index) => {
+      const other = right[index];
+
+      return (
+        placement.id === other.id &&
+        placement.signatureId === other.signatureId &&
+        areCustomPositionsEqual(placement.customPosition, other.customPosition) &&
+        placement.fontSizeScale === other.fontSizeScale &&
+        placement.opacity === other.opacity &&
+        placement.watermarkPosition === other.watermarkPosition
+      );
+    });
+  });
 }
 
 function areTextLayersSnapshotEqual(
@@ -6701,12 +13928,49 @@ function getCropHandleAtPoint(
   );
 }
 
+function createDefaultCropRect(image: HTMLImageElement): CropRect {
+  return {
+    height: image.naturalHeight,
+    width: image.naturalWidth,
+    x: 0,
+    y: 0,
+  };
+}
+
+function constrainCropRectToAspectRatio(
+  rect: CropRect,
+  image: HTMLImageElement,
+  aspectRatio: number,
+): CropRect {
+  let { height, width, x, y } = rect;
+
+  if (height <= 0 || width <= 0 || aspectRatio <= 0) {
+    return rect;
+  }
+
+  const currentRatio = width / height;
+
+  if (currentRatio > aspectRatio) {
+    width = height * aspectRatio;
+  } else {
+    height = width / aspectRatio;
+  }
+
+  width = Math.max(1, Math.min(width, image.naturalWidth));
+  height = Math.max(1, Math.min(height, image.naturalHeight));
+  x = clamp(x, 0, Math.max(0, image.naturalWidth - width));
+  y = clamp(y, 0, Math.max(0, image.naturalHeight - height));
+
+  return { height, width, x, y };
+}
+
 function getNextCropRect({
   drag,
   image,
   point,
 }: {
   drag: {
+    aspectRatio?: number;
     mode: CropDragMode;
     origin: { x: number; y: number };
     rect: CropRect;
@@ -6750,7 +14014,13 @@ function getNextCropRect({
   const top = resizesTop ? point.y : drag.rect.y;
   const bottom = resizesBottom ? point.y : drag.rect.y + drag.rect.height;
 
-  return rectFromPoints({ x: left, y: top }, { x: right, y: bottom }, image);
+  const nextRect = rectFromPoints({ x: left, y: top }, { x: right, y: bottom }, image);
+
+  if (drag.aspectRatio) {
+    return constrainCropRectToAspectRatio(nextRect, image, drag.aspectRatio);
+  }
+
+  return nextRect;
 }
 
 function rectFromPoints(
@@ -6770,6 +14040,8 @@ function rectFromPoints(
     y,
   };
 }
+
+const EDITOR_SIGNAL_COLOR = "#D97757";
 
 function drawCropOverlay({
   context,
@@ -6797,7 +14069,7 @@ function drawCropOverlay({
 
   const rect = cropRectToCanvas(cropRect, frame, image);
 
-  context.fillStyle = "rgba(8, 22, 31, 0.45)";
+  context.fillStyle = "rgba(0, 0, 0, 0.45)";
   context.fillRect(frame.x, frame.y, frame.width, rect.y - frame.y);
   context.fillRect(
     frame.x,
@@ -6812,17 +14084,48 @@ function drawCropOverlay({
     frame.x + frame.width - (rect.x + rect.width),
     rect.height,
   );
-  context.strokeStyle = "#F97316";
+
+  context.strokeStyle = "rgba(217, 119, 87, 0.55)";
+  context.lineWidth = 1;
+  for (let index = 1; index <= 2; index += 1) {
+    const vertical = rect.x + (rect.width * index) / 3;
+    const horizontal = rect.y + (rect.height * index) / 3;
+    context.beginPath();
+    context.moveTo(vertical, rect.y);
+    context.lineTo(vertical, rect.y + rect.height);
+    context.stroke();
+    context.beginPath();
+    context.moveTo(rect.x, horizontal);
+    context.lineTo(rect.x + rect.width, horizontal);
+    context.stroke();
+  }
+
+  context.strokeStyle = EDITOR_SIGNAL_COLOR;
   context.lineWidth = 2;
   context.strokeRect(rect.x, rect.y, rect.width, rect.height);
-  drawCropHandle(context, rect.x, rect.y);
-  drawCropHandle(context, rect.x + rect.width / 2, rect.y);
-  drawCropHandle(context, rect.x + rect.width, rect.y);
-  drawCropHandle(context, rect.x + rect.width, rect.y + rect.height / 2);
-  drawCropHandle(context, rect.x, rect.y + rect.height / 2);
-  drawCropHandle(context, rect.x, rect.y + rect.height);
-  drawCropHandle(context, rect.x + rect.width / 2, rect.y + rect.height);
-  drawCropHandle(context, rect.x + rect.width, rect.y + rect.height);
+  drawCropHandle(context, rect.x, rect.y, EDITOR_SIGNAL_COLOR);
+  drawCropHandle(context, rect.x + rect.width / 2, rect.y, EDITOR_SIGNAL_COLOR);
+  drawCropHandle(context, rect.x + rect.width, rect.y, EDITOR_SIGNAL_COLOR);
+  drawCropHandle(
+    context,
+    rect.x + rect.width,
+    rect.y + rect.height / 2,
+    EDITOR_SIGNAL_COLOR,
+  );
+  drawCropHandle(context, rect.x, rect.y + rect.height / 2, EDITOR_SIGNAL_COLOR);
+  drawCropHandle(context, rect.x, rect.y + rect.height, EDITOR_SIGNAL_COLOR);
+  drawCropHandle(
+    context,
+    rect.x + rect.width / 2,
+    rect.y + rect.height,
+    EDITOR_SIGNAL_COLOR,
+  );
+  drawCropHandle(
+    context,
+    rect.x + rect.width,
+    rect.y + rect.height,
+    EDITOR_SIGNAL_COLOR,
+  );
 
   context.restore();
 }
@@ -6844,12 +14147,16 @@ function drawCropHandle(
   context: CanvasRenderingContext2D,
   x: number,
   y: number,
+  fillColor = "#FFFFFF",
 ) {
-  context.fillStyle = "#FFFFFF";
-  context.strokeStyle = "#F97316";
-  context.lineWidth = 2;
+  context.fillStyle = fillColor;
+  context.strokeStyle =
+    fillColor === "#FFFFFF"
+      ? "rgba(0, 0, 0, 0.25)"
+      : "rgba(255, 255, 255, 0.85)";
+  context.lineWidth = 1.5;
   context.beginPath();
-  context.rect(x - 5, y - 5, 10, 10);
+  context.arc(x, y, 6, 0, Math.PI * 2);
   context.fill();
   context.stroke();
 }
@@ -6983,28 +14290,254 @@ function drawResizeOverlay({
   context,
   frame,
   isActive,
+  resizeHeight,
+  resizeWidth,
 }: {
   context: CanvasRenderingContext2D;
   frame: ImageFrame;
   isActive: boolean;
+  resizeHeight: number;
+  resizeWidth: number;
 }) {
-  if (!isActive) {
+  if (!isActive || !resizeWidth || !resizeHeight) {
     return;
   }
 
   context.save();
-  context.strokeStyle = "#F97316";
+
+  context.setLineDash([6, 4]);
+  context.strokeStyle = "rgba(217, 119, 87, 0.55)";
+  context.lineWidth = 1;
+  for (let index = 1; index <= 2; index += 1) {
+    const vertical = frame.x + (frame.width * index) / 3;
+    const horizontal = frame.y + (frame.height * index) / 3;
+    context.beginPath();
+    context.moveTo(vertical, frame.y);
+    context.lineTo(vertical, frame.y + frame.height);
+    context.stroke();
+    context.beginPath();
+    context.moveTo(frame.x, horizontal);
+    context.lineTo(frame.x + frame.width, horizontal);
+    context.stroke();
+  }
+  context.setLineDash([]);
+
+  context.strokeStyle = EDITOR_SIGNAL_COLOR;
   context.lineWidth = 2;
   context.strokeRect(frame.x, frame.y, frame.width, frame.height);
-  drawCropHandle(context, frame.x, frame.y);
-  drawCropHandle(context, frame.x + frame.width / 2, frame.y);
-  drawCropHandle(context, frame.x + frame.width, frame.y);
-  drawCropHandle(context, frame.x + frame.width, frame.y + frame.height / 2);
-  drawCropHandle(context, frame.x, frame.y + frame.height / 2);
-  drawCropHandle(context, frame.x, frame.y + frame.height);
-  drawCropHandle(context, frame.x + frame.width / 2, frame.y + frame.height);
-  drawCropHandle(context, frame.x + frame.width, frame.y + frame.height);
+
+  const label = `${Math.round(resizeWidth)} x ${Math.round(resizeHeight)}`;
+  context.font = "600 12px system-ui, -apple-system, sans-serif";
+  const metrics = context.measureText(label);
+  const pillWidth = metrics.width + 20;
+  const pillHeight = 24;
+  const pillX = frame.x + frame.width / 2 - pillWidth / 2;
+  const pillY = frame.y + frame.height / 2 - pillHeight / 2;
+
+  context.fillStyle = "rgba(255, 255, 255, 0.94)";
+  context.beginPath();
+  context.roundRect(pillX, pillY, pillWidth, pillHeight, pillHeight / 2);
+  context.fill();
+  context.fillStyle = "#000000";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(label, frame.x + frame.width / 2, frame.y + frame.height / 2);
+
+  drawResizeGuideArrow(
+    context,
+    frame.x + 12,
+    frame.y + frame.height / 2,
+    pillX + 4,
+    frame.y + frame.height / 2,
+    EDITOR_SIGNAL_COLOR,
+  );
+  drawResizeGuideArrow(
+    context,
+    pillX + pillWidth - 4,
+    frame.y + frame.height / 2,
+    frame.x + frame.width - 12,
+    frame.y + frame.height / 2,
+    EDITOR_SIGNAL_COLOR,
+  );
+  drawResizeGuideArrow(
+    context,
+    frame.x + frame.width / 2,
+    frame.y + 12,
+    frame.x + frame.width / 2,
+    pillY + 4,
+    EDITOR_SIGNAL_COLOR,
+  );
+  drawResizeGuideArrow(
+    context,
+    frame.x + frame.width / 2,
+    pillY + pillHeight - 4,
+    frame.x + frame.width / 2,
+    frame.y + frame.height - 12,
+    EDITOR_SIGNAL_COLOR,
+  );
+
+  drawCropHandle(context, frame.x, frame.y, EDITOR_SIGNAL_COLOR);
+  drawCropHandle(context, frame.x + frame.width / 2, frame.y, EDITOR_SIGNAL_COLOR);
+  drawCropHandle(context, frame.x + frame.width, frame.y, EDITOR_SIGNAL_COLOR);
+  drawCropHandle(
+    context,
+    frame.x + frame.width,
+    frame.y + frame.height / 2,
+    EDITOR_SIGNAL_COLOR,
+  );
+  drawCropHandle(context, frame.x, frame.y + frame.height / 2, EDITOR_SIGNAL_COLOR);
+  drawCropHandle(context, frame.x, frame.y + frame.height, EDITOR_SIGNAL_COLOR);
+  drawCropHandle(
+    context,
+    frame.x + frame.width / 2,
+    frame.y + frame.height,
+    EDITOR_SIGNAL_COLOR,
+  );
+  drawCropHandle(
+    context,
+    frame.x + frame.width,
+    frame.y + frame.height,
+    EDITOR_SIGNAL_COLOR,
+  );
+
   context.restore();
+}
+
+function drawResizeGuideArrow(
+  context: CanvasRenderingContext2D,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  color: string,
+) {
+  const angle = Math.atan2(toY - fromY, toX - fromX);
+  const headLength = 5;
+
+  context.strokeStyle = color;
+  context.fillStyle = color;
+  context.lineWidth = 1.5;
+  context.beginPath();
+  context.moveTo(fromX, fromY);
+  context.lineTo(toX, toY);
+  context.stroke();
+
+  context.beginPath();
+  context.moveTo(toX, toY);
+  context.lineTo(
+    toX - headLength * Math.cos(angle - Math.PI / 6),
+    toY - headLength * Math.sin(angle - Math.PI / 6),
+  );
+  context.lineTo(
+    toX - headLength * Math.cos(angle + Math.PI / 6),
+    toY - headLength * Math.sin(angle + Math.PI / 6),
+  );
+  context.closePath();
+  context.fill();
+
+  const reverseAngle = angle + Math.PI;
+  context.beginPath();
+  context.moveTo(fromX, fromY);
+  context.lineTo(
+    fromX - headLength * Math.cos(reverseAngle - Math.PI / 6),
+    fromY - headLength * Math.sin(reverseAngle - Math.PI / 6),
+  );
+  context.lineTo(
+    fromX - headLength * Math.cos(reverseAngle + Math.PI / 6),
+    fromY - headLength * Math.sin(reverseAngle + Math.PI / 6),
+  );
+  context.closePath();
+  context.fill();
+}
+
+function drawImageWithResizeMode(
+  context: CanvasRenderingContext2D,
+  image: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+  mode: ResizeScaleMode,
+  destX: number,
+  destY: number,
+  destWidth: number,
+  destHeight: number,
+) {
+  if (mode === "stretch") {
+    context.drawImage(image, destX, destY, destWidth, destHeight);
+    return;
+  }
+
+  if (mode === "contain") {
+    const scale = Math.min(destWidth / sourceWidth, destHeight / sourceHeight);
+    const drawWidth = sourceWidth * scale;
+    const drawHeight = sourceHeight * scale;
+    const x = destX + (destWidth - drawWidth) / 2;
+    const y = destY + (destHeight - drawHeight) / 2;
+    context.drawImage(image, x, y, drawWidth, drawHeight);
+    return;
+  }
+
+  const scale = Math.max(destWidth / sourceWidth, destHeight / sourceHeight);
+  const sourceCropWidth = destWidth / scale;
+  const sourceCropHeight = destHeight / scale;
+  const sourceX = (sourceWidth - sourceCropWidth) / 2;
+  const sourceY = (sourceHeight - sourceCropHeight) / 2;
+
+  context.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    sourceCropWidth,
+    sourceCropHeight,
+    destX,
+    destY,
+    destWidth,
+    destHeight,
+  );
+}
+
+function drawResizeTargetImage(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  targetWidth: number,
+  targetHeight: number,
+  mode: ResizeScaleMode,
+  settings: ImageEffectSettings,
+) {
+  if (mode === "stretch") {
+    drawBaseImageWithEffect(context, image, 0, 0, targetWidth, targetHeight, settings);
+    return;
+  }
+
+  const tempCanvas = document.createElement("canvas");
+  tempCanvas.width = image.naturalWidth;
+  tempCanvas.height = image.naturalHeight;
+  const tempContext = tempCanvas.getContext("2d");
+
+  if (!tempContext) {
+    drawBaseImageWithEffect(context, image, 0, 0, targetWidth, targetHeight, settings);
+    return;
+  }
+
+  drawBaseImageWithEffect(
+    tempContext,
+    image,
+    0,
+    0,
+    tempCanvas.width,
+    tempCanvas.height,
+    settings,
+  );
+  drawImageWithResizeMode(
+    context,
+    tempCanvas,
+    tempCanvas.width,
+    tempCanvas.height,
+    mode,
+    0,
+    0,
+    targetWidth,
+    targetHeight,
+  );
 }
 
 type BackgroundRemovalResult =

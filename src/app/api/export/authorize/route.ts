@@ -46,12 +46,29 @@ export async function POST(request: Request) {
       data: { user },
     } = await supabase.auth.getUser();
 
+    if (!user) {
+      return NextResponse.json(
+        { error: "Sign in is required to export files." },
+        { status: 401 },
+      );
+    }
+
+    if (!user.email_confirmed_at) {
+      return NextResponse.json(
+        {
+          error:
+            "Confirm your email address before exporting. Check your inbox, then click Export again.",
+        },
+        { status: 403 },
+      );
+    }
+
     const result = await authorizeExport({
       exportId,
       fileMeta,
       fileType,
       ipAddress: getClientIp(request),
-      userId: user?.id ?? null,
+      userId: user.id,
     });
 
     return NextResponse.json(result);

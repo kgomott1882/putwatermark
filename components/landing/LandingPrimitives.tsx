@@ -34,24 +34,16 @@ export function LandingStarfield() {
 }
 
 export function LandingSectionHeader({
-  aside,
   index,
   lead,
   title,
 }: {
-  aside?: string;
   index: string;
   lead?: ReactNode;
   title: string;
 }) {
   return (
-    <div
-      className={`grid gap-8 lg:items-end ${
-        aside
-          ? "lg:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_minmax(0,14rem)]"
-          : "lg:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]"
-      }`}
-    >
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,10rem)_minmax(0,1fr)] lg:items-end">
       <div className="flex items-start gap-4">
         <div className="h-20 w-px bg-signal" />
         <div>
@@ -69,9 +61,6 @@ export function LandingSectionHeader({
           <p className="landing-muted mt-4 max-w-2xl text-lg leading-8">{lead}</p>
         ) : null}
       </div>
-      {aside ? (
-        <p className="landing-muted text-sm leading-6 lg:text-right">{aside}</p>
-      ) : null}
     </div>
   );
 }

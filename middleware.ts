@@ -1,7 +1,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { applyFfmpegAssetIsolationHeaders } from "./src/lib/ffmpegCrossOriginIsolation";
 
 export async function middleware(request: NextRequest) {
+  if (request.nextUrl.pathname.startsWith("/ffmpeg/")) {
+    const response = NextResponse.next({
+      request,
+    });
+    applyFfmpegAssetIsolationHeaders(response.headers);
+    return response;
+  }
+
   let response = NextResponse.next({
     request,
   });
@@ -43,6 +52,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mjs|js|ico|woff2?|wasm)$).*)",
+    "/ffmpeg/:path*",
+    "/((?!_next/static|_next/image|favicon.ico|ffmpeg/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mjs|js|ico|woff2?|wasm)$).*)",
   ],
 };

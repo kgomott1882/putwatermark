@@ -5,6 +5,7 @@ import {
   type ExportFileMeta,
   type ExportFileType,
 } from "./exportCost";
+import { getVideoExportRoute } from "./videoExportLimits";
 
 export type ExportConsumeSuccess = {
   balance: number;
@@ -44,6 +45,42 @@ type ConsumeExportCreditsResult = {
   cost: number;
   error_code?: string;
 };
+
+function allowsLongServerActualBilling({
+  actualCost,
+  authorizedCost,
+  fileMeta,
+  fileType,
+}: {
+  actualCost: number;
+  authorizedCost: number;
+  fileMeta: ExportFileMeta;
+  fileType: ExportFileType;
+}) {
+  if (actualCost >= authorizedCost) {
+    return actualCost === authorizedCost;
+  }
+
+  if (fileType !== "video") {
+    return false;
+  }
+
+  const { durationSeconds, fileSizeBytes, height, width } = fileMeta;
+
+  if (
+    typeof durationSeconds !== "number" ||
+    typeof fileSizeBytes !== "number" ||
+    typeof width !== "number" ||
+    typeof height !== "number"
+  ) {
+    return false;
+  }
+
+  return (
+    getVideoExportRoute(durationSeconds, width, height, fileSizeBytes) ===
+    "long-server"
+  );
+}
 
 async function verifyCleanExportAuthorization(
   exportId: string,
@@ -137,7 +174,11 @@ export async function consumeExportCredits({
   let costResult;
 
   try {
-    costResult = await calculateExportCost(fileType, fileMeta);
+    costResult = await calculateExportCost(fileType, fileMeta, {
+      exportId,
+      useActualLongVideoChunkCount: true,
+      userId,
+    });
   } catch (error) {
     if (error instanceof ExportCostError) {
       throw new ExportConsumeError(error.message, 400);
@@ -148,7 +189,14 @@ export async function consumeExportCredits({
 
   const cost = costResult.cost;
 
-  if (authorization.cost !== cost) {
+  if (
+    !allowsLongServerActualBilling({
+      actualCost: cost,
+      authorizedCost: authorization.cost,
+      fileMeta,
+      fileType,
+    })
+  ) {
     await logFailedConsumeAttempt({
       balance: null,
       cost,

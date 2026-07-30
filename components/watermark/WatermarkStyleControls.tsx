@@ -1,8 +1,10 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Bold } from "lucide-react";
 import type { FontFamilyGroup } from "@/lib/watermarkFonts";
 import {
+  DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
   TEXT_WATERMARK_COLOR_PALETTE,
   type TextWatermarkFontWeight,
 } from "@/lib/watermarkTextStyle";
@@ -13,11 +15,13 @@ type FontFamilyOption = {
 };
 
 type WatermarkStyleControlsProps = {
+  embedded?: boolean;
   fontFamilies?: readonly FontFamilyOption[];
   fontFamilyGroups?: readonly FontFamilyGroup[];
   fontFamily: string;
   fontSizeScale: number;
   fontWeight?: TextWatermarkFontWeight;
+  hideSliders?: boolean;
   onFontFamilyChange: (value: string) => void;
   onFontSizeScaleChange: (value: number) => void;
   onFontWeightChange?: (value: TextWatermarkFontWeight) => void;
@@ -26,7 +30,25 @@ type WatermarkStyleControlsProps = {
   textColor?: string;
   watermarkOpacity: number;
   watermarkType: "logo" | "signature" | "text";
+  signatureKind?: "full" | "initials" | null;
 };
+
+function StyleField({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-ed-fg">
+        {title}
+      </p>
+      {children}
+    </div>
+  );
+}
 
 function CompactSlider({
   id,
@@ -47,14 +69,19 @@ function CompactSlider({
 }) {
   return (
     <div className="min-w-0">
-      <div className="flex items-center justify-between gap-1">
-        <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-beige-dim">
+      <div className="flex items-center justify-between gap-2">
+        <label
+          className="text-[10px] font-bold uppercase tracking-[0.08em] text-ed-fg"
+          htmlFor={id}
+        >
           {label}
+        </label>
+        <span className="text-[11px] font-semibold tabular-nums text-ed-fg">
+          {value}%
         </span>
-        <span className="text-[11px] font-semibold tabular-nums text-beige">{value}%</span>
       </div>
       <input
-        className="mt-0.5 h-1 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-signal"
+        className="editor-range mt-1.5"
         id={id}
         max={max}
         min={min}
@@ -68,16 +95,19 @@ function CompactSlider({
 }
 
 export function WatermarkStyleControls({
+  embedded = false,
   fontFamilies,
   fontFamilyGroups,
   fontFamily,
   fontSizeScale,
-  fontWeight = 700,
+  fontWeight = DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
+  hideSliders = false,
   onFontFamilyChange,
   onFontSizeScaleChange,
   onFontWeightChange,
   onTextColorChange,
   onWatermarkOpacityChange,
+  signatureKind = null,
   textColor = "#FFFFFF",
   watermarkOpacity,
   watermarkType,
@@ -86,58 +116,62 @@ export function WatermarkStyleControls({
     watermarkType === "logo"
       ? "Logo size"
       : watermarkType === "signature"
-        ? "Sig size"
+        ? signatureKind === "initials"
+          ? "Initials size"
+          : "Signature size"
         : "Text size";
 
+  const sectionSpacing = embedded ? "space-y-3" : "space-y-2";
+  const sliderLayout = embedded ? "stack" : "grid";
+
   return (
-    <div className="space-y-2">
+    <div className={sectionSpacing}>
       {watermarkType === "text" ? (
         <>
-          <div className="flex items-center gap-1">
-            <select
-              className="min-w-0 flex-1 rounded-md border border-beige/10 bg-night-card px-2 py-1.5 text-xs text-beige outline-none transition focus:border-signal"
-              id="font-family"
-              onChange={(event) => onFontFamilyChange(event.target.value)}
-              value={fontFamily}
-            >
-              {fontFamilyGroups
-                ? fontFamilyGroups.map((group) => (
-                    <optgroup key={group.label} label={group.label}>
-                      {group.fonts.map(({ label, value }) => (
-                        <option key={`${group.label}-${label}`} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))
-                : fontFamilies?.map(({ label, value }) => (
-                    <option key={label} value={value}>
-                      {label}
-                    </option>
-                  ))}
-            </select>
-            <button
-              aria-label="Bold text"
-              aria-pressed={fontWeight === 700}
-              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition ${
-                fontWeight === 700
-                  ? "border-signal bg-signal text-white"
-                  : "border-beige/10 bg-night-elevated text-beige-dim hover:border-sand/40 hover:text-beige"
-              }`}
-              onClick={() =>
-                onFontWeightChange?.(fontWeight === 700 ? 400 : 700)
-              }
-              type="button"
-            >
-              <Bold className="h-3.5 w-3.5" strokeWidth={2.5} />
-            </button>
-          </div>
+          <StyleField title="Font">
+            <div className="flex items-center gap-1.5">
+              <select
+                className="editor-field-sm min-w-0 flex-1 rounded-md"
+                id="font-family"
+                onChange={(event) => onFontFamilyChange(event.target.value)}
+                value={fontFamily}
+              >
+                {fontFamilyGroups
+                  ? fontFamilyGroups.map((group) => (
+                      <optgroup key={group.label} label={group.label}>
+                        {group.fonts.map(({ label, value }) => (
+                          <option key={`${group.label}-${label}`} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))
+                  : fontFamilies?.map(({ label, value }) => (
+                      <option key={label} value={value}>
+                        {label}
+                      </option>
+                    ))}
+              </select>
+              <button
+                aria-label="Bold text"
+                aria-pressed={fontWeight === 700}
+                className={`editor-secondary-button flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
+                  fontWeight === 700
+                    ? "border-2 border-signal bg-signal/15 text-ed-fg ring-2 ring-signal/30"
+                    : "text-ed-fg-muted hover:border-signal/50"
+                }`}
+                onClick={() =>
+                  onFontWeightChange?.(fontWeight === 700 ? 400 : 700)
+                }
+                type="button"
+              >
+                <Bold className="h-3.5 w-3.5" strokeWidth={2.5} />
+              </button>
+            </div>
+          </StyleField>
 
-          <div className="grid grid-cols-[auto_1fr] items-center gap-x-1.5 gap-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-beige-dim">
-              Color
-            </span>
-            <div className="flex flex-wrap gap-1">
+          <StyleField title="Color">
+            <div className="flex flex-wrap gap-1.5">
               {TEXT_WATERMARK_COLOR_PALETTE.map(({ label, value }) => {
                 const isActive = textColor.toUpperCase() === value.toUpperCase();
 
@@ -147,8 +181,8 @@ export function WatermarkStyleControls({
                     aria-pressed={isActive}
                     className={`relative h-6 w-6 rounded-full border transition ${
                       isActive
-                        ? "border-signal ring-1 ring-signal/40"
-                        : "border-beige/15 hover:border-sand/50"
+                        ? "border-2 border-signal ring-2 ring-signal/35"
+                        : "border-ed-border hover:border-signal/50"
                     }`}
                     key={value}
                     onClick={() => onTextColorChange?.(value)}
@@ -163,11 +197,16 @@ export function WatermarkStyleControls({
                 );
               })}
             </div>
-          </div>
+          </StyleField>
         </>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-2">
+      {hideSliders ? null : (
+      <div
+        className={
+          sliderLayout === "stack" ? "space-y-3" : "grid grid-cols-2 gap-2"
+        }
+      >
         <CompactSlider
           id="font-size"
           label={sizeLabel}
@@ -187,6 +226,7 @@ export function WatermarkStyleControls({
           value={watermarkOpacity}
         />
       </div>
+      )}
     </div>
   );
 }

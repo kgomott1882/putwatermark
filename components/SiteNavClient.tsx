@@ -187,8 +187,48 @@ export function SiteNavClient({
       ? resolvedAccountData.creditBalance
       : null;
 
+  const headerClass = showInEditor
+    ? "sticky top-0 z-50 overflow-visible border-b border-ed-border bg-ed-panel/95 backdrop-blur-md"
+    : "sticky top-0 z-50 overflow-visible bg-night/95 backdrop-blur-md";
+  const brandTextClass = showInEditor
+    ? "text-base font-bold tracking-[-0.03em] text-ed-fg"
+    : "text-base font-bold tracking-[-0.03em] text-beige";
+  const navPillShellClass = showInEditor
+    ? "inline-flex items-center rounded-full border border-ed-border bg-ed-bg-card px-2 py-2 shadow-[0_8px_24px_rgba(43,43,43,0.14)]"
+    : "inline-flex items-center rounded-full border border-beige/10 bg-night-card/75 px-2 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl";
+  const navLinkActiveClass = showInEditor
+    ? "border-2 border-signal bg-ed-bg text-ed-fg shadow-sm ring-2 ring-signal/25"
+    : "bg-beige/10 text-beige";
+  const navLinkInactiveClass = showInEditor
+    ? "text-ed-fg-muted hover:bg-ed-bg hover:text-ed-fg"
+    : "text-beige/85 hover:bg-beige/5 hover:text-beige";
+  const mobileMenuToggleFocusClass = showInEditor
+    ? "inline-flex shrink-0 transition hover:opacity-85 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal/40 focus-visible:ring-offset-2 focus-visible:ring-offset-ed-panel md:hidden"
+    : "inline-flex shrink-0 transition hover:opacity-85 focus:outline-none focus-visible:ring-2 focus-visible:ring-sand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-night md:hidden";
+  const mobileMenuCloseClass = showInEditor
+    ? "inline-flex h-9 w-9 items-center justify-center rounded-md bg-ed-accent text-xl font-light leading-none text-white"
+    : "inline-flex h-9 w-9 items-center justify-center rounded-md bg-ink text-xl font-light leading-none text-beige";
+  const mobileMenuOpenClass = showInEditor
+    ? "inline-flex h-9 w-9 flex-col items-center justify-center gap-[5px] rounded-md bg-ed-accent px-2 py-2.5"
+    : "inline-flex h-9 w-9 flex-col items-center justify-center gap-[5px] rounded-md bg-ink px-2 py-2.5";
+  const mobileMenuLineClass = showInEditor
+    ? "h-[2px] w-full rounded-full bg-white"
+    : "h-[2px] w-full rounded-full bg-beige";
+  const creditBadgeClass = showInEditor
+    ? "rounded-full border border-ed-border bg-ed-bg-card px-3 py-1.5 text-[11px] font-semibold text-ed-fg"
+    : "rounded-full border border-beige/10 bg-night-elevated px-3 py-1.5 text-[11px] font-semibold text-beige";
+  const mobileMenuSectionClass = showInEditor
+    ? `${pageContainerClass} border-t border-ed-border bg-ed-panel py-3 md:hidden`
+    : `${pageContainerClass} border-t border-beige/10 py-3 md:hidden`;
+  const mobileMenuPanelClass = showInEditor
+    ? "flex flex-col gap-0.5 rounded-xl border border-ed-border bg-ed-bg-card p-1.5"
+    : "flex flex-col gap-0.5 rounded-xl border border-beige/10 bg-night-card/80 p-1.5";
+  const mobileNavLinkClass = showInEditor
+    ? "rounded-lg px-4 py-3 text-sm font-medium text-ed-fg transition hover:bg-ed-bg focus-visible:ring-2 focus-visible:ring-signal/30"
+    : "rounded-lg px-4 py-3 text-sm font-medium text-beige transition hover:bg-beige/5";
+
   return (
-    <header className="sticky top-0 z-50 overflow-visible bg-night/95 backdrop-blur-md">
+    <header className={headerClass}>
       <nav
         aria-label="Main navigation"
         className={`${pageContainerClass} grid h-[4.25rem] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 overflow-visible md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]`}
@@ -204,13 +244,13 @@ export function SiteNavClient({
             decoding="async"
             src={siteIconSrc}
           />
-          <span className="text-base font-bold tracking-[-0.03em] text-beige">
+          <span className={brandTextClass}>
             PutWatermark
           </span>
         </Link>
 
         <div className="hidden justify-center md:flex">
-          <div className="inline-flex items-center rounded-full border border-beige/10 bg-night-card/75 px-2 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+          <div className={navPillShellClass}>
             {navLinks.map(({ href, label }) => {
               const isActive =
                 pathname === href ||
@@ -219,9 +259,7 @@ export function SiteNavClient({
               return (
                 <Link
                   className={`rounded-full px-5 py-2 text-sm font-medium transition ${
-                    isActive
-                      ? "bg-beige/10 text-beige"
-                      : "text-beige/85 hover:bg-beige/5 hover:text-beige"
+                    isActive ? navLinkActiveClass : navLinkInactiveClass
                   }`}
                   href={href}
                   key={href}
@@ -243,38 +281,39 @@ export function SiteNavClient({
                 aria-expanded={isMenuOpen}
                 aria-haspopup="true"
                 aria-label={isMenuOpen ? "Close menu" : "Open menu"}
-                className="inline-flex shrink-0 transition hover:opacity-85 focus:outline-none focus-visible:ring-2 focus-visible:ring-sand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-night md:hidden"
+                className={mobileMenuToggleFocusClass}
                 onClick={() => setIsMenuOpen((open) => !open)}
                 type="button"
               >
                 {isMenuOpen ? (
                   <span
                     aria-hidden
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-ink text-xl font-light leading-none text-beige"
+                    className={mobileMenuCloseClass}
                   >
                     ×
                   </span>
                 ) : (
                   <span
                     aria-hidden
-                    className="inline-flex h-9 w-9 flex-col items-center justify-center gap-[5px] rounded-md bg-ink px-2 py-2.5"
+                    className={mobileMenuOpenClass}
                   >
-                    <span className="h-[2px] w-full rounded-full bg-beige" />
-                    <span className="h-[2px] w-full rounded-full bg-beige" />
-                    <span className="h-[2px] w-full rounded-full bg-beige" />
+                    <span className={mobileMenuLineClass} />
+                    <span className={mobileMenuLineClass} />
+                    <span className={mobileMenuLineClass} />
                   </span>
                 )}
               </button>
               {editorCreditBalance !== null ? (
                 <span
                   aria-label={`${formatCreditBalance(editorCreditBalance)} credits available`}
-                  className="rounded-full border border-beige/10 bg-night-elevated px-3 py-1.5 text-[11px] font-semibold text-beige"
+                  className={creditBadgeClass}
                 >
                   {formatCreditBalance(editorCreditBalance)} credits
                 </span>
               ) : null}
               <SiteNavAccountMenu
                 creditBalance={resolvedAccountData?.creditBalance ?? null}
+                editorLightTheme={showInEditor}
                 showBackToEditor={!showInEditor}
                 userEmail={resolvedAccountData?.userEmail ?? null}
               />
@@ -341,13 +380,13 @@ export function SiteNavClient({
 
       {isMenuOpen && showAccountMenu ? (
         <div
-          className={`${pageContainerClass} border-t border-beige/10 py-3 md:hidden`}
+          className={mobileMenuSectionClass}
           id={showInEditor ? "editor-mobile-nav-menu" : "mobile-nav-menu"}
         >
-          <div className="flex flex-col gap-0.5 rounded-xl border border-beige/10 bg-night-card/80 p-1.5">
+          <div className={mobileMenuPanelClass}>
             {navLinks.map(({ href, label }) => (
               <Link
-                className="rounded-lg px-4 py-3 text-sm font-medium text-beige transition hover:bg-beige/5"
+                className={mobileNavLinkClass}
                 href={href}
                 key={href}
                 onClick={() => setIsMenuOpen(false)}

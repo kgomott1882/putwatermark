@@ -227,9 +227,9 @@ export function BlogRealEstateListingPhotoArticle({
               Real estate work involves as much paperwork as photography — disclosures,
               listing agreements, offers, and licensing agreements with photographers all
               typically need a signature. The same tool used to watermark listing photos also
-              supports drawing or typing a signature and placing it directly on a PDF, which
-              is useful for the document side of a transaction without needing separate
-              software.
+              supports Sign & Fill on PDFs — draw or type a signature, add initials, or place
+              fill-in text fields — which is useful for the document side of a transaction
+              without needing separate software.
             </p>
           </ArticleSection>
 

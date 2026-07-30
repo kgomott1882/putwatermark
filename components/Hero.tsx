@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, type Variants } from "framer-motion";
+import { motion } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { LandingHighlight } from "./landing/LandingPrimitives";
@@ -15,19 +15,16 @@ const features = [
 
 const formats = ["JPG / PNG / WebP", "PDF documents", "MP4 / MOV / WebM"] as const;
 
-const containerVariants: Variants = {
+const containerVariants = {
   hidden: {},
-  visible: {
-    transition: { staggerChildren: 0.07 },
-  },
+  visible: {},
 };
 
-const itemVariants: Variants = {
+const itemVariants = {
   hidden: { opacity: 0, y: 18 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.55, ease: "easeOut" },
   },
 };
 
@@ -41,6 +38,7 @@ export function Hero() {
             className="lg:col-start-1 lg:row-start-1"
             initial="hidden"
             variants={containerVariants}
+            transition={{ staggerChildren: 0.07 }}
           >
             <motion.h1
               className="max-w-none text-balance text-[clamp(3rem,6.2vw,5.75rem)] font-bold leading-[0.92] tracking-[-0.05em] text-beige xl:text-[clamp(3.25rem,4.8vw,6rem)]"
@@ -55,7 +53,7 @@ export function Hero() {
               variants={itemVariants}
             >
               Upload, add your watermark, and download.{" "}
-              <LandingHighlight>No software, no signup, no subscription.</LandingHighlight>
+              <LandingHighlight>No software, no subscription — free account to export.</LandingHighlight>
             </motion.p>
 
             <motion.div

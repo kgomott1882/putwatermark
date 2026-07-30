@@ -11,9 +11,11 @@ export type FontFamilyGroup = {
 export const DEFAULT_WATERMARK_FONT_FAMILY =
   'Arial, Helvetica, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
+export const GEOMETRIC_SANS_FONT_FAMILY = '"Trebuchet MS", Arial, sans-serif';
+
 const systemFonts: readonly FontFamilyOption[] = [
   { label: "System Sans", value: DEFAULT_WATERMARK_FONT_FAMILY },
-  { label: "Geometric Sans", value: '"Trebuchet MS", Arial, sans-serif' },
+  { label: "Geometric Sans", value: GEOMETRIC_SANS_FONT_FAMILY },
   { label: "Serif", value: 'Georgia, "Times New Roman", serif' },
   { label: "Monospace", value: '"Courier New", Courier, monospace' },
   { label: "Condensed", value: 'Impact, "Arial Narrow", sans-serif' },

@@ -1,11 +1,19 @@
 import { createAdminClient } from "../../utils/supabase/admin";
 import {
+  PDF_CREDITS_PER_PAGE,
+  PDF_FILL_CREDITS_PER_PAGE,
   calculateExportCost,
   ExportCostError,
+  formatVideoExportCostNotice,
   resolvePhotoExportCount,
   type ExportFileMeta,
   type ExportFileType,
 } from "./exportCost";
+import type { PdfBillingMode } from "./exportCost";
+import {
+  type SignatureManifestEntry,
+  validateSignatureManifest,
+} from "./signatureValidation";
 
 export const EXPORT_AUTHORIZE_RATE_LIMIT = 10;
 export const EXPORT_AUTHORIZE_RATE_WINDOW_MS = 60_000;
@@ -16,10 +24,19 @@ export type ExportAuthorizeReason = "anonymous" | "insufficient_credits";
 
 export type ExportAuthorizeResult = {
   allowed: true;
-  tier: ExportAuthorizeDecision;
-  cost: number;
   balance?: number;
+  cost: number;
+  costNotice?: string;
+  fillPageCount?: number;
+  fillSurchargeCredits?: number;
+  pageCount?: number;
+  signedPageCount?: number;
+  billablePageCount?: number;
   reason?: ExportAuthorizeReason;
+  tier: ExportAuthorizeDecision;
+  videoDurationBaseCredits?: number;
+  videoServerRouted?: boolean;
+  videoSizeSurchargeCredits?: number;
 };
 
 export class ExportAuthorizeError extends Error {
@@ -73,9 +90,16 @@ export function parseExportFileMeta(
   }
 
   const meta = fileMeta as {
-    storagePath?: unknown;
     durationSeconds?: unknown;
+    fileSizeBytes?: unknown;
+    fillManifestPath?: unknown;
+    height?: unknown;
+    pdfBillingMode?: unknown;
     photoCount?: unknown;
+    signatureManifest?: unknown;
+    signaturePlacementManifestPath?: unknown;
+    storagePath?: unknown;
+    width?: unknown;
   };
 
   const parsed: ExportFileMeta = {};
@@ -114,6 +138,43 @@ export function parseExportFileMeta(
   }
 
   if (
+    typeof meta.fillManifestPath === "string" &&
+    meta.fillManifestPath.trim()
+  ) {
+    const fillManifestPath = meta.fillManifestPath.trim();
+
+    if (!fillManifestPath.startsWith(`exports/${exportId}/`)) {
+      throw new ExportAuthorizeError("fillManifestPath does not match exportId.");
+    }
+
+    parsed.fillManifestPath = fillManifestPath;
+  }
+
+  if (
+    typeof meta.signaturePlacementManifestPath === "string" &&
+    meta.signaturePlacementManifestPath.trim()
+  ) {
+    const signaturePlacementManifestPath =
+      meta.signaturePlacementManifestPath.trim();
+
+    if (!signaturePlacementManifestPath.startsWith(`exports/${exportId}/`)) {
+      throw new ExportAuthorizeError(
+        "signaturePlacementManifestPath does not match exportId.",
+      );
+    }
+
+    parsed.signaturePlacementManifestPath = signaturePlacementManifestPath;
+  }
+
+  if (meta.pdfBillingMode === "watermark" || meta.pdfBillingMode === "signFill") {
+    parsed.pdfBillingMode = meta.pdfBillingMode;
+  }
+
+  if (Array.isArray(meta.signatureManifest)) {
+    parsed.signatureManifest = meta.signatureManifest as SignatureManifestEntry[];
+  }
+
+  if (
     typeof meta.durationSeconds === "number" &&
     Number.isFinite(meta.durationSeconds) &&
     meta.durationSeconds > 0
@@ -121,11 +182,88 @@ export function parseExportFileMeta(
     parsed.durationSeconds = meta.durationSeconds;
   }
 
+  if (
+    typeof meta.fileSizeBytes === "number" &&
+    Number.isFinite(meta.fileSizeBytes) &&
+    meta.fileSizeBytes > 0
+  ) {
+    parsed.fileSizeBytes = meta.fileSizeBytes;
+  }
+
+  if (
+    typeof meta.width === "number" &&
+    Number.isFinite(meta.width) &&
+    meta.width > 0
+  ) {
+    parsed.width = meta.width;
+  }
+
+  if (
+    typeof meta.height === "number" &&
+    Number.isFinite(meta.height) &&
+    meta.height > 0
+  ) {
+    parsed.height = meta.height;
+  }
+
   if (fileType === "pdf" && !parsed.storagePath) {
     throw new ExportAuthorizeError("PDF export requires fileMeta.storagePath.");
   }
 
+  if (fileType === "video") {
+    if (
+      !parsed.durationSeconds ||
+      !parsed.fileSizeBytes ||
+      !parsed.width ||
+      !parsed.height
+    ) {
+      throw new ExportAuthorizeError(
+        "Video export requires durationSeconds, fileSizeBytes, width, and height.",
+      );
+    }
+  }
+
   return parsed;
+}
+
+function formatPdfExportCostNotice({
+  billablePageCount = 0,
+  cost,
+  fillPageCount = 0,
+  fillSurchargeCredits = 0,
+  pageCount = 0,
+  pdfBillingMode = "watermark",
+  signedPageCount = 0,
+}: {
+  billablePageCount?: number;
+  cost: number;
+  fillPageCount?: number;
+  fillSurchargeCredits?: number;
+  pageCount?: number;
+  pdfBillingMode?: PdfBillingMode;
+  signedPageCount?: number;
+}) {
+  if (pdfBillingMode === "watermark") {
+    const baseCost = PDF_CREDITS_PER_PAGE * pageCount;
+
+    if (fillPageCount > 0) {
+      return `${pageCount} pages → ${baseCost} credits + ${fillPageCount} fill pages → ${fillSurchargeCredits} credits = ${cost} credits.`;
+    }
+
+    return `${pageCount} pages → ${cost} credits.`;
+  }
+
+  const baseCost = PDF_CREDITS_PER_PAGE * billablePageCount;
+
+  if (fillPageCount > 0 && signedPageCount > 0) {
+    return `${billablePageCount} billable pages → ${baseCost} credits + ${fillPageCount} fill pages → ${fillSurchargeCredits} credits = ${cost} credits.`;
+  }
+
+  if (fillPageCount > 0) {
+    return `${fillPageCount} fill pages → ${baseCost} credits + ${fillSurchargeCredits} credits fill surcharge = ${cost} credits.`;
+  }
+
+  return `${signedPageCount} signed pages → ${cost} credits.`;
 }
 
 export function getClientIp(request: Request) {
@@ -203,14 +341,15 @@ function qualifiesForCleanExport({
   balance,
   cost,
   fileType,
+  videoServerRouted,
 }: {
   balance: number;
   cost: number;
   fileType: ExportFileType;
+  videoServerRouted?: boolean;
 }) {
-  if (fileType === "video") {
-    // Video overage pricing is not calibrated yet (cost may be 0). Until real
-    // per-second rates exist, only users with credits may export clean video.
+  // In-browser video exports bill 0 credits; free tier is balance <= 0 (see exportUpsellEligibility).
+  if (fileType === "video" && !videoServerRouted && cost === 0) {
     return balance > 0;
   }
 
@@ -292,8 +431,16 @@ export async function authorizeExport({
 
   let costResult;
 
+  const signatureValidationError = validateSignatureManifest(
+    fileMeta.signatureManifest ?? [],
+  );
+
+  if (signatureValidationError) {
+    throw new ExportAuthorizeError(signatureValidationError, 400);
+  }
+
   try {
-    costResult = await calculateExportCost(fileType, fileMeta);
+    costResult = await calculateExportCost(fileType, fileMeta, { exportId });
   } catch (error) {
     if (error instanceof ExportCostError) {
       throw new ExportAuthorizeError(error.message, 400);
@@ -303,39 +450,113 @@ export async function authorizeExport({
   }
 
   const cost = costResult.cost;
+  const authorizeExtras =
+    fileType === "pdf"
+      ? {
+          costNotice: formatPdfExportCostNotice({
+            billablePageCount: costResult.billablePageCount,
+            cost,
+            fillPageCount: costResult.fillPageCount,
+            fillSurchargeCredits: costResult.fillSurchargeCredits,
+            pageCount: costResult.pageCount,
+            pdfBillingMode: costResult.pdfBillingMode,
+            signedPageCount: costResult.signedPageCount,
+          }),
+          billablePageCount: costResult.billablePageCount,
+          fillPageCount: costResult.fillPageCount,
+          fillSurchargeCredits: costResult.fillSurchargeCredits,
+          pageCount: costResult.pageCount,
+          signedPageCount: costResult.signedPageCount,
+        }
+      : fileType === "video" && costResult.videoServerRouted
+        ? {
+            costNotice: formatVideoExportCostNotice({
+              cost,
+              durationBase: costResult.videoDurationBaseCredits ?? 0,
+              durationSeconds: costResult.durationSeconds ?? 0,
+              fileSizeBytes: costResult.fileSizeBytes ?? 0,
+              longVideoChunkSurcharge:
+                costResult.videoLongVideoChunkSurchargeCredits ?? 0,
+              longVideoExtraChunks: costResult.videoEstimatedExtraChunks ?? 0,
+              longVideoSurchargeEstimated: Boolean(
+                costResult.videoLongVideoChunkSurchargeEstimated,
+              ),
+              sizeSurcharge: costResult.videoSizeSurchargeCredits ?? 0,
+            }),
+            videoDurationBaseCredits: costResult.videoDurationBaseCredits,
+            videoEstimatedExtraChunks: costResult.videoEstimatedExtraChunks,
+            videoLongServerRouted: costResult.videoLongServerRouted,
+            videoLongVideoChunkSurchargeCredits:
+              costResult.videoLongVideoChunkSurchargeCredits,
+            videoServerRouted: costResult.videoServerRouted,
+            videoSizeSurchargeCredits: costResult.videoSizeSurchargeCredits,
+          }
+        : {};
 
   if (fileType === "photo") {
     console.info("[export-authorize] photo export", {
       cost,
       exportId,
       photoCount: costResult.photoCount ?? resolvePhotoExportCount(fileMeta),
-      userId: userId ?? "anonymous",
+      userId,
     });
   }
 
   if (!userId) {
+    throw new ExportAuthorizeError(
+      "Sign in is required to export files.",
+      401,
+    );
+  }
+
+  const balance = await getUserCreditBalance(userId);
+
+  if (
+    fileType === "video" &&
+    costResult.videoServerRouted &&
+    balance < cost
+  ) {
+    throw new ExportAuthorizeError(
+      "Server video export requires sufficient credits. Add credits to continue.",
+      402,
+    );
+  }
+
+  const isClientVideoExport =
+    fileType === "video" &&
+    !costResult.videoServerRouted &&
+    cost === 0;
+
+  if (isClientVideoExport && balance <= 0) {
     await logExportAuthorization({
-      balanceAtCheck: null,
+      balanceAtCheck: balance,
       cost,
       decision: "watermarked",
       exportId,
       fileType,
       ipAddress,
-      reason: "anonymous",
-      userId: null,
+      reason: "insufficient_credits",
+      userId,
     });
 
     return {
       allowed: true,
+      balance,
       cost,
-      reason: "anonymous",
+      reason: "insufficient_credits",
       tier: "watermarked",
+      ...authorizeExtras,
     };
   }
 
-  const balance = await getUserCreditBalance(userId);
-
-  if (qualifiesForCleanExport({ balance, cost, fileType })) {
+  if (
+    qualifiesForCleanExport({
+      balance,
+      cost,
+      fileType,
+      videoServerRouted: costResult.videoServerRouted,
+    })
+  ) {
     await logExportAuthorization({
       balanceAtCheck: balance,
       cost,
@@ -352,6 +573,7 @@ export async function authorizeExport({
       balance,
       cost,
       tier: "clean",
+      ...authorizeExtras,
     };
   }
 
@@ -372,5 +594,6 @@ export async function authorizeExport({
     cost,
     reason: "insufficient_credits",
     tier: "watermarked",
+    ...authorizeExtras,
   };
 }

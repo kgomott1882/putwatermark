@@ -72,7 +72,7 @@ export function ImageEffectsPanel({
   if (!image) {
     return (
       <EditorCard>
-        <p className="text-sm text-beige-dim">
+        <p className="text-sm text-ed-fg-muted">
           Upload an image to preview effects.
         </p>
       </EditorCard>
@@ -89,10 +89,10 @@ export function ImageEffectsPanel({
             return (
               <motion.button
                 aria-pressed={isSelected}
-                className={`relative w-full overflow-hidden rounded-xl border text-left transition-colors ${
+                className={`relative w-full overflow-hidden rounded-xl border text-left transition-colors shadow-sm ${
                   isSelected
-                    ? "border-signal text-white"
-                    : "border-beige/10 bg-night-card text-beige-dim hover:border-signal hover:text-beige"
+                    ? "border-signal text-ed-fg"
+                    : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:border-signal/50 hover:text-ed-fg"
                 }`}
                 key={id}
                 onClick={() => onEffectChange(id)}
@@ -102,7 +102,7 @@ export function ImageEffectsPanel({
               >
                 {isSelected ? (
                   <motion.span
-                    className="absolute inset-0 rounded-xl border border-signal bg-signal/10"
+                    className="absolute inset-0 rounded-xl editor-active-surface"
                     layoutId="image-effect-selection"
                     transition={{
                       type: "spring",
@@ -112,7 +112,7 @@ export function ImageEffectsPanel({
                   />
                 ) : null}
                 <div className="relative z-10 flex items-stretch gap-0">
-                  <div className="h-16 w-20 shrink-0 overflow-hidden bg-night-elevated">
+                  <div className="h-16 w-20 shrink-0 overflow-hidden bg-ed-bg-card">
                     {thumbnails[id] ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -155,7 +155,7 @@ export function ImageEffectsPanel({
             </div>
           </EditorPanelSection>
           <EditorPanelSection title="Border color">
-            <div className="grid grid-cols-2 gap-2 rounded-xl bg-night-card/60 p-1">
+            <div className="editor-segment-track grid grid-cols-2 gap-2">
               <EditorSegment
                 active={borderColor === "ink"}
                 groupId="effect-border-color"
@@ -183,12 +183,12 @@ export function ImageEffectsPanel({
         >
           <EditorPanelSection title="Exposure">
             <div className="flex items-center justify-between gap-4">
-              <span className="text-xs font-semibold text-beige">
+              <span className="text-xs font-semibold text-ed-fg">
                 {exposure > 0 ? `+${exposure}%` : `${exposure}%`}
               </span>
             </div>
             <input
-              className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-signal"
+              className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-ed-bg-card accent-signal"
               max={50}
               min={-50}
               onChange={(event) => onExposureChange(Number(event.target.value))}

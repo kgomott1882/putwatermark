@@ -3,6 +3,11 @@ import {
   createServerVideoUploadTarget,
   ServerVideoProcessingError,
 } from "../../../../../lib/serverVideoExportRoute";
+import {
+  requireAuthenticatedUserId,
+  requireCleanServerVideoExportAuthorization,
+} from "../../../../../lib/serverVideoExportAuth";
+import { sanitizeExportId } from "../../../../../lib/exportAuthorize";
 import { isServerVideoExportConfigured } from "../../../../../../utils/supabase/admin";
 
 export const runtime = "nodejs";
@@ -19,11 +24,14 @@ export async function POST(request: Request) {
   }
 
   try {
+    const userId = await requireAuthenticatedUserId();
     const body = (await request.json()) as {
       duration?: number;
+      exportId?: string;
       fileName?: string;
       fileSizeBytes?: number;
       height?: number;
+      resumeJobId?: string;
       width?: number;
     };
 
@@ -32,7 +40,8 @@ export async function POST(request: Request) {
       typeof body.fileSizeBytes !== "number" ||
       typeof body.width !== "number" ||
       typeof body.height !== "number" ||
-      typeof body.fileName !== "string"
+      typeof body.fileName !== "string" ||
+      typeof body.exportId !== "string"
     ) {
       return NextResponse.json(
         { error: "Missing video metadata for server upload." },
@@ -40,11 +49,27 @@ export async function POST(request: Request) {
       );
     }
 
+    const exportId = sanitizeExportId(body.exportId);
+    const fileMeta = {
+      durationSeconds: body.duration,
+      fileSizeBytes: body.fileSizeBytes,
+      height: body.height,
+      width: body.width,
+    };
+
+    await requireCleanServerVideoExportAuthorization({
+      exportId,
+      fileMeta,
+      userId,
+    });
+
     const uploadTarget = await createServerVideoUploadTarget({
       duration: body.duration,
       fileName: body.fileName,
       fileSizeBytes: body.fileSizeBytes,
       height: body.height,
+      resumeJobId:
+        typeof body.resumeJobId === "string" ? body.resumeJobId : undefined,
       width: body.width,
     });
 
@@ -55,6 +80,12 @@ export async function POST(request: Request) {
         ? error.message
         : "Could not prepare server video upload.";
 
-    return NextResponse.json({ error: message }, { status: 400 });
+    const status =
+      error instanceof ServerVideoProcessingError &&
+      message.includes("requires sufficient credits")
+        ? 402
+        : 400;
+
+    return NextResponse.json({ error: message }, { status });
   }
 }

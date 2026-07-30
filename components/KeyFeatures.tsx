@@ -29,9 +29,9 @@ const features: Feature[] = [
     image: "/Batch%20Pics.jpeg",
   },
   {
-    title: "Sign your documents",
+    title: "Sign & fill documents",
     description:
-      "Draw your signature or type it in a handwriting style, save it for reuse, and drag it onto any photo, video, or PDF — perfect for signing contracts and agreements.",
+      "Draw or type a signature, add fill-in text on PDF pages, save signatures for reuse, and drag placements onto any photo, video, or PDF — perfect for signing contracts and filling in forms.",
     href: "/watermark",
     image: "/Tablet_signing.jpeg",
   },
@@ -107,13 +107,15 @@ function FeatureCard({
               watermark to every image in one pass, preview every page, and export in
               your browser.
             </>
-          ) : (
+          ) : feature.title === "Sign & fill documents" ? (
             <>
-              Draw your signature or type it in a handwriting style, save it for reuse,
-              and drag it onto any{" "}
-              <LandingHighlight>photo, video, or PDF</LandingHighlight> — perfect for
-              signing contracts and agreements.
+              Draw or type a signature, add fill-in text on PDFs, save placements
+              for reuse, and drag them onto any{" "}
+              <LandingHighlight>photo, video, or PDF</LandingHighlight> — perfect
+              for signing contracts and filling in forms.
             </>
+          ) : (
+            feature.description
           )}
         </p>
         <Link

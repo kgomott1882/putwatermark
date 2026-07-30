@@ -12,6 +12,19 @@
 
 # testing
 /coverage
+scripts/.export-test-output/
+
+# dev spikes and QA artifacts
+/spike-phase0/
+/spike-phase0-1/
+/spike-phase0-time/
+/qa-phase1-timeline/
+/public/previews/
+
+# dev-only scripts (not used by build or runtime)
+/scripts/browser-*
+/scripts/verify-*
+/scripts/preview-forced-watermark.mjs
 
 # next.js
 /.next/
@@ -19,6 +32,9 @@
 
 # production
 /build
+
+# Generated ffmpeg.wasm assets (copied from node_modules on install/build)
+/public/ffmpeg/
 
 # misc
 .DS_Store

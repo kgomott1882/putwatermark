@@ -98,7 +98,7 @@ const comparisonRows = [
     watermarkly: "Yes",
   },
   {
-    feature: "Document signing",
+    feature: "Sign & fill (PDF)",
     putWatermark: "Yes",
     watermarkWs: "Not offered",
     visualWatermark: "Not offered",
@@ -216,9 +216,9 @@ export function BlogWatermarkComparisonArticle({
               doesn&apos;t require an account at all; one is only needed once you&apos;re
               ready to move beyond the free tier&apos;s tiled watermark. Pricing is
               credit-based rather than a subscription, and credits don&apos;t expire for 60
-              days once purchased. It&apos;s also currently the only one of the four with
-              built-in document signing (drawing or typing a signature directly onto a PDF),
-              alongside the watermarking features the others share.
+              days once purchased.               It&apos;s also currently the only one of the four with built-in Sign & Fill for
+              PDFs — signatures, initials, and fill-in text fields — alongside the
+              watermarking features the others share.
             </p>
           </ArticleSection>
 
@@ -245,8 +245,8 @@ export function BlogWatermarkComparisonArticle({
                   need most directly.
                 </>,
                 <>
-                  You need to sign a document as well as watermark it, without switching
-                  tools — this is currently unique to PutWatermark among the four.
+                  You need to sign or fill a PDF as well as watermark photos, without
+                  switching tools — this is currently unique to PutWatermark among the four.
                 </>,
               ]}
             />

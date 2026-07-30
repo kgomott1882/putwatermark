@@ -11,23 +11,29 @@ export type FixedPurchaseTier = {
 
 export const FIXED_PURCHASE_TIERS: Record<PurchaseTierId, FixedPurchaseTier> = {
   grow: {
-    credits: 3_000,
+    credits: 4_000,
     label: "Grow",
-    priceUSD: 8.99,
+    priceUSD: 9.99,
     tierId: "grow",
   },
   premium: {
-    credits: 9_000,
+    credits: 11_000,
     label: "Premium",
     priceUSD: 19.99,
     tierId: "premium",
   },
 };
 
-export const CUSTOM_CREDITS_MIN = 3_000;
+export const CUSTOM_CREDITS_MIN = 15_000;
 export const CUSTOM_CREDITS_MAX = 50_000;
 export const CUSTOM_CREDITS_STEP = 500;
-export const CUSTOM_PRICE_PER_THOUSAND_USD = 2;
+export const CUSTOM_PRICE_PER_THOUSAND_USD = 1.6;
+
+/** Tier rate floors must stay meaningfully above the next tier — not penny-match it. */
+export const PURCHASE_TIER_MIN_RATE_MARGIN = 0.15;
+
+/** @deprecated Use PURCHASE_TIER_MIN_RATE_MARGIN */
+export const CUSTOM_PACK_MIN_PREMIUM_PRICE_MARGIN = PURCHASE_TIER_MIN_RATE_MARGIN;
 
 export type PurchaseSelectionKind = "tier" | "custom";
 
@@ -75,7 +81,7 @@ export function validateCustomCreditAmount(credits: number) {
 export function computeCustomPurchasePriceUSD(credits: number) {
   validateCustomCreditAmount(credits);
 
-  // Integer credits on a 500-step grid with $2/1,000 always produce exact cents.
+  // Integer credits on a 500-step grid with $1.60/1,000 always produce exact cents.
   const priceCents = (credits * CUSTOM_PRICE_PER_THOUSAND_USD * 100) / 1_000;
 
   return priceCents / 100;
@@ -127,3 +133,84 @@ export function resolvePurchaseSelection(
 
   return resolveCustomPurchase(input.credits);
 }
+
+function computeCustomMinimumPriceUSD() {
+  return (CUSTOM_CREDITS_MIN * CUSTOM_PRICE_PER_THOUSAND_USD) / 1_000;
+}
+
+export function computePricePerThousandCredits(
+  credits: number,
+  priceUSD: number,
+) {
+  return (priceUSD * 1_000) / credits;
+}
+
+function logPurchasePricingMisconfiguration(message: string) {
+  console.error(`[purchasePricing] ${message}`);
+
+  if (process.env.NODE_ENV !== "production") {
+    throw new Error(message);
+  }
+}
+
+/**
+ * Guards against custom-pack pricing that overlaps or undercuts Premium.
+ * Logs in all environments; throws during non-production startup so misconfiguration
+ * is caught before deploy rather than by eyeballing the pricing page.
+ */
+export function assertCustomPackMinimumPriceAbovePremium() {
+  const premiumPriceUSD = FIXED_PURCHASE_TIERS.premium.priceUSD;
+  const customMinPriceUSD = computeCustomMinimumPriceUSD();
+  const requiredMinimumPriceUSD =
+    premiumPriceUSD * (1 + PURCHASE_TIER_MIN_RATE_MARGIN);
+
+  if (customMinPriceUSD >= requiredMinimumPriceUSD) {
+    return;
+  }
+
+  const marginPercent = (PURCHASE_TIER_MIN_RATE_MARGIN * 100).toFixed(0);
+  const message =
+    `Custom pack minimum price ($${customMinPriceUSD.toFixed(2)} for ${CUSTOM_CREDITS_MIN.toLocaleString("en-US")} credits) ` +
+    `must be at least ${marginPercent}% above Premium ($${premiumPriceUSD.toFixed(2)}). ` +
+    `Required floor: $${requiredMinimumPriceUSD.toFixed(2)}.`;
+
+  logPurchasePricingMisconfiguration(message);
+}
+
+/**
+ * Grow's per-1,000-credit rate must stay meaningfully above Premium's so entry
+ * tiers cannot accidentally invert when one pack is edited without the other.
+ */
+export function assertGrowPerThousandRateAbovePremium() {
+  const grow = FIXED_PURCHASE_TIERS.grow;
+  const premium = FIXED_PURCHASE_TIERS.premium;
+  const growRatePerThousand = computePricePerThousandCredits(
+    grow.credits,
+    grow.priceUSD,
+  );
+  const premiumRatePerThousand = computePricePerThousandCredits(
+    premium.credits,
+    premium.priceUSD,
+  );
+  const requiredGrowRatePerThousand =
+    premiumRatePerThousand * (1 + PURCHASE_TIER_MIN_RATE_MARGIN);
+
+  if (growRatePerThousand >= requiredGrowRatePerThousand) {
+    return;
+  }
+
+  const marginPercent = (PURCHASE_TIER_MIN_RATE_MARGIN * 100).toFixed(0);
+  const message =
+    `Grow per-1,000-credit rate ($${growRatePerThousand.toFixed(2)}) ` +
+    `must be at least ${marginPercent}% above Premium ($${premiumRatePerThousand.toFixed(2)} per 1,000). ` +
+    `Required Grow rate: $${requiredGrowRatePerThousand.toFixed(2)} per 1,000.`;
+
+  logPurchasePricingMisconfiguration(message);
+}
+
+export function assertPurchasePricingInvariants() {
+  assertGrowPerThousandRateAbovePremium();
+  assertCustomPackMinimumPriceAbovePremium();
+}
+
+assertPurchasePricingInvariants();

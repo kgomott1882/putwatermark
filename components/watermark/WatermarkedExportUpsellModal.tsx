@@ -2,28 +2,44 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { X } from "lucide-react";
 import { useEffect, useId, useRef } from "react";
 
 type WatermarkedExportUpsellModalProps = {
+  onClose: () => void;
   onContinue: () => void;
   open: boolean;
 };
 
 export function WatermarkedExportUpsellModal({
+  onClose,
   onContinue,
   open,
 }: WatermarkedExportUpsellModalProps) {
   const titleId = useId();
   const descriptionId = useId();
   const continueButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) {
       return;
     }
 
-    continueButtonRef.current?.focus();
-  }, [open]);
+    closeButtonRef.current?.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose, open]);
 
   if (!open) {
     return null;
@@ -38,42 +54,54 @@ export function WatermarkedExportUpsellModal({
     >
       <div
         aria-hidden="true"
-        className="absolute inset-0 bg-night/80 backdrop-blur-sm"
+        className="absolute inset-0 bg-ed-fg/45 backdrop-blur-sm"
       />
 
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-beige/10 bg-night-card shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
-        <div className="border-b border-beige/10 bg-night-elevated/60 px-6 py-5">
-          <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-beige/10 bg-beige/5">
-              <Image
-                alt=""
-                aria-hidden="true"
-                className="h-7 w-7"
-                height={28}
-                src="/Put%20Watermark%20-%20Icon.png"
-                width={28}
-              />
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-ed-border bg-ed-panel shadow-[0_24px_80px_rgba(43,43,43,0.25)]">
+        <div className="border-b border-ed-border bg-ed-bg-card px-6 py-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex min-w-0 flex-1 items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-ed-border bg-ed-fg/5">
+                <Image
+                  alt=""
+                  aria-hidden="true"
+                  className="h-7 w-7"
+                  height={28}
+                  src="/Put%20Watermark%20-%20Icon.png"
+                  width={28}
+                />
+              </div>
+              <div className="min-w-0 pt-0.5">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ed-fg">
+                  Free export
+                </p>
+                <h2
+                  className="mt-1 text-lg font-semibold leading-snug text-ed-fg"
+                  id={titleId}
+                >
+                  This export will include the PutWatermark logo
+                </h2>
+              </div>
             </div>
-            <div className="min-w-0 pt-0.5">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-beige-dim">
-                Free export
-              </p>
-              <h2
-                className="mt-1 text-lg font-semibold leading-snug text-beige"
-                id={titleId}
-              >
-                This export will include the PutWatermark logo
-              </h2>
-            </div>
+
+            <button
+              aria-label="Close"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-ed-border bg-ed-bg-card text-ed-fg-muted transition hover:border-ed-border hover:text-ed-fg"
+              onClick={onClose}
+              ref={closeButtonRef}
+              type="button"
+            >
+              <X className="h-4 w-4" strokeWidth={2} />
+            </button>
           </div>
         </div>
 
         <div className="px-6 py-5">
           <p
-            className="text-sm leading-6 text-beige-dim"
+            className="text-sm leading-6 text-ed-fg-muted"
             id={descriptionId}
           >
-            Free exports are tiled with our watermark. Buy credits to export clean,
+            Free exports include a centered PutWatermark.com watermark. Buy credits to export clean,
             watermark-free files with your own branding instead.
           </p>
 
@@ -85,7 +113,7 @@ export function WatermarkedExportUpsellModal({
               Buy Credits
             </Link>
             <button
-              className="inline-flex w-full items-center justify-center rounded-xl border border-beige/15 bg-night-elevated px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-beige transition hover:border-sand/40 hover:text-sand"
+              className="editor-secondary-button inline-flex w-full items-center justify-center rounded-xl px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-ed-fg hover:border-signal/50"
               onClick={onContinue}
               ref={continueButtonRef}
               type="button"

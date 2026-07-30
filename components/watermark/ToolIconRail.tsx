@@ -1,29 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import {
-  Crop,
-  Crown,
-  Droplets,
-  Home,
-  Maximize2,
-  RotateCw,
-  Sparkles,
-  Star,
-} from "lucide-react";
+import { Crown, FileText, Home, Images, Video } from "lucide-react";
 import type { ReactNode } from "react";
 
 export type EditorPanelId =
-  | "templates"
+  | "photos"
+  | "pdfDocs"
   | "watermark"
+  | "signFill"
+  | "blur"
   | "crop"
   | "resize"
   | "rotate"
-  | "effects";
+  | "effects"
+  | "video";
+
+export type EditorMediaKind = "image" | "pdf" | "video";
 
 type ToolIconRailProps = {
   activePanel: EditorPanelId | null;
-  imageToolsEnabled: boolean;
+  mediaKind: EditorMediaKind | null;
   onSelectPanel: (panel: EditorPanelId) => void;
 };
 
@@ -38,95 +35,119 @@ type RailItemProps = {
 function RailItem({ active, disabled, icon, label, onClick }: RailItemProps) {
   return (
     <button
-      className={`group relative flex w-full flex-col items-center gap-1 px-1 py-2.5 text-[9px] font-semibold uppercase tracking-[0.08em] transition disabled:cursor-not-allowed disabled:opacity-35 ${
+      className={`flex w-full flex-col items-center gap-2 rounded-xl px-1.5 py-3 text-[11px] leading-tight transition disabled:cursor-not-allowed ${
         active
-          ? "bg-beige/10 text-beige"
-          : "text-beige-dim hover:bg-beige/5 hover:text-beige"
+          ? "bg-ed-bg-card text-ed-fg font-bold shadow-sm"
+          : disabled
+            ? "font-medium text-ed-fg-muted opacity-35"
+            : "font-bold text-ed-fg hover:bg-ed-bg-card/70"
       }`}
       disabled={disabled}
       onClick={onClick}
       type="button"
     >
-      {active ? (
-        <span
-          aria-hidden
-          className="absolute bottom-2 left-0 top-2 w-0.5 rounded-r bg-signal"
-        />
-      ) : null}
-      <span className="flex h-5 w-5 items-center justify-center">{icon}</span>
-      <span className="leading-none">{label}</span>
+      <span
+        className={`flex h-6 w-6 items-center justify-center ${
+          disabled ? "text-ed-fg-muted/50" : "text-signal"
+        }`}
+      >
+        {icon}
+      </span>
+      <span>{label}</span>
     </button>
   );
 }
 
+function isPhotosPanel(panel: EditorPanelId | null) {
+  return (
+    panel === "photos" ||
+    panel === "watermark" ||
+    panel === "effects" ||
+    panel === "blur" ||
+    panel === "crop" ||
+    panel === "resize" ||
+    panel === "rotate"
+  );
+}
+
+function isPdfDocsPanel(panel: EditorPanelId | null) {
+  return panel === "pdfDocs" || panel === "signFill";
+}
+
+function isEditorTabEnabled(
+  tab: "photos" | "pdfDocs" | "video",
+  mediaKind: EditorMediaKind | null,
+) {
+  if (!mediaKind) {
+    return true;
+  }
+
+  if (tab === "photos") {
+    return mediaKind === "image";
+  }
+
+  if (tab === "pdfDocs") {
+    return mediaKind === "pdf";
+  }
+
+  return mediaKind === "video";
+}
+
 export function ToolIconRail({
   activePanel,
-  imageToolsEnabled,
+  mediaKind,
   onSelectPanel,
 }: ToolIconRailProps) {
-  const imageTool = (panel: "crop" | "resize" | "rotate", icon: ReactNode) => (
-    <RailItem
-      active={activePanel === panel}
-      disabled={!imageToolsEnabled}
-      icon={icon}
-      label={panel}
-      onClick={() => onSelectPanel(panel)}
-    />
-  );
+  const photosEnabled = isEditorTabEnabled("photos", mediaKind);
+  const pdfDocsEnabled = isEditorTabEnabled("pdfDocs", mediaKind);
+  const videosEnabled = isEditorTabEnabled("video", mediaKind);
 
   return (
     <nav
       aria-label="Editor tools"
-      className="flex h-full w-[4.5rem] shrink-0 flex-col border-r border-beige/10 bg-editor-rail"
+      className="flex h-full w-[5rem] shrink-0 flex-col border-r border-ed-border bg-ed-panel py-2"
     >
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col gap-0.5 px-1.5">
         <Link
-          className="flex flex-col items-center gap-1 px-1 py-3 text-[9px] font-semibold uppercase tracking-[0.08em] text-beige-dim transition hover:bg-beige/5 hover:text-beige"
+          className="flex flex-col items-center gap-2 rounded-xl px-1.5 py-3 text-[11px] font-medium leading-tight text-ed-fg-muted transition hover:bg-ed-bg-card/70 hover:text-ed-fg"
           href="/"
           title="Home"
         >
-          <Home className="h-5 w-5" strokeWidth={1.75} />
-          <span className="leading-none">Home</span>
+          <Home className="h-6 w-6" strokeWidth={1.75} />
+          <span>Home</span>
         </Link>
 
-        <div className="mx-2 border-t border-beige/10" />
+        <div className="mx-1 border-t border-ed-border" />
 
         <RailItem
-          active={activePanel === "templates"}
-          icon={<Star className="h-5 w-5" strokeWidth={1.75} />}
-          label="Templates"
-          onClick={() => onSelectPanel("templates")}
+          active={isPhotosPanel(activePanel)}
+          disabled={!photosEnabled}
+          icon={<Images className="h-6 w-6" strokeWidth={1.75} />}
+          label="Photos"
+          onClick={() => onSelectPanel("photos")}
         />
         <RailItem
-          active={activePanel === "watermark"}
-          icon={<Droplets className="h-5 w-5" strokeWidth={1.75} />}
-          label="Watermark"
-          onClick={() => onSelectPanel("watermark")}
+          active={isPdfDocsPanel(activePanel)}
+          disabled={!pdfDocsEnabled}
+          icon={<FileText className="h-6 w-6" strokeWidth={1.75} />}
+          label="Pdf Docs"
+          onClick={() => onSelectPanel("pdfDocs")}
         />
-        {imageTool("crop", <Crop className="h-5 w-5" strokeWidth={1.75} />)}
-        {imageTool(
-          "resize",
-          <Maximize2 className="h-5 w-5" strokeWidth={1.75} />,
-        )}
-        {imageTool(
-          "rotate",
-          <RotateCw className="h-5 w-5" strokeWidth={1.75} />,
-        )}
         <RailItem
-          active={activePanel === "effects"}
-          disabled={!imageToolsEnabled}
-          icon={<Sparkles className="h-5 w-5" strokeWidth={1.75} />}
-          label="Effects"
-          onClick={() => onSelectPanel("effects")}
+          active={activePanel === "video"}
+          disabled={!videosEnabled}
+          icon={<Video className="h-6 w-6" strokeWidth={1.75} />}
+          label="Videos"
+          onClick={() => onSelectPanel("video")}
         />
       </div>
 
       <Link
-        className="mx-2 mb-3 flex flex-col items-center gap-1 rounded-xl bg-signal px-1 py-2.5 text-[9px] font-bold uppercase tracking-[0.08em] text-white shadow-md transition hover:brightness-110"
+        className="mx-1.5 mb-3 flex flex-col items-center gap-2 rounded-xl bg-signal px-1.5 py-3 text-[11px] font-bold leading-tight text-white shadow-md transition hover:brightness-110"
         href="/pricing"
       >
-        <Crown className="h-4 w-4" strokeWidth={2} />
-        <span className="leading-none">Upgrade</span>
+        <Crown className="h-5 w-5" strokeWidth={2} />
+        <span>Upgrade</span>
       </Link>
     </nav>
   );

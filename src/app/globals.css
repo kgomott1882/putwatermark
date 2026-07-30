@@ -73,18 +73,74 @@ body.landing-cursor-none * {
   }
 
   .editor-theme {
-    @apply bg-night text-beige;
+    @apply bg-ed-bg text-ed-fg;
+  }
+
+  .editor-field {
+    @apply w-full rounded-xl border-2 border-ed-border bg-ed-bg px-3 text-ed-fg shadow-sm outline-none transition placeholder:text-ed-fg-muted/70 focus:border-signal focus:ring-2 focus:ring-signal/30;
+  }
+
+  .editor-field-sm {
+    @apply w-full rounded-lg border-2 border-ed-border bg-ed-bg px-2 py-1.5 text-xs text-ed-fg shadow-sm outline-none transition placeholder:text-ed-fg-muted/70 focus:border-signal focus:ring-2 focus:ring-signal/30;
+  }
+
+  .editor-secondary-button {
+    @apply border border-ed-border bg-ed-bg text-ed-fg shadow-sm transition hover:border-signal/50 hover:shadow-md focus-visible:border-signal focus-visible:ring-2 focus-visible:ring-signal/30;
+  }
+
+  .editor-segment-track {
+    @apply rounded-lg border border-ed-border bg-ed-bg-card/90 p-0.5 shadow-[inset_0_1px_2px_rgba(43,43,43,0.1)];
+  }
+
+  .editor-active-surface {
+    @apply border-2 border-signal bg-ed-bg shadow-[0_2px_8px_rgba(43,43,43,0.14),0_0_0_1px_rgba(217,119,87,0.45)];
+  }
+
+  .editor-range {
+    @apply h-1.5 w-full cursor-pointer appearance-none rounded-full bg-ed-border accent-signal;
+  }
+
+  .editor-range::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 9999px;
+    background-color: #999999;
+  }
+
+  .editor-range::-webkit-slider-thumb {
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -4px;
+    border: 2px solid #ffffff;
+    border-radius: 9999px;
+    background-color: #d97757;
+    box-shadow: 0 1px 3px rgba(43, 43, 43, 0.2);
+  }
+
+  .editor-range::-moz-range-track {
+    height: 6px;
+    border-radius: 9999px;
+    background-color: #999999;
+  }
+
+  .editor-range::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #ffffff;
+    border-radius: 9999px;
+    background-color: #d97757;
+    box-shadow: 0 1px 3px rgba(43, 43, 43, 0.2);
   }
 }
 
 @layer utilities {
   .editor-checkerboard {
-    background-color: #121212;
+    background-color: #ffffff;
     background-image:
-      linear-gradient(45deg, #1a1a1a 25%, transparent 25%),
-      linear-gradient(-45deg, #1a1a1a 25%, transparent 25%),
-      linear-gradient(45deg, transparent 75%, #1a1a1a 75%),
-      linear-gradient(-45deg, transparent 75%, #1a1a1a 75%);
+      linear-gradient(45deg, #d4d4d4 25%, transparent 25%),
+      linear-gradient(-45deg, #d4d4d4 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #d4d4d4 75%),
+      linear-gradient(-45deg, transparent 75%, #d4d4d4 75%);
     background-position:
       0 0,
       0 12px,

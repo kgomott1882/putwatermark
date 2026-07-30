@@ -10,7 +10,6 @@ import {
   Globe,
   Grid3x3,
   ImageIcon,
-  LayoutTemplate,
   MonitorSmartphone,
   PenLine,
   ShieldCheck,
@@ -60,7 +59,7 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "Custom text watermarks",
       description:
-        "Choose from System Sans, Geometric Sans, Serif, Monospace, Condensed, and Script. Drag into place or use the preset grid, then adjust opacity and size.",
+        "Choose from System Sans, Geometric Sans, Serif, Monospace, Condensed, and Script. Drag into place or use the preset grid, then adjust opacity and size. Quick templates (Subtle corner, Protect dense/light) and saved presets live in the Watermark panel.",
       Icon: Type,
       image: "/Custom watermaks.png",
       imageAlt: "Custom text watermark on a photo",
@@ -74,12 +73,12 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
       imageAlt: "Logo watermark applied to an image",
     },
     {
-      title: "Signatures",
+      title: "Sign & fill",
       description:
-        "Draw a signature or type your name in a script font. Save multiple signatures (e.g. full signature and initials) for reuse in the same session. Drag your signature onto any document, photo, or video.",
+        "Draw a signature or type your name in a script font, add initials, and place fill-in text fields on PDF pages. Export uses 50 credits per billable page, with a 5-credit fill surcharge on pages that contain fill text.",
       Icon: PenLine,
       image: "/Signatures.png",
-      imageAlt: "Signature placed on a document",
+      imageAlt: "Signature and fill-text fields placed on a document",
     },
     {
       title: "Tile watermarking",
@@ -88,14 +87,6 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
       Icon: Grid3x3,
       image: "/Shoes.jpeg",
       imageAlt: "Tiled watermark pattern across a product photo",
-    },
-    {
-      title: "Templates",
-      description:
-        "Start fast with Subtle corner, Protect (dense), and Protect (light). Save your current settings as a named preset while you work in the editor.",
-      Icon: LayoutTemplate,
-      image: "/Templates.png",
-      imageAlt: "Watermark template presets in the editor",
     },
     {
       title: "Batch watermarking",
@@ -151,7 +142,7 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "Video",
       description:
-        "MP4, MOV, and WebM clips under 60 seconds and 1080p process instantly in your browser. Larger videos (up to 50MB) are automatically processed on our servers — support for longer/larger files is coming soon.",
+        "MP4, MOV, and WebM clips under 60 seconds and 1080p process instantly in your browser. Longer or larger videos (up to 250MB or 10 minutes) upload with resumable transfers and are processed on our servers.",
       Icon: Video,
       image: "/youtubers-watermarked.jpg",
       imageAlt: "Video frame with a watermark overlay",
@@ -310,8 +301,8 @@ export function FeaturesPageClient() {
 
           <div className="mt-16 flex flex-col items-start justify-between gap-6 landing-border border-t pt-12 md:flex-row md:items-center">
             <p className="landing-muted max-w-xl text-sm leading-7 md:text-base">
-              Ready to try it? Open the editor, upload a file, and export in seconds —{" "}
-              <LandingHighlight>no signup required</LandingHighlight>.
+              Ready to try it? Open the editor, upload a file, and preview freely —{" "}
+              <LandingHighlight>create a free account when you export</LandingHighlight>.
             </p>
             <LandingCta href="/watermark">Try it now</LandingCta>
           </div>

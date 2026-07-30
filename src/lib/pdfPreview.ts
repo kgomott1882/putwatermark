@@ -2,9 +2,27 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 
 let workerInitialized = false;
 
-const previewMaxLongEdge = 1600;
-const thumbnailScale = 0.22;
-const PDF_LOAD_TIMEOUT_MS = 45_000;
+const previewMaxLongEdge = 2800;
+
+function getPreviewDevicePixelRatio() {
+  if (typeof window === "undefined") {
+    return 1;
+  }
+
+  return Math.min(window.devicePixelRatio || 1, 2.5);
+}
+
+function getPreviewScale(pageWidth: number, pageHeight: number) {
+  const devicePixelRatio = getPreviewDevicePixelRatio();
+  const longEdge = Math.max(pageWidth, pageHeight);
+  const targetLongEdge = previewMaxLongEdge * devicePixelRatio;
+
+  if (longEdge <= previewMaxLongEdge) {
+    return Math.max(2, 1.75 * devicePixelRatio);
+  }
+
+  return targetLongEdge / longEdge;
+}
 
 async function getPdfJs() {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -50,15 +68,8 @@ export type RenderedPdfPage = {
   width: number;
 };
 
-function getPreviewScale(pageWidth: number, pageHeight: number) {
-  const longEdge = Math.max(pageWidth, pageHeight);
-
-  if (longEdge <= previewMaxLongEdge) {
-    return 1.25;
-  }
-
-  return previewMaxLongEdge / longEdge;
-}
+const thumbnailScale = 0.22;
+const PDF_LOAD_TIMEOUT_MS = 45_000;
 
 async function renderPdfPageToCanvas(
   pdfDocument: PDFDocumentProxy,

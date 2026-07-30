@@ -3,6 +3,7 @@
 import { PayPalButtons, PayPalScriptProvider } from "@paypal/react-paypal-js";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { LoadingIndicator } from "../LoadingIndicator";
 import { createClient } from "../../utils/supabase/client";
 import { fetchUserCreditBalance, formatCreditBalance } from "@/lib/creditBalance";
 import { capturePurchaseOrder, createPurchaseOrder } from "@/lib/purchaseClient";
@@ -63,6 +64,8 @@ export function PricingPayPalCheckout({
     } = await supabase.auth.getUser();
 
     if (!user) {
+      setUiState("error");
+      setMessage("Your session expired. Please log in and try again.");
       return;
     }
 
@@ -83,7 +86,6 @@ export function PricingPayPalCheckout({
       }
     }
 
-    setUiState("idle");
     setMessage(
       "Payment processing — your credits will appear shortly. Refresh your account page if they have not updated within a minute.",
     );
@@ -120,6 +122,15 @@ export function PricingPayPalCheckout({
             </Link>
           </div>
         </>
+      ) : uiState === "processing" ? (
+        <>
+          <LoadingIndicator label="Confirming your payment..." />
+          {message ? (
+            <p className="text-center text-xs leading-6 text-beige-dim" role="status">
+              {message}
+            </p>
+          ) : null}
+        </>
       ) : (
         <>
           <PayPalScriptProvider
@@ -131,7 +142,6 @@ export function PricingPayPalCheckout({
           >
             <PayPalButtons
               key={checkoutKey}
-              disabled={uiState === "processing"}
               style={{
                 color: "gold",
                 height: 45,
@@ -168,9 +178,7 @@ export function PricingPayPalCheckout({
                 }
 
                 setUiState("processing");
-                setMessage(
-                  "Payment approved — capturing on our server. Your credits will appear once PayPal confirms the payment.",
-                );
+                setMessage(null);
 
                 try {
                   const supabase = createClient();
@@ -187,12 +195,7 @@ export function PricingPayPalCheckout({
 
                   await capturePurchaseOrder(orderId);
 
-                  setUiState("idle");
-                  setMessage(
-                    "Payment processing — your credits will appear shortly once PayPal confirms the capture.",
-                  );
-
-                  void pollForUpdatedCredits(expectedCredits, startingBalance);
+                  await pollForUpdatedCredits(expectedCredits, startingBalance);
                 } catch (error) {
                   setUiState("error");
                   setMessage(

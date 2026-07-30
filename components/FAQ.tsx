@@ -16,12 +16,12 @@ const faqItems: FaqItem[] = [
   {
     question: "What is PutWatermark?",
     answer:
-      "PutWatermark is a browser-based tool for watermarking photos, PDFs, and videos — free to try, with no signup required. It helps protect your work from unauthorized use by letting you add text or logo watermarks as a single mark or tiled across the whole file, and lets you sign documents directly by drawing or typing your signature. No software to install and no upfront payment to get started.",
+      "PutWatermark is a browser-based tool for watermarking photos, PDFs, and videos — free to try, with no signup required. It helps protect your work from unauthorized use by letting you add text or logo watermarks as a single mark or tiled across the whole file. On PDFs, the Sign & Fill tool also lets you add signatures, initials, and fill-in text fields; exporting those pages uses credits at the same per-page rate as other PDF exports. No software to install and no upfront payment to get started.",
   },
   {
     question: "Do I need to create an account to use PutWatermark?",
     answer:
-      "No signup is required to try the tool. You can upload, watermark, and export right away. Create an account only when you're ready to remove the free watermark overlay or access paid features.",
+      "No signup is required to try the editor — upload, watermark, and preview freely. Create a free account when you're ready to export; your draft is saved for 48 hours if you sign up mid-session.",
   },
   {
     question: "What file types are supported?",
@@ -56,7 +56,7 @@ const faqItems: FaqItem[] = [
   {
     question: "What happens to large videos?",
     answer:
-      "Videos under 60 seconds and 1080p process instantly in your browser. Most larger files are processed automatically on our servers; very large files may need to be split for now.",
+      "Videos under 60 seconds and 1080p process instantly in your browser. Longer or larger videos (up to 250MB or 10 minutes) upload with resumable transfers and are processed on our servers.",
   },
 ];
 

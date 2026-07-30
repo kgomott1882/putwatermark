@@ -9,26 +9,52 @@ import {
 /** Public asset — always available at export time, independent of user uploads. */
 export const FORCED_TILE_LOGO_PATH = "/Put%20Watermark%20-%20Icon.png";
 
-export const FORCED_TILE_SITE_TEXT = "putwatermark.com";
+export const FORCED_TILE_SITE_TEXT = "PutWatermark.com";
 
 export const FORCED_TILE_LAYER_ID = "forced-export-tile";
 
-/** Locked free-tier / watermarked export tile — icon + site text, S / 45° / 130%. */
+/** ~36% of content width at export (was ~34% at 190, ~27% at 150). Deliberately prominent. */
 export const FORCED_TILE_SETTINGS = {
-  fontSizeScale: 100,
-  logoFileName: "Put Watermark - Forced Tile Unit.png",
-  tileAngle: 45,
-  tileDensity: "sparse",
+  fontSizeScale: 200,
+  logoFileName: "Put Watermark - Forced Center Stamp.png",
+  tileAngle: 0,
+  tileDensity: "medium",
   tileGap: 130,
-  watermarkMode: "tile",
+  watermarkMode: "single",
   watermarkOpacity: 44,
+  watermarkPosition: "center",
   watermarkType: "logo",
 } as const;
 
-const FORCED_TILE_TEXT_COLOR = "#5c5c5c";
-const FORCED_TILE_TEXT_STROKE = "rgba(255, 255, 255, 0.45)";
+const FORCED_TILE_TEXT_COLOR = "#ffffff";
+const FORCED_TILE_TEXT_STROKE = "rgba(0, 0, 0, 0.5)";
 const FORCED_TILE_ICON_LIGHT_HALO = "rgba(255, 255, 255, 0.85)";
-const FORCED_TILE_ICON_DARK_EDGE = "rgba(0, 0, 0, 0.35)";
+const FORCED_TILE_ICON_DARK_EDGE = "rgba(0, 0, 0, 0.55)";
+
+function drawForcedTileWhiteIcon(
+  context: CanvasRenderingContext2D,
+  logoImage: HTMLImageElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const maskCanvas = document.createElement("canvas");
+  maskCanvas.width = Math.max(1, Math.ceil(width));
+  maskCanvas.height = Math.max(1, Math.ceil(height));
+  const maskContext = maskCanvas.getContext("2d");
+
+  if (!maskContext) {
+    context.drawImage(logoImage, x, y, width, height);
+    return;
+  }
+
+  maskContext.drawImage(logoImage, 0, 0, width, height);
+  maskContext.globalCompositeOperation = "source-in";
+  maskContext.fillStyle = FORCED_TILE_TEXT_COLOR;
+  maskContext.fillRect(0, 0, width, height);
+  context.drawImage(maskCanvas, x, y);
+}
 
 function drawForcedTileIconWithOutline(
   context: CanvasRenderingContext2D,
@@ -41,18 +67,20 @@ function drawForcedTileIconWithOutline(
   const strokeWidth = Math.max(1, Math.round(width * 0.04));
 
   context.save();
-  context.shadowColor = FORCED_TILE_ICON_LIGHT_HALO;
-  context.shadowBlur = strokeWidth * 1.5;
-  context.drawImage(logoImage, x, y, width, height);
+  context.shadowColor = FORCED_TILE_ICON_DARK_EDGE;
+  context.shadowBlur = strokeWidth * 2.2;
+  context.shadowOffsetY = Math.max(1, strokeWidth * 0.35);
+  drawForcedTileWhiteIcon(context, logoImage, x, y, width, height);
   context.restore();
 
   context.save();
-  context.shadowColor = FORCED_TILE_ICON_DARK_EDGE;
-  context.shadowBlur = strokeWidth;
-  context.drawImage(logoImage, x, y, width, height);
+  context.shadowColor = FORCED_TILE_ICON_LIGHT_HALO;
+  context.shadowBlur = strokeWidth * 1.6;
+  context.shadowOffsetY = 0;
+  drawForcedTileWhiteIcon(context, logoImage, x, y, width, height);
   context.restore();
 
-  context.drawImage(logoImage, x, y, width, height);
+  drawForcedTileWhiteIcon(context, logoImage, x, y, width, height);
 }
 
 function drawForcedTileSiteText(
@@ -73,10 +101,10 @@ function drawForcedTileSiteText(
 }
 
 const FORCED_TILE_OPACITY = FORCED_TILE_SETTINGS.watermarkOpacity;
-const FORCED_TILE_ANGLE = FORCED_TILE_SETTINGS.tileAngle;
-const FORCED_TILE_DENSITY = FORCED_TILE_SETTINGS.tileDensity;
-const FORCED_TILE_GAP = FORCED_TILE_SETTINGS.tileGap;
 const FORCED_TILE_FONT_SIZE_SCALE = FORCED_TILE_SETTINGS.fontSizeScale;
+const FORCED_TILE_POSITION: WatermarkPosition =
+  FORCED_TILE_SETTINGS.watermarkPosition;
+const FORCED_CENTER_POSITION = { xPercent: 0.5, yPercent: 0.5 } as const;
 const FORCED_TILE_COMPOSITE_ICON_WIDTH = Math.round(
   56 * (FORCED_TILE_FONT_SIZE_SCALE / 25),
 );
@@ -115,7 +143,7 @@ function canvasToImage(canvas: HTMLCanvasElement) {
     image.decoding = "async";
     image.onload = () => resolve(image);
     image.onerror = () => {
-      reject(new Error("Could not create the forced tile composite image."));
+      reject(new Error("Could not create the forced watermark composite image."));
     };
     image.src = canvas.toDataURL("image/png");
   });
@@ -142,7 +170,7 @@ export function createForcedTileCompositeImage(logoImage: HTMLImageElement) {
       const measureContext = measureCanvas.getContext("2d");
 
       if (!measureContext) {
-        throw new Error("Could not measure the forced tile composite text.");
+        throw new Error("Could not measure the forced watermark composite text.");
       }
 
       measureContext.font = `600 ${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
@@ -163,7 +191,7 @@ export function createForcedTileCompositeImage(logoImage: HTMLImageElement) {
       const context = canvas.getContext("2d");
 
       if (!context) {
-        throw new Error("Could not render the forced tile composite image.");
+        throw new Error("Could not render the forced watermark composite image.");
       }
 
       context.scale(scale, scale);
@@ -172,18 +200,14 @@ export function createForcedTileCompositeImage(logoImage: HTMLImageElement) {
 
       const iconX = (unitWidth - iconBaseWidth) / 2;
       const iconY = padding / 2;
-      context.save();
-      context.translate(iconX + iconBaseWidth / 2, iconY + iconHeight / 2);
-      context.rotate((FORCED_TILE_ANGLE * Math.PI) / 180);
       drawForcedTileIconWithOutline(
         context,
         logoImage,
-        -iconBaseWidth / 2,
-        -iconHeight / 2,
+        iconX,
+        iconY,
         iconBaseWidth,
         iconHeight,
       );
-      context.restore();
 
       drawForcedTileSiteText(
         context,
@@ -193,6 +217,9 @@ export function createForcedTileCompositeImage(logoImage: HTMLImageElement) {
       );
 
       const compositeImage = await canvasToImage(canvas);
+      if (typeof compositeImage.decode === "function") {
+        await compositeImage.decode().catch(() => undefined);
+      }
       forcedTileCompositeImageCache = compositeImage;
       return compositeImage;
     })().catch((error) => {
@@ -219,13 +246,21 @@ export function loadForcedTileLogoImage() {
       };
       image.onerror = () => {
         forcedTileLogoImagePromise = null;
-        reject(new Error("Could not load the forced tile logo icon."));
+        reject(new Error("Could not load the forced watermark logo icon."));
       };
       image.src = FORCED_TILE_LOGO_PATH;
     });
   }
 
   return forcedTileLogoImagePromise;
+}
+
+export function hasForcedWatermarkOverlay(settings: {
+  logoLayers?: LogoWatermarkLayer[];
+}) {
+  return (settings.logoLayers ?? []).some(
+    (layer) => layer.id === FORCED_TILE_LAYER_ID,
+  );
 }
 
 export async function createForcedTileWatermarkSettings<
@@ -235,29 +270,22 @@ export async function createForcedTileWatermarkSettings<
   const forcedLogoLayer: LogoWatermarkLayer = {
     ...createDefaultLogoLayer(),
     id: FORCED_TILE_LAYER_ID,
+    customPosition: FORCED_CENTER_POSITION,
     fontSizeScale: FORCED_TILE_FONT_SIZE_SCALE,
     logoFileName: FORCED_TILE_SETTINGS.logoFileName,
     logoImage: compositeImage,
     opacity: FORCED_TILE_OPACITY,
     originalLogoImage: compositeImage,
+    watermarkPosition: FORCED_TILE_POSITION,
   };
+
+  const userLogoLayers = (settings.logoLayers ?? []).filter(
+    (layer) => layer.id !== FORCED_TILE_LAYER_ID,
+  );
 
   return {
     ...settings,
-    activeLogoLayerId: forcedLogoLayer.id,
-    activeTextLayerId: forcedLogoLayer.id,
-    customPosition: null,
-    fontSizeScale: FORCED_TILE_FONT_SIZE_SCALE,
-    logoImage: compositeImage,
-    logoLayers: [forcedLogoLayer],
-    textLayers: [],
-    tileAngle: FORCED_TILE_ANGLE,
-    tileDensity: FORCED_TILE_DENSITY,
-    tileGap: FORCED_TILE_GAP,
-    watermarkMode: "tile",
-    watermarkOpacity: FORCED_TILE_OPACITY,
-    watermarkText: "",
-    watermarkType: "logo",
+    logoLayers: [...userLogoLayers, forcedLogoLayer],
   };
 }
 
@@ -272,15 +300,16 @@ export function getExportFileType({
   mediaKind,
   watermarkType,
 }: {
+  hasFillFields?: boolean;
   mediaKind: "image" | "pdf" | "video" | null;
   watermarkType: "text" | "logo" | "signature";
 }): ExportFileType {
-  if (watermarkType === "signature") {
-    return "signature";
-  }
-
   if (mediaKind === "pdf") {
     return "pdf";
+  }
+
+  if (watermarkType === "signature") {
+    return "signature";
   }
 
   if (mediaKind === "video") {
@@ -288,6 +317,32 @@ export function getExportFileType({
   }
 
   return "photo";
+}
+
+async function readExportUploadError(response: Response, fallback: string) {
+  try {
+    const payload = (await response.json()) as { error?: string };
+    return payload.error ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function uploadExportArtifactViaServer(formData: FormData) {
+  const response = await fetch("/api/export/upload", {
+    body: formData,
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error(await readExportUploadError(response, "Export upload failed."));
+  }
+
+  return (await response.json()) as {
+    fillManifestPath?: string;
+    signaturePlacementManifestPath?: string;
+    storagePath?: string;
+  };
 }
 
 export async function uploadPdfForExportAuthorization({
@@ -299,41 +354,83 @@ export async function uploadPdfForExportAuthorization({
   fileName: string;
   pdfBytes: Uint8Array;
 }) {
-  const response = await fetch("/api/export/upload-url", {
-    body: JSON.stringify({ exportId, fileName }),
-    headers: { "Content-Type": "application/json" },
-    method: "POST",
-  });
+  const safeFileName = fileName.trim() || "document.pdf";
+  const uploadFileName = safeFileName.toLowerCase().endsWith(".pdf")
+    ? safeFileName
+    : `${safeFileName}.pdf`;
+  const formData = new FormData();
 
-  if (!response.ok) {
-    throw new Error("Could not prepare PDF upload for export authorization.");
-  }
+  formData.append("exportId", exportId);
+  formData.append("fileName", uploadFileName);
+  formData.append(
+    "file",
+    new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" }),
+    uploadFileName,
+  );
 
-  const payload = (await response.json()) as {
-    uploadPath?: string;
-    uploadUrl?: string;
-  };
+  const payload = await uploadExportArtifactViaServer(formData);
 
-  if (!payload.uploadPath || !payload.uploadUrl) {
-    throw new Error("Could not prepare PDF upload for export authorization.");
-  }
-
-  const uploadResponse = await fetch(payload.uploadUrl, {
-    body: new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" }),
-    headers: { "Content-Type": "application/pdf" },
-    method: "PUT",
-  });
-
-  if (!uploadResponse.ok) {
-    const errorBody = await uploadResponse.text().catch(() => "");
-    throw new Error(
-      errorBody
-        ? `PDF upload failed (${uploadResponse.status}): ${errorBody}`
-        : `PDF upload failed (${uploadResponse.status}).`,
-    );
+  if (!payload.storagePath) {
+    throw new Error("Could not upload PDF for credit check.");
   }
 
   return {
-    storagePath: payload.uploadPath,
+    storagePath: payload.storagePath,
+  } satisfies ExportFileMeta;
+}
+
+export async function uploadFillManifestForExportAuthorization({
+  exportId,
+  manifestJson,
+}: {
+  exportId: string;
+  manifestJson: string;
+}) {
+  const formData = new FormData();
+
+  formData.append("artifact", "fill-manifest");
+  formData.append("exportId", exportId);
+  formData.append(
+    "manifest",
+    new Blob([manifestJson], { type: "application/json" }),
+    "fill-manifest.json",
+  );
+
+  const payload = await uploadExportArtifactViaServer(formData);
+
+  if (!payload.fillManifestPath) {
+    throw new Error("Could not upload fill manifest for credit check.");
+  }
+
+  return {
+    fillManifestPath: payload.fillManifestPath,
+  } satisfies ExportFileMeta;
+}
+
+export async function uploadSignaturePlacementManifestForExportAuthorization({
+  exportId,
+  manifestJson,
+}: {
+  exportId: string;
+  manifestJson: string;
+}) {
+  const formData = new FormData();
+
+  formData.append("artifact", "signature-placements");
+  formData.append("exportId", exportId);
+  formData.append(
+    "manifest",
+    new Blob([manifestJson], { type: "application/json" }),
+    "signature-placements.json",
+  );
+
+  const payload = await uploadExportArtifactViaServer(formData);
+
+  if (!payload.signaturePlacementManifestPath) {
+    throw new Error("Could not upload signature placement manifest for credit check.");
+  }
+
+  return {
+    signaturePlacementManifestPath: payload.signaturePlacementManifestPath,
   } satisfies ExportFileMeta;
 }

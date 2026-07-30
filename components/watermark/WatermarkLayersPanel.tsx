@@ -1,6 +1,13 @@
 "use client";
 
+import { useEffect, useState, type ReactNode } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import {
+  formatVideoTimeInput,
+  hasVideoVisibilityRange,
+  parseVideoTimeInput,
+  resolveVideoVisibilityRange,
+} from "@/lib/videoWatermarkVisibility";
 import type { FontFamilyGroup } from "@/lib/watermarkFonts";
 import type {
   LogoWatermarkLayer,
@@ -9,27 +16,12 @@ import type {
 import type { TextWatermarkFontWeight } from "@/lib/watermarkTextStyle";
 import {
   EditorCard,
-  EditorPanelSection,
-  EditorPill,
 } from "./EditorToolPanel";
 import { WatermarkStyleControls } from "./WatermarkStyleControls";
 
 type WatermarkMode = "single" | "tile";
 type TileAngle = 0 | 45 | 90 | 180;
 type TileDensity = "sparse" | "medium" | "dense";
-
-const tileDensities: { label: string; value: TileDensity }[] = [
-  { label: "Sparse", value: "sparse" },
-  { label: "Medium", value: "medium" },
-  { label: "Dense", value: "dense" },
-];
-
-const tileAngles: { label: string; value: TileAngle }[] = [
-  { label: "0°", value: 0 },
-  { label: "45°", value: 45 },
-  { label: "90°", value: 90 },
-  { label: "180°", value: 180 },
-];
 
 type WatermarkLayersPanelProps = {
   activeLayerId: string;
@@ -54,12 +46,96 @@ type WatermarkLayersPanelProps = {
   onTileAngleChange: (value: TileAngle) => void;
   onTileDensityChange: (value: TileDensity) => void;
   onTileGapChange: (value: number) => void;
+  onVisibleFromSecondsChange?: (value: number | undefined) => void;
+  onVisibleUntilSecondsChange?: (value: number | undefined) => void;
   onWatermarkOpacityChange: (value: number) => void;
+  showVideoVisibilityControls?: boolean;
   tileAngle: TileAngle;
   tileDensity: TileDensity;
   tileGap: number;
   type: "text" | "logo";
+  videoDurationSeconds?: number;
 };
+
+function LayerField({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-ed-fg">
+        {title}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+function VideoVisibilityTimeInput({
+  id,
+  label,
+  onCommit,
+  valueSeconds,
+}: {
+  id: string;
+  label: string;
+  onCommit: (value: number | undefined) => void;
+  valueSeconds?: number;
+}) {
+  const [draft, setDraft] = useState("");
+
+  useEffect(() => {
+    setDraft(
+      valueSeconds !== undefined ? formatVideoTimeInput(valueSeconds) : "",
+    );
+  }, [valueSeconds]);
+
+  return (
+    <div className="space-y-1.5">
+      <label
+        className="text-[9px] font-bold uppercase tracking-[0.1em] text-ed-fg"
+        htmlFor={id}
+      >
+        {label}
+      </label>
+      <input
+        className="editor-field py-2 text-sm tabular-nums"
+        id={id}
+        inputMode="numeric"
+        onBlur={() => {
+          const trimmed = draft.trim();
+
+          if (!trimmed) {
+            onCommit(undefined);
+            setDraft("");
+            return;
+          }
+
+          const parsed = parseVideoTimeInput(trimmed);
+
+          if (parsed === null) {
+            setDraft(
+              valueSeconds !== undefined
+                ? formatVideoTimeInput(valueSeconds)
+                : "",
+            );
+            return;
+          }
+
+          onCommit(parsed);
+          setDraft(formatVideoTimeInput(parsed));
+        }}
+        onChange={(event) => setDraft(event.target.value)}
+        placeholder="Whole video"
+        type="text"
+        value={draft}
+      />
+    </div>
+  );
+}
 
 export function WatermarkLayersPanel({
   activeLayerId,
@@ -84,44 +160,34 @@ export function WatermarkLayersPanel({
   onTileAngleChange,
   onTileDensityChange,
   onTileGapChange,
+  onVisibleFromSecondsChange,
+  onVisibleUntilSecondsChange,
   onWatermarkOpacityChange,
+  showVideoVisibilityControls = false,
   tileAngle,
   tileDensity,
   tileGap,
   type,
+  videoDurationSeconds = 0,
 }: WatermarkLayersPanelProps) {
+  const [showManualTimeInputs, setShowManualTimeInputs] = useState(false);
   const canAddLayer = mode === "single";
   const activeIndex = Math.max(0, layerIds.indexOf(activeLayerId));
   const logoLayer = type === "logo" ? (layer as LogoWatermarkLayer) : null;
   const textLayer = type === "text" ? (layer as TextWatermarkLayer) : null;
+  const panelTitle = type === "text" ? "Text watermarks" : "Logo watermarks";
 
   return (
-    <div className="space-y-3">
-      <EditorPanelSection
-        title={type === "text" ? "Text watermarks" : "Logo watermarks"}
-      >
-        <div className="flex items-center gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-            {layerIds.map((id, index) => (
-              <button
-                className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition ${
-                  id === activeLayerId
-                    ? "bg-signal text-white"
-                    : "border border-beige/10 bg-night-elevated text-beige-dim hover:border-sand/40 hover:text-beige"
-                }`}
-                key={id}
-                onClick={() => onLayerSelect(id)}
-                type="button"
-              >
-                {type === "text" ? `Text ${index + 1}` : `Logo ${index + 1}`}
-              </button>
-            ))}
-          </div>
-
+    <EditorCard className="space-y-0 p-2.5">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-ed-fg">
+            {panelTitle}
+          </p>
           <div className="flex shrink-0 items-center gap-1">
             <button
               aria-label={`Add ${type} watermark`}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-beige/10 bg-night-elevated text-beige-dim transition hover:border-sand/40 hover:text-beige disabled:cursor-not-allowed disabled:opacity-35"
+              className="editor-secondary-button inline-flex h-7 w-7 items-center justify-center rounded-md text-ed-fg-muted hover:text-ed-fg disabled:cursor-not-allowed disabled:opacity-35"
               disabled={!canAddLayer}
               onClick={onAddLayer}
               title={
@@ -131,11 +197,11 @@ export function WatermarkLayersPanel({
               }
               type="button"
             >
-              <Plus className="h-4 w-4" strokeWidth={2} />
+              <Plus className="h-3.5 w-3.5" strokeWidth={2} />
             </button>
             <button
               aria-label={`Delete ${type} watermark ${activeIndex + 1}`}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-beige/10 bg-night-elevated text-beige-dim transition hover:border-signal/40 hover:text-signal disabled:cursor-not-allowed disabled:opacity-35"
+              className="editor-secondary-button inline-flex h-7 w-7 items-center justify-center rounded-md text-ed-fg-muted hover:border-signal/50 hover:text-signal disabled:cursor-not-allowed disabled:opacity-35"
               disabled={layerCount <= 1}
               onClick={() => onRemoveLayer(activeLayerId)}
               type="button"
@@ -145,52 +211,116 @@ export function WatermarkLayersPanel({
           </div>
         </div>
 
-        {textLayer ? (
-          <EditorCard className="mt-2">
-            <label
-              className="block text-[10px] font-bold uppercase tracking-[0.12em] text-beige-dim"
-              htmlFor={`watermark-text-${activeLayerId}`}
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto pb-0.5">
+          {layerIds.map((id, index) => (
+            <button
+              className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition ${
+                id === activeLayerId
+                  ? "border-2 border-signal bg-ed-bg font-bold text-ed-fg shadow-sm"
+                  : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:text-ed-fg"
+              }`}
+              key={id}
+              onClick={() => onLayerSelect(id)}
+              type="button"
             >
-              Watermark text
-            </label>
+              {type === "text" ? `Text ${index + 1}` : `Logo ${index + 1}`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-3 border-t border-ed-border/80 pt-3">
+        {textLayer ? (
+          <LayerField title="Watermark text">
             <input
-              className="mt-2 w-full rounded-xl border border-beige/10 bg-night-card px-3 py-2.5 text-sm text-beige outline-none transition placeholder:text-beige-dim/70 focus:border-signal focus:ring-2 focus:ring-signal/20"
+              className="editor-field py-2.5 text-sm"
               id={`watermark-text-${activeLayerId}`}
               onChange={(event) => onTextChange(event.target.value)}
               placeholder="Add text here"
               type="text"
               value={textLayer.text}
             />
-          </EditorCard>
+          </LayerField>
+        ) : null}
+
+        {textLayer && showVideoVisibilityControls ? (
+          <LayerField title="Visible during">
+            <p className="text-[11px] leading-4 text-ed-fg-muted">
+              Use the timeline below the video to set when this text appears.
+              Leave both times empty to show for the whole video.
+            </p>
+
+            <button
+              className="flex w-full items-center justify-between rounded-lg border border-ed-border bg-ed-bg px-2.5 py-2 text-left text-[11px] font-semibold text-ed-fg-muted transition hover:text-ed-fg"
+              aria-expanded={showManualTimeInputs}
+              onClick={() => setShowManualTimeInputs((current) => !current)}
+              type="button"
+            >
+              <span>Edit times manually</span>
+              <span>{showManualTimeInputs ? "−" : "+"}</span>
+            </button>
+
+            {showManualTimeInputs ? (
+              <div className="grid grid-cols-2 gap-2">
+                <VideoVisibilityTimeInput
+                  id={`watermark-visible-from-${activeLayerId}`}
+                  label="Start"
+                  onCommit={(value) => onVisibleFromSecondsChange?.(value)}
+                  valueSeconds={textLayer.visibleFromSeconds}
+                />
+                <VideoVisibilityTimeInput
+                  id={`watermark-visible-until-${activeLayerId}`}
+                  label="End"
+                  onCommit={(value) => onVisibleUntilSecondsChange?.(value)}
+                  valueSeconds={textLayer.visibleUntilSeconds}
+                />
+              </div>
+            ) : null}
+
+            {hasVideoVisibilityRange(textLayer) &&
+            videoDurationSeconds > 0 &&
+            (() => {
+              const range = resolveVideoVisibilityRange(
+                textLayer,
+                videoDurationSeconds,
+              );
+
+              return range !== null && range.start >= range.end;
+            })() ? (
+              <p className="text-[11px] leading-4 text-signal">
+                Start must be before end.
+              </p>
+            ) : null}
+          </LayerField>
         ) : null}
 
         {logoLayer ? (
-          <div className="mt-2 space-y-2">
+          <div className="space-y-3">
             {logoLayer.logoImage ? (
               <>
-                <div className="rounded-lg border border-beige/10 bg-beige/5 px-2.5 py-1.5 text-xs text-beige">
+                <div className="rounded-lg border border-ed-border bg-ed-bg px-2.5 py-2 text-xs text-ed-fg shadow-sm">
                   Loaded:{" "}
                   <span className="font-semibold">{logoLayer.logoFileName}</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
-                    className="rounded-lg border border-beige/10 px-3 py-1.5 text-xs font-medium text-beige-dim transition hover:border-sand hover:text-beige"
+                    className="editor-secondary-button rounded-lg px-3 py-1.5 text-xs font-medium text-ed-fg-muted hover:text-ed-fg"
                     onClick={onLogoPick}
                     type="button"
                   >
                     Change logo
                   </button>
                   <button
-                    className="rounded-lg border border-dashed border-beige/20 bg-beige/5 px-3 py-1.5 text-xs font-medium text-signal transition hover:brightness-110"
+                    className="rounded-lg border border-dashed border-ed-border bg-ed-bg px-3 py-1.5 text-xs font-medium text-signal transition hover:brightness-110"
                     onClick={onLogoRemove}
                     type="button"
                   >
                     Remove logo
                   </button>
                 </div>
-                <div className="rounded-lg border border-beige/10 bg-night-card p-2">
+                <div className="rounded-lg border border-ed-border bg-ed-bg p-2 shadow-sm">
                   <div className="flex items-center gap-2">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-beige/10 bg-night-elevated">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-ed-border bg-ed-bg-card">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         alt="Logo preview"
@@ -199,15 +329,15 @@ export function WatermarkLayersPanel({
                       />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-beige-dim">
+                      <p className="text-xs font-medium text-ed-fg-muted">
                         Remove background
                       </p>
                       <button
                         aria-pressed={logoLayer.isLogoBackgroundRemoved}
                         className={`mt-1 flex w-full items-center justify-between rounded-full border p-0.5 text-xs font-semibold transition ${
                           logoLayer.isLogoBackgroundRemoved
-                            ? "border-signal bg-signal text-white"
-                            : "border-beige/10 bg-beige/5 text-beige-dim hover:border-signal hover:text-beige"
+                            ? "border-2 border-signal bg-signal/15 text-ed-fg shadow-sm ring-2 ring-signal/25"
+                            : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:border-signal/40 hover:text-ed-fg"
                         }`}
                         onClick={onLogoBackgroundToggle}
                         type="button"
@@ -215,12 +345,12 @@ export function WatermarkLayersPanel({
                         <span className="px-2">
                           {logoLayer.isLogoBackgroundRemoved ? "On" : "Off"}
                         </span>
-                        <span className="mr-0.5 h-5 w-5 rounded-full bg-night-card" />
+                        <span className="mr-0.5 h-5 w-5 rounded-full bg-ed-bg-card" />
                       </button>
                     </div>
                   </div>
                   {logoBackgroundMessage ? (
-                    <p className="mt-1.5 text-[11px] leading-4 text-beige-dim">
+                    <p className="mt-1.5 text-[11px] leading-4 text-ed-fg-muted">
                       {logoBackgroundMessage}
                     </p>
                   ) : null}
@@ -228,92 +358,51 @@ export function WatermarkLayersPanel({
               </>
             ) : (
               <button
-                className="w-full rounded-xl border border-dashed border-beige/20 bg-beige/5 px-4 py-3 text-center transition hover:border-signal hover:bg-beige/10"
+                className="editor-secondary-button w-full rounded-xl border-dashed px-4 py-3 text-center hover:border-signal/50"
                 onClick={onLogoPick}
                 type="button"
               >
-                <span className="block text-sm font-semibold text-beige">
+                <span className="block text-sm font-semibold text-ed-fg">
                   Upload a logo
                 </span>
-                <span className="mt-1 block text-xs text-beige-dim">
+                <span className="mt-1 block text-xs text-ed-fg-muted">
                   PNG preferred. JPG and WebP supported.
                 </span>
               </button>
             )}
             {logoError ? (
-              <div className="rounded-xl border border-signal/30 bg-signal/10 px-3 py-2 text-xs text-beige">
+              <div className="rounded-xl border border-signal/30 bg-signal/10 px-3 py-2 text-xs text-ed-fg">
                 {logoError}
               </div>
             ) : null}
           </div>
         ) : null}
-      </EditorPanelSection>
 
-      {mode === "tile" ? (
-        <div className="space-y-2">
-          <EditorPanelSection title="Density">
-            <div className="grid grid-cols-3 gap-1">
-              {tileDensities.map(({ label, value }) => (
-                <EditorPill
-                  active={tileDensity === value}
-                  groupId={`tile-density-${activeLayerId}`}
-                  key={value}
-                  onClick={() => onTileDensityChange(value)}
-                >
-                  {label}
-                </EditorPill>
-              ))}
-            </div>
-          </EditorPanelSection>
-
-          <EditorPanelSection title="Angle">
-            <div className="grid grid-cols-4 gap-1">
-              {tileAngles.map(({ label, value }) => (
-                <EditorPill
-                  active={tileAngle === value}
-                  groupId={`tile-angle-${activeLayerId}`}
-                  key={value}
-                  onClick={() => onTileAngleChange(value)}
-                >
-                  {label}
-                </EditorPill>
-              ))}
-            </div>
-          </EditorPanelSection>
-
-          <EditorPanelSection title="Gap">
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-xs font-semibold text-beige">{tileGap}%</span>
-            </div>
-            <input
-              className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full bg-editor-panel-header accent-signal"
-              max={300}
-              min={50}
-              onChange={(event) => onTileGapChange(Number(event.target.value))}
-              step={10}
-              type="range"
-              value={tileGap}
+        {textLayer ? (
+          <div className="border-t border-ed-border/80 pt-3">
+            <WatermarkStyleControls
+              embedded
+              fontFamily={
+                textLayer.fontFamily ??
+                fontFamilyGroups[0]?.fonts[0]?.value ??
+                ""
+              }
+              fontFamilyGroups={fontFamilyGroups}
+              fontSizeScale={layer.fontSizeScale}
+              fontWeight={textLayer.fontWeight}
+              hideSliders
+              onFontFamilyChange={onFontFamilyChange}
+              onFontSizeScaleChange={onFontSizeScaleChange}
+              onFontWeightChange={onFontWeightChange}
+              onTextColorChange={onTextColorChange}
+              onWatermarkOpacityChange={onWatermarkOpacityChange}
+              textColor={textLayer.textColor}
+              watermarkOpacity={layer.opacity}
+              watermarkType="text"
             />
-          </EditorPanelSection>
-        </div>
-      ) : null}
-
-      <WatermarkStyleControls
-        fontFamily={
-          textLayer?.fontFamily ?? fontFamilyGroups[0]?.fonts[0]?.value ?? ""
-        }
-        fontFamilyGroups={fontFamilyGroups}
-        fontSizeScale={layer.fontSizeScale}
-        fontWeight={textLayer?.fontWeight}
-        onFontFamilyChange={onFontFamilyChange}
-        onFontSizeScaleChange={onFontSizeScaleChange}
-        onFontWeightChange={onFontWeightChange}
-        onTextColorChange={onTextColorChange}
-        onWatermarkOpacityChange={onWatermarkOpacityChange}
-        textColor={textLayer?.textColor}
-        watermarkOpacity={layer.opacity}
-        watermarkType={type}
-      />
-    </div>
+          </div>
+        ) : null}
+      </div>
+    </EditorCard>
   );
 }

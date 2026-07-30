@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 
 export const WATERMARK_TEMP_BUCKET = "watermark-temp";
+export const ANONYMOUS_DRAFTS_BUCKET = "anonymous-drafts";
+export const ANONYMOUS_DRAFT_EXPIRY_HOURS = 48;
 
 export function createAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

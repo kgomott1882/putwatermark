@@ -1,4 +1,7 @@
 import type { EditorPanelId } from "../../components/watermark/ToolIconRail";
+import type { SerializedPdfPageFillMap } from "./pdfPageFillFields";
+import type { SerializedPdfPageSignatureMap } from "./pdfPageSignatures";
+import type { SignatureKind } from "./signatureValidation";
 import type { StoredWatermarkSettings } from "./watermarkSettingsStorage";
 
 const DB_NAME = "putwatermark-editor-session";
@@ -19,6 +22,7 @@ export type StoredEditorSessionMeta = {
   activeEditorPanel: EditorPanelId | null;
   activePdfPageId: string | null;
   activeSignatureId: string | null;
+  activeLogoTemplate?: string | null;
   activeTemplate: string | null;
   backgroundRemovedLogoDataUrl: string | null;
   batchEntryIds: string[];
@@ -28,11 +32,16 @@ export type StoredEditorSessionMeta = {
   logoDataUrl: string | null;
   logoFileName: string;
   mediaKind: "image" | "pdf" | "video";
+  pdfDocumentTool?: "signature" | "fill";
+  pdfPageFillMap?: SerializedPdfPageFillMap;
+  pdfPageSignatures?: SerializedPdfPageSignatureMap;
   savedSignatures: Array<{
     id: string;
+    kind?: SignatureKind;
     label: string;
     previewSrc: string;
     source: "draw" | "type";
+    typedText?: string | null;
   }>;
   version: 1;
   videoDuration: number;

@@ -211,7 +211,7 @@ export function Footer() {
                     disabled={isSubmitting}
                     name="name"
                     onChange={(event) => {
-                      setName(event.target.value);
+                      setName((event.target as unknown as { value: string }).value);
                       setFormError("");
                       setSuccessMessage("");
                     }}
@@ -228,7 +228,7 @@ export function Footer() {
                     disabled={isSubmitting}
                     name="email"
                     onChange={(event) => {
-                      setEmail(event.target.value);
+                      setEmail((event.target as unknown as { value: string }).value);
                       setEmailError("");
                       setFormError("");
                       setSuccessMessage("");

@@ -6,8 +6,15 @@ export const acceptedVideoTypes = [
   "video/webm",
 ] as const;
 
+export const acceptedImageInputTypes = acceptedImageTypes.join(",");
+
+export const acceptedPdfInputTypes = "application/pdf,.pdf";
+
+export const acceptedVideoInputTypes =
+  "video/mp4,video/quicktime,video/webm,.mov,.mp4,.webm";
+
 export const acceptedMediaInputTypes =
-  "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.mov,application/pdf,.pdf";
+  `${acceptedImageInputTypes},${acceptedVideoInputTypes},${acceptedPdfInputTypes}`;
 
 export function isImageFile(file: File) {
   return acceptedImageTypes.includes(

@@ -22,6 +22,7 @@ import {
   DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
   type TextWatermarkFontWeight,
 } from "./watermarkTextStyle";
+import { GEOMETRIC_SANS_FONT_FAMILY } from "./watermarkFonts";
 
 export type TextWatermarkLayer = {
   customPosition: CustomPosition | null;
@@ -34,6 +35,8 @@ export type TextWatermarkLayer = {
   textColor: string;
   textShadowEnabled: boolean;
   type: "text";
+  visibleFromSeconds?: number;
+  visibleUntilSeconds?: number;
   watermarkPosition: WatermarkPosition;
 };
 
@@ -67,6 +70,8 @@ export type WatermarkLayerSnapshot =
       textColor?: string;
       textShadowEnabled?: boolean;
       type: "text";
+      visibleFromSeconds?: number;
+      visibleUntilSeconds?: number;
       watermarkPosition: WatermarkPosition;
     }
   | {
@@ -86,6 +91,10 @@ export type WatermarkLayerSnapshot =
 const defaultFontFamily =
   'Arial, Helvetica, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
+export const DEFAULT_TEXT_LAYER_FONT_FAMILY = GEOMETRIC_SANS_FONT_FAMILY;
+export const DEFAULT_TEXT_LAYER_FONT_SIZE_SCALE = 50;
+export const DEFAULT_TEXT_LAYER_OPACITY = 20;
+
 export function createWatermarkLayerId() {
   return `wm-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -95,11 +104,11 @@ export function createDefaultTextLayer(
 ): TextWatermarkLayer {
   return {
     customPosition: null,
-    fontFamily: defaultFontFamily,
-    fontSizeScale: 100,
+    fontFamily: DEFAULT_TEXT_LAYER_FONT_FAMILY,
+    fontSizeScale: DEFAULT_TEXT_LAYER_FONT_SIZE_SCALE,
     fontWeight: DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
     id: createWatermarkLayerId(),
-    opacity: 70,
+    opacity: DEFAULT_TEXT_LAYER_OPACITY,
     text: partial?.text ?? "",
     textColor: DEFAULT_TEXT_WATERMARK_COLOR,
     textShadowEnabled: DEFAULT_TEXT_SHADOW_ENABLED,
@@ -184,6 +193,8 @@ export async function serializeTextLayer(
     textColor: layer.textColor,
     textShadowEnabled: layer.textShadowEnabled,
     type: "text",
+    visibleFromSeconds: layer.visibleFromSeconds,
+    visibleUntilSeconds: layer.visibleUntilSeconds,
     watermarkPosition: layer.watermarkPosition,
   };
 }
@@ -222,6 +233,8 @@ export async function deserializeTextLayer(
     textColor: snapshot.textColor ?? DEFAULT_TEXT_WATERMARK_COLOR,
     textShadowEnabled: snapshot.textShadowEnabled ?? DEFAULT_TEXT_SHADOW_ENABLED,
     type: "text",
+    visibleFromSeconds: snapshot.visibleFromSeconds,
+    visibleUntilSeconds: snapshot.visibleUntilSeconds,
     watermarkPosition: snapshot.watermarkPosition,
   };
 }

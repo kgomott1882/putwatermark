@@ -82,9 +82,9 @@ function getFaqAnswer(question: string, answer: string) {
   if (question === "Is there a size or length limit on watermarking video?") {
     return (
       <>
-        Short clips process instantly in your browser. Most larger videos are
-        processed automatically on our servers; very large files may need to be
-        split for now. See{" "}
+        Short clips process instantly in your browser. Longer or larger videos
+        (up to 250MB or 10 minutes) upload with resumable transfers and are
+        processed automatically on our servers. See{" "}
         <BlogInlineLink href="/pricing">current details</BlogInlineLink> for
         credit usage on longer exports.
       </>
@@ -161,11 +161,13 @@ export function BlogWatermarkVideoArticle({ post }: BlogWatermarkVideoArticlePro
                 </>,
                 <>
                   <strong className="text-beige">Longer or larger videos</strong> are
-                  automatically routed to server-side processing instead. You don&apos;t do
-                  anything differently — you&apos;ll see a slightly different progress
-                  indicator, since it&apos;s now processing on our infrastructure rather
-                  than your device, but the result is the same watermarked file, downloaded
-                  once it&apos;s ready. Very large files may need to be split for now.
+                  automatically routed to server-side processing instead. Uploads
+                  use resumable transfers (up to 250MB or 10 minutes), so an
+                  interrupted connection can be resumed when you export again.
+                  You&apos;ll see a slightly different progress indicator while
+                  the file uploads and processes on our infrastructure rather
+                  than your device, but the result is the same watermarked file,
+                  downloaded once it&apos;s ready.
                 </>,
                 <>
                   <strong className="text-beige">

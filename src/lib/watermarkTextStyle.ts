@@ -1,7 +1,7 @@
 export type TextWatermarkFontWeight = 400 | 700;
 
 export const DEFAULT_TEXT_WATERMARK_COLOR = "#FFFFFF";
-export const DEFAULT_TEXT_WATERMARK_FONT_WEIGHT: TextWatermarkFontWeight = 700;
+export const DEFAULT_TEXT_WATERMARK_FONT_WEIGHT: TextWatermarkFontWeight = 400;
 export const DEFAULT_TEXT_SHADOW_ENABLED = true;
 
 export type TextWatermarkColorOption = {

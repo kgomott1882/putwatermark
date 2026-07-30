@@ -258,27 +258,28 @@ export function BlogPostArticle({ post }: BlogPostArticleProps) {
                 items={[
                   "Upload your video. MP4, MOV, and WebM formats are supported.",
                   "Design your watermark exactly as you would for a photo — text, logo, position, opacity, and tiling all work the same way, live over your video preview.",
-                  "Export. Short clips (under 60 seconds, up to 1080p) process instantly, right in your browser. Most larger videos are processed automatically on our servers; very large files may need to be split for now. Nothing is stored afterward.",
+                  "Export. Short clips (under 60 seconds, up to 1080p) process instantly, right in your browser. Longer or larger videos (up to 250MB or 10 minutes) upload with resumable transfers and are processed on our servers. Nothing is stored afterward.",
                 ]}
               />
             </ArticleSection>
 
-            <ArticleSection title="Signing Documents Online">
+            <ArticleSection title="Signing and Filling Documents Online">
               <p>
-                Beyond watermarking, you can add a{" "}
-                <BlogInlineLink href="/features?tab=watermarking">signature</BlogInlineLink>{" "}
-                directly to any file:
+                On PDFs, use{" "}
+                <BlogInlineLink href="/features?tab=watermarking">Sign & Fill</BlogInlineLink>{" "}
+                to add signatures, initials, and typed fill-in fields:
               </p>
               <BulletList
                 items={[
                   "Create your signature — draw it with your mouse or finger, or type your name and render it in a handwriting-style font.",
                   "Save it for reuse — keep your full signature and your initials separately, ready to use again in the same session.",
-                  "Drag it into place on any photo, video, or PDF page, and adjust its size before exporting.",
+                  "Add fill-in text on PDF pages with Add Text when a form needs dates, names, or other typed answers.",
+                  "Drag placements into place on any PDF page, and adjust size before exporting.",
                 ]}
               />
               <p>
-                This is useful for signing agreements, approving proofs, or marking
-                documents as reviewed — without printing, signing, and scanning.
+                This is useful for signing agreements, completing forms, approving proofs, or
+                marking documents as reviewed — without printing, signing, and scanning.
               </p>
             </ArticleSection>
 

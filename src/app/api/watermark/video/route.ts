@@ -5,6 +5,11 @@ import {
   ServerVideoProcessingCancelledError,
   ServerVideoProcessingError,
 } from "../../../../lib/serverVideoExportRoute";
+import {
+  requireAuthenticatedUserId,
+  requireCleanServerVideoExportAuthorization,
+} from "../../../../lib/serverVideoExportAuth";
+import { sanitizeExportId } from "../../../../lib/exportAuthorize";
 import { isServerVideoExportConfigured } from "../../../../../utils/supabase/admin";
 
 export const runtime = "nodejs";
@@ -25,21 +30,34 @@ export async function POST(request: Request) {
   let videoPath: string | undefined;
 
   try {
+    const userId = await requireAuthenticatedUserId();
     const body = (await request.json()) as {
+      durationSeconds?: number;
+      exportId?: string;
+      fileSizeBytes?: number;
+      height?: number;
       inputFileName?: string;
       jobId?: string;
       overlayBase64?: string;
+      trimDurationSeconds?: number;
+      trimStartSeconds?: number;
       videoPath?: string;
+      width?: number;
     };
 
     jobId = body.jobId;
     videoPath = body.videoPath;
 
     if (
+      typeof body.exportId !== "string" ||
       typeof body.jobId !== "string" ||
       typeof body.videoPath !== "string" ||
       typeof body.overlayBase64 !== "string" ||
-      typeof body.inputFileName !== "string"
+      typeof body.inputFileName !== "string" ||
+      typeof body.durationSeconds !== "number" ||
+      typeof body.fileSizeBytes !== "number" ||
+      typeof body.width !== "number" ||
+      typeof body.height !== "number"
     ) {
       return NextResponse.json(
         { error: "Missing server video export payload." },
@@ -47,11 +65,26 @@ export async function POST(request: Request) {
       );
     }
 
+    const exportId = sanitizeExportId(body.exportId);
+
+    await requireCleanServerVideoExportAuthorization({
+      exportId,
+      fileMeta: {
+        durationSeconds: body.durationSeconds,
+        fileSizeBytes: body.fileSizeBytes,
+        height: body.height,
+        width: body.width,
+      },
+      userId,
+    });
+
     const result = await processServerVideoExport(
       {
         inputFileName: body.inputFileName,
         jobId: body.jobId,
         overlayBase64: body.overlayBase64,
+        trimDurationSeconds: body.trimDurationSeconds,
+        trimStartSeconds: body.trimStartSeconds,
         videoPath: body.videoPath,
       },
       request.signal,
@@ -75,6 +108,12 @@ export async function POST(request: Request) {
         ? error.message
         : "Server video export failed.";
 
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status =
+      error instanceof ServerVideoProcessingError &&
+      message.includes("requires sufficient credits")
+        ? 402
+        : 500;
+
+    return NextResponse.json({ error: message }, { status });
   }
 }

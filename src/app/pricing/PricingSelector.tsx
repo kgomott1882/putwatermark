@@ -1,9 +1,9 @@
 "use client";
 
-import { ArrowRight, Check } from "lucide-react";
+import { ArrowRight, Check, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   LandingHighlight,
   LandingSectionHeader,
@@ -11,7 +11,19 @@ import {
 } from "../../../components/landing/LandingPrimitives";
 import { pageContainerClass } from "../../../components/pageContainer";
 import { PricingCheckoutModal } from "../../../components/pricing/PricingCheckoutModal";
-import type { PurchaseTierId } from "@/lib/purchasePricing";
+import {
+  CUSTOM_CREDITS_MAX,
+  CUSTOM_CREDITS_MIN,
+  CUSTOM_CREDITS_STEP,
+  CUSTOM_PRICE_PER_THOUSAND_USD,
+  FIXED_PURCHASE_TIERS,
+  type PurchaseTierId,
+} from "@/lib/purchasePricing";
+
+type PricingFormatGroup = {
+  features: readonly string[];
+  label: string;
+};
 
 type PricingTier = {
   credits: number;
@@ -20,7 +32,6 @@ type PricingTier = {
   price: number;
   tagline: string;
   tierId: PurchaseTierId;
-  videoLine: string;
 };
 
 type PricingSelectorProps = {
@@ -30,35 +41,59 @@ type PricingSelectorProps = {
 
 const pricingTiers: PricingTier[] = [
   {
-    credits: 3_000,
-    label: "Grow",
-    price: 8.99,
+    credits: FIXED_PURCHASE_TIERS.grow.credits,
+    label: FIXED_PURCHASE_TIERS.grow.label,
+    price: FIXED_PURCHASE_TIERS.grow.priceUSD,
     tagline: "Personal projects & occasional exports",
     tierId: "grow",
-    videoLine: "Covered by your credit balance",
   },
   {
-    credits: 9_000,
-    label: "Premium",
+    credits: FIXED_PURCHASE_TIERS.premium.credits,
+    label: FIXED_PURCHASE_TIERS.premium.label,
     popular: true,
-    price: 19.99,
+    price: FIXED_PURCHASE_TIERS.premium.priceUSD,
     tagline: "Regular creative work",
     tierId: "premium",
-    videoLine: "Covered by your credit balance",
   },
 ];
 
-const PRICE_PER_THOUSAND_CREDITS = 2;
+const CREDIT_COVERAGE_LINE = "Covered by your credit balance";
+const CREDITS_EXPIRY_LINE = "Credits don't expire for 60 days";
+
+const pricingFormatGroups: PricingFormatGroup[] = [
+  {
+    features: ["Watermark", "Filters", "Blur", "Crop", "Resize", "Rotate"],
+    label: "Photos",
+  },
+  {
+    features: ["Sign & Fill", "Watermark", "Merge PDF", "Compress PDF"],
+    label: "PDF",
+  },
+  {
+    features: [
+      "Overview",
+      "Add Caption",
+      "Watermark",
+      "Shorten Video",
+      "Blur",
+      "Merge Videos",
+    ],
+    label: "Video",
+  },
+];
+
+const premiumTierCredits = FIXED_PURCHASE_TIERS.premium.credits;
+
+const PRICE_PER_THOUSAND_CREDITS = CUSTOM_PRICE_PER_THOUSAND_USD;
 const STANDALONE_PRICE_PER_CREDIT = PRICE_PER_THOUSAND_CREDITS / 1_000;
 
-const STANDALONE_CREDITS_MIN = 3_000;
-const STANDALONE_CREDITS_MAX = 50_000;
-const STANDALONE_CREDITS_STEP = 500;
-const STANDALONE_CREDITS_DEFAULT = 3_000;
+const STANDALONE_CREDITS_MIN = CUSTOM_CREDITS_MIN;
+const STANDALONE_CREDITS_MAX = CUSTOM_CREDITS_MAX;
+const STANDALONE_CREDITS_STEP = CUSTOM_CREDITS_STEP;
+const STANDALONE_CREDITS_DEFAULT = CUSTOM_CREDITS_MIN;
 
-const PHOTOS_PDFS_LINE = "Covered by your credit balance";
-const SIGNATURE_LINE = "Unlimited — always free";
-const CREDITS_EXPIRY_LINE = "Credits don't expire for 60 days";
+const SIGN_AND_FILL_DETAIL_LINE =
+  "50 credits/page with signatures, initials, or fill text (+5 fill surcharge per fill page)";
 const VIDEO_FOOTNOTE =
   "Videos that can't run in your browser are processed on our servers and may use additional credits";
 
@@ -87,8 +122,8 @@ const creditUsageGuide = [
     value: "Additional credits apply, based on length",
   },
   {
-    label: "Signatures",
-    value: "Always free — never uses credits",
+    label: "Sign & fill",
+    value: SIGN_AND_FILL_DETAIL_LINE,
   },
 ] as const;
 
@@ -109,13 +144,37 @@ function formatCredits(amount: number) {
   return creditsFormatter.format(amount);
 }
 
-function getTierFeatures(tier: PricingTier) {
-  return [
-    `Photos & PDFs: ${PHOTOS_PDFS_LINE}`,
-    `Video: ${tier.videoLine}`,
-    `Signatures: ${SIGNATURE_LINE}`,
-    CREDITS_EXPIRY_LINE,
-  ] as const;
+function PricingFormatGroupSection({ group }: { group: PricingFormatGroup }) {
+  return (
+    <div>
+      <p className="text-[12px] leading-5">
+        <span className="font-semibold text-beige">{group.label}</span>
+        <span className="text-beige-dim"> : {CREDIT_COVERAGE_LINE}</span>
+      </p>
+      <ul className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1">
+        {group.features.map((feature) => (
+          <li
+            className="flex items-center gap-1.5 text-[11px] leading-4 text-beige-dim"
+            key={feature}
+          >
+            <Check className="h-2.5 w-2.5 shrink-0 text-signal" strokeWidth={2.5} />
+            <span>{feature}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function PricingTierCheckItem({ children }: { children: ReactNode }) {
+  return (
+    <li className="flex items-start gap-2.5 text-[13px] leading-5 text-beige-dim">
+      <span className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-signal/15 text-signal">
+        <Check className="h-2 w-2" strokeWidth={2.75} />
+      </span>
+      <span>{children}</span>
+    </li>
+  );
 }
 
 export function PricingSelector({ isLoggedIn, paypalClientId }: PricingSelectorProps) {
@@ -182,7 +241,7 @@ export function PricingSelector({ isLoggedIn, paypalClientId }: PricingSelectorP
           title: "Custom credit pack",
         }
       : {
-          detail: `${formatCredits(selectedTier.credits)} credits · Video: ${selectedTier.videoLine} · Signatures: ${SIGNATURE_LINE}`,
+          detail: `${formatCredits(selectedTier.credits)} credits · Photos, PDF & video · ${CREDITS_EXPIRY_LINE}`,
           key: selectedTier.label,
           price: formatPrice(selectedTier.price),
           title: `${selectedTier.label} pack`,
@@ -216,62 +275,60 @@ export function PricingSelector({ isLoggedIn, paypalClientId }: PricingSelectorP
           ))}
         </ul>
 
-        <div className="mx-auto mt-8 grid w-full max-w-3xl gap-4 sm:grid-cols-2 lg:gap-5">
+        <div className="mx-auto mt-8 grid w-full max-w-4xl gap-4 sm:grid-cols-2">
           {pricingTiers.map((tier, index) => {
             const isSelected = selectionMode === "tier" && selectedTierIndex === index;
-            const features = getTierFeatures(tier);
 
             return (
               <article
-                className={`flex h-full flex-col rounded-2xl border bg-night-card transition ${
+                className={`flex h-full flex-col rounded-2xl border bg-night-card px-5 py-5 transition sm:px-6 ${
                   tier.popular
                     ? "border-signal/35 shadow-[0_0_0_1px_rgba(217,119,87,0.12)]"
                     : "landing-border"
                 } ${isSelected ? "ring-2 ring-signal/80 ring-offset-2 ring-offset-night" : ""}`}
                 key={tier.label}
               >
-                <div className="px-6 pb-5 pt-6">
-                  <h3 className="text-2xl font-bold tracking-[-0.04em] text-beige sm:text-[1.65rem]">
-                    {tier.label}
-                  </h3>
-                  <p className="mt-1.5 text-sm leading-6 text-beige-dim">{tier.tagline}</p>
-                </div>
+                {tier.popular ? (
+                  <p className="mb-2 inline-flex w-fit rounded-full bg-signal px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
+                    Most popular
+                  </p>
+                ) : null}
 
-                <div className="border-t border-beige/10" />
+                <h3 className="text-xl font-bold tracking-[-0.04em] text-beige">
+                  {tier.label}
+                </h3>
+                <p className="mt-1 text-[13px] leading-5 text-beige-dim">{tier.tagline}</p>
 
-                <div className="px-6 py-5">
-                  <p className="text-3xl font-bold tracking-[-0.05em] text-beige lg:text-4xl">
+                <div className="mt-3">
+                  <p className="text-3xl font-bold tracking-[-0.05em] text-beige">
                     {formatPrice(tier.price)}
                   </p>
-                  <p className="mt-1 text-sm text-beige-dim">one-time pack</p>
-                  <div className="mt-4 rounded-xl border border-beige/15 bg-night-elevated/60 px-4 py-3">
-                    <p className="text-sm font-semibold text-beige">
-                      {formatCredits(tier.credits)} credits
-                    </p>
-                  </div>
+                  <p className="mt-0.5 text-[13px] text-beige-dim">
+                    one-time · {formatCredits(tier.credits)} credits
+                  </p>
                 </div>
 
-                <div className="border-t border-beige/10" />
+                <div className="mt-4 flex flex-1 flex-col border-t border-beige/10 pt-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sand">
+                    Includes
+                  </p>
+                  <div className="mt-3 space-y-3">
+                    {pricingFormatGroups.map((group) => (
+                      <PricingFormatGroupSection group={group} key={group.label} />
+                    ))}
+                  </div>
+                  <ul className="mt-3 border-t border-beige/10 pt-3">
+                    <PricingTierCheckItem>{CREDITS_EXPIRY_LINE}</PricingTierCheckItem>
+                  </ul>
+                  <p className="mt-2 text-[10px] leading-4 text-beige-dim/75">
+                    {VIDEO_FOOTNOTE}
+                  </p>
+                </div>
 
-                <ul className="flex flex-1 flex-col gap-3 px-6 py-5">
-                  {features.map((feature) => (
-                    <li className="flex items-start gap-3 text-sm leading-6 text-beige-dim" key={feature}>
-                      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-signal/15 text-signal">
-                        <Check className="h-2.5 w-2.5" strokeWidth={2.5} />
-                      </span>
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <p className="px-6 pb-2 text-[11px] leading-5 text-beige-dim/80">
-                  {VIDEO_FOOTNOTE}
-                </p>
-
-                <div className="px-6 pb-6 pt-2">
+                <div className="mt-4">
                   <button
                     aria-pressed={isSelected}
-                    className={`w-full rounded-xl px-4 py-3.5 text-sm font-semibold transition ${
+                    className={`w-full rounded-xl px-4 py-3 text-sm font-semibold transition ${
                       tier.popular
                         ? "bg-signal text-white shadow-lg shadow-signal/20 hover:brightness-110"
                         : isSelected
@@ -289,87 +346,112 @@ export function PricingSelector({ isLoggedIn, paypalClientId }: PricingSelectorP
           })}
         </div>
 
-        <div className="landing-surface mt-8 rounded-[1.75rem] p-6 sm:p-8">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <details className="group landing-surface mt-8 rounded-[1.75rem]">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-6 sm:px-8 [&::-webkit-details-marker]:hidden">
+            <p className="text-sm font-semibold text-beige">
+              Need more than {formatCredits(premiumTierCredits)} credits?
+            </p>
+            <ChevronDown
+              aria-hidden
+              className="h-5 w-5 shrink-0 text-beige-dim transition-transform duration-200 group-open:rotate-180"
+              strokeWidth={2.2}
+            />
+          </summary>
+
+          <div className="border-t border-beige/10 px-6 pb-6 pt-2 sm:px-8">
+            <div className="flex flex-col gap-2 pt-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sand">
+                  Custom pack
+                </p>
+                <p className="mt-2 max-w-xl text-sm leading-7 text-beige-dim">
+                  High-volume option above Premium —{" "}
+                  {formatPrice(PRICE_PER_THOUSAND_CREDITS)} per 1,000 credits, from{" "}
+                  {formatCredits(STANDALONE_CREDITS_MIN)} to{" "}
+                  {formatCredits(STANDALONE_CREDITS_MAX)} credits.
+                </p>
+              </div>
+              <p className="text-2xl font-bold tracking-[-0.04em] text-beige">
+                {formatPrice(standalonePrice)}
+              </p>
+            </div>
+
+            <div className="mt-6">
+              <div className="flex items-center justify-between gap-4 text-sm">
+                <span className="font-medium text-beige-dim">Credits</span>
+                <span className="font-semibold text-beige">
+                  {formatCredits(standaloneCredits)}
+                </span>
+              </div>
+              <input
+                aria-label="Custom credit pack amount"
+                className="mt-3 h-2 w-full cursor-pointer appearance-none rounded-full bg-beige/10 accent-signal"
+                max={STANDALONE_CREDITS_MAX}
+                min={STANDALONE_CREDITS_MIN}
+                onChange={(event) =>
+                  handleStandaloneCreditsChange(Number(event.target.value))
+                }
+                step={STANDALONE_CREDITS_STEP}
+                type="range"
+                value={standaloneCredits}
+              />
+              <div className="mt-2 flex justify-between text-[11px] font-semibold uppercase tracking-[0.1em] text-beige-dim">
+                <span>{formatCredits(STANDALONE_CREDITS_MIN)}</span>
+                <span>{formatCredits(STANDALONE_CREDITS_MAX)}</span>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <button
+                aria-pressed={selectionMode === "extra"}
+                className={`w-full rounded-xl px-4 py-3.5 text-sm font-semibold transition ${
+                  selectionMode === "extra"
+                    ? "border border-signal/50 bg-signal/10 text-beige"
+                    : "border border-beige/15 bg-night-elevated text-beige hover:border-beige/25 hover:bg-night-elevated/80"
+                }`}
+                onClick={openCustomCheckout}
+                type="button"
+              >
+                Continue with {formatCredits(standaloneCredits)} credits
+              </button>
+            </div>
+          </div>
+        </details>
+
+        <details className="group landing-surface mt-8 rounded-[1.75rem]">
+          <summary className="flex cursor-pointer list-none items-start justify-between gap-4 p-6 sm:p-8 [&::-webkit-details-marker]:hidden">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sand">
-                Custom pack
+                Reference
               </p>
-              <p className="mt-2 max-w-xl text-sm leading-7 text-beige-dim">
-                Buy exactly the credits you need —{" "}
-                {formatPrice(PRICE_PER_THOUSAND_CREDITS)} per 1,000 credits, no base
-                tier required.
+              <h2 className="mt-2 text-xl font-bold tracking-[-0.03em] text-beige sm:text-2xl">
+                How credits work
+              </h2>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-beige-dim">
+                Every credit works the same way, no matter what you&apos;re protecting.
               </p>
             </div>
-            <p className="text-2xl font-bold tracking-[-0.04em] text-beige">
-              {formatPrice(standalonePrice)}
-            </p>
-          </div>
-
-          <div className="mt-6">
-            <div className="flex items-center justify-between gap-4 text-sm">
-              <span className="font-medium text-beige-dim">Credits</span>
-              <span className="font-semibold text-beige">
-                {formatCredits(standaloneCredits)}
-              </span>
-            </div>
-            <input
-              aria-label="Custom credit pack amount"
-              className="mt-3 h-2 w-full cursor-pointer appearance-none rounded-full bg-beige/10 accent-signal"
-              max={STANDALONE_CREDITS_MAX}
-              min={STANDALONE_CREDITS_MIN}
-              onChange={(event) =>
-                handleStandaloneCreditsChange(Number(event.target.value))
-              }
-              step={STANDALONE_CREDITS_STEP}
-              type="range"
-              value={standaloneCredits}
+            <ChevronDown
+              aria-hidden
+              className="mt-1 h-5 w-5 shrink-0 text-beige-dim transition-transform duration-200 group-open:rotate-180"
+              strokeWidth={2.2}
             />
-            <div className="mt-2 flex justify-between text-[11px] font-semibold uppercase tracking-[0.1em] text-beige-dim">
-              <span>{formatCredits(STANDALONE_CREDITS_MIN)}</span>
-              <span>{formatCredits(STANDALONE_CREDITS_MAX)}</span>
-            </div>
+          </summary>
+
+          <div className="border-t border-beige/10 px-6 pb-6 pt-2 sm:px-8">
+            <ul className="mt-4 divide-y divide-beige/10 rounded-2xl landing-border border">
+              {creditUsageGuide.map((row) => (
+                <li
+                  className="grid gap-2 px-4 py-4 first:rounded-t-2xl last:rounded-b-2xl sm:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] sm:gap-6 sm:px-5"
+                  key={row.label}
+                >
+                  <span className="text-sm font-medium text-beige">{row.label}</span>
+                  <span className="text-sm leading-6 text-beige-dim">{row.value}</span>
+                </li>
+              ))}
+            </ul>
           </div>
-
-          <div className="mt-6">
-            <button
-              aria-pressed={selectionMode === "extra"}
-              className={`w-full rounded-xl px-4 py-3.5 text-sm font-semibold transition ${
-                selectionMode === "extra"
-                  ? "border border-signal/50 bg-signal/10 text-beige"
-                  : "border border-beige/15 bg-night-elevated text-beige hover:border-beige/25 hover:bg-night-elevated/80"
-              }`}
-              onClick={openCustomCheckout}
-              type="button"
-            >
-              Continue with {formatCredits(standaloneCredits)} credits
-            </button>
-          </div>
-        </div>
-
-        <div className="landing-surface mt-8 rounded-[1.75rem] p-6 sm:p-8">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sand">
-            Reference
-          </p>
-          <h2 className="mt-2 text-xl font-bold tracking-[-0.03em] text-beige sm:text-2xl">
-            How credits work
-          </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-beige-dim">
-            Every credit works the same way, no matter what you&apos;re protecting.
-          </p>
-
-          <ul className="mt-6 divide-y divide-beige/10 rounded-2xl landing-border border">
-            {creditUsageGuide.map((row) => (
-              <li
-                className="grid gap-2 px-4 py-4 first:rounded-t-2xl last:rounded-b-2xl sm:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] sm:gap-6 sm:px-5"
-                key={row.label}
-              >
-                <span className="text-sm font-medium text-beige">{row.label}</span>
-                <span className="text-sm leading-6 text-beige-dim">{row.value}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        </details>
 
         {!isLoggedIn ? (
           <p className="mt-8 text-center text-sm text-beige-dim">

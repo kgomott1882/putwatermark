@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, type Variants } from "framer-motion";
+import { motion } from "framer-motion";
 import { ArrowUpRight, Smartphone, Video, Zap, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -46,16 +46,12 @@ const capabilities: Capability[] = [
   },
 ];
 
-const containerVariants: Variants = {
+const containerVariants = {
   hidden: {},
-  visible: {
-    transition: {
-      staggerChildren: 0.15,
-    },
-  },
+  visible: {},
 };
 
-const itemVariants: Variants = {
+const itemVariants = {
   hidden: {
     opacity: 0,
     y: 30,
@@ -63,10 +59,6 @@ const itemVariants: Variants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: {
-      duration: 0.65,
-      ease: "easeOut",
-    },
   },
 };
 
@@ -91,6 +83,7 @@ export function Capabilities() {
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true, amount: 0.3 }}
+          transition={{ staggerChildren: 0.15 }}
         >
           {capabilities.map(({ title, description, Icon }, index) => (
             <motion.div
@@ -99,6 +92,7 @@ export function Capabilities() {
               }`}
               key={title}
               variants={itemVariants}
+              transition={{ duration: 0.65, ease: "easeOut" }}
             >
               <div className="flex items-start justify-between">
                 {index === 0 ? (

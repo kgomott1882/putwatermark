@@ -15,7 +15,6 @@ export function AboutPageContent() {
       <section className="landing-section border-b">
         <div className={pageContainerClass}>
           <LandingSectionHeader
-            aside="Why PutWatermark exists — and how we think about building tools."
             index="About"
             lead={
               <>

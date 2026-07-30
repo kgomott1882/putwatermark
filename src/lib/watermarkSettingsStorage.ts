@@ -56,7 +56,7 @@ export function getDefaultStoredWatermarkSettings(): StoredWatermarkSettings {
     tileGap: 120,
     watermarkMode: "single",
     watermarkOpacity: 70,
-    watermarkPosition: "bottom-right",
+    watermarkPosition: "top-left",
     watermarkText: "",
     watermarkType: "text",
   };

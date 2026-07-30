@@ -1,10 +1,24 @@
-import { VideoExportCancelledError, VideoExportFailedError } from "./watermarkVideoExport";
+import {
+  getResumeJobIdForVideoUpload,
+  uploadVideoWithTus,
+} from "./serverVideoTusUpload";
+import {
+  VideoExportCancelledError,
+  VideoExportFailedError,
+  VideoExportTimeoutError,
+} from "./watermarkVideoExport";
 
 export type ServerVideoExportStage =
   | "downloading"
   | "preparing"
   | "processing"
   | "uploading";
+
+/** Guard when a long-video step never responds (e.g. dropped connection). */
+const LONG_VIDEO_SPLIT_REQUEST_TIMEOUT_MS = 20 * 60 * 1000;
+const LONG_VIDEO_CHUNK_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
+const LONG_VIDEO_CONCAT_REQUEST_TIMEOUT_MS = 15 * 60 * 1000;
+const SHORT_SERVER_PROCESS_REQUEST_TIMEOUT_MS = 8 * 60 * 1000;
 
 const ALLOWED_VIDEO_UPLOAD_MIME_TYPES = new Set([
   "video/mp4",
@@ -35,60 +49,103 @@ export function resolveVideoUploadContentType(
   }
 }
 
-function getVideoUploadErrorMessage(responseText: string, status: number) {
-  let payload: {
-    error?: string;
-    message?: string;
-    statusCode?: number | string;
-  } | null = null;
-
-  if (responseText.trim()) {
-    try {
-      payload = JSON.parse(responseText) as {
-        error?: string;
-        message?: string;
-        statusCode?: number | string;
-      };
-    } catch {
-      payload = null;
-    }
-  }
-
-  const statusCode = Number(payload?.statusCode ?? status);
-  const errorCode = payload?.error?.toLowerCase() ?? "";
-
-  if (statusCode === 413 || errorCode === "payload too large") {
-    return "Video too large — video uploads are currently limited to ~50MB. Larger video support is coming soon.";
-  }
-
-  if (payload?.message) {
-    return `Video upload failed: ${payload.message}`;
-  }
-
-  if (payload?.error) {
-    return `Video upload failed: ${payload.error}`;
-  }
-
-  return `Video upload failed (HTTP ${status}). Please try again.`;
-}
-
-type ExportVideoOnServerInput = {
+type SharedServerExportInput = {
   abortSignal?: AbortSignal;
   duration: number;
+  exportId: string;
   fileSizeBytes: number;
   height: number;
   inputFileName: string;
+  onProcessingDetailChange?: (detail: string | null) => void;
   onProgress: (progress: number) => void;
   onStageChange: (stage: ServerVideoExportStage) => void;
   overlayPngBytes: Uint8Array;
   shouldCancel: () => boolean;
+  trimEndSeconds?: number;
+  trimStartSeconds?: number;
   videoBlob: Blob;
   width: number;
 };
 
+type ServerUploadTargetInput = Pick<
+  SharedServerExportInput,
+  | "abortSignal"
+  | "duration"
+  | "exportId"
+  | "fileSizeBytes"
+  | "height"
+  | "inputFileName"
+  | "onProgress"
+  | "onStageChange"
+  | "shouldCancel"
+  | "videoBlob"
+  | "width"
+>;
+
+type ExportVideoOnServerInput = SharedServerExportInput;
+
 function assertNotCancelled(shouldCancel: () => boolean) {
   if (shouldCancel()) {
     throw new VideoExportCancelledError();
+  }
+}
+
+function mergeAbortSignals(
+  ...signals: Array<AbortSignal | undefined>
+): AbortSignal {
+  const controller = new AbortController();
+
+  for (const signal of signals) {
+    if (!signal) {
+      continue;
+    }
+
+    if (signal.aborted) {
+      controller.abort();
+      return controller.signal;
+    }
+
+    signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+
+  return controller.signal;
+}
+
+async function fetchServerVideoStep(
+  url: string,
+  init: RequestInit,
+  {
+    abortSignal,
+    shouldCancel,
+    timeoutMessage,
+    timeoutMs,
+  }: {
+    abortSignal?: AbortSignal;
+    shouldCancel: () => boolean;
+    timeoutMessage: string;
+    timeoutMs: number;
+  },
+) {
+  assertNotCancelled(shouldCancel);
+
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const signal = mergeAbortSignals(abortSignal, timeoutSignal);
+
+  try {
+    return await fetch(url, { ...init, signal });
+  } catch (error) {
+    if (abortSignal?.aborted || shouldCancel()) {
+      throw new VideoExportCancelledError();
+    }
+
+    if (
+      error instanceof DOMException &&
+      (error.name === "TimeoutError" || error.name === "AbortError")
+    ) {
+      throw new VideoExportTimeoutError(timeoutMessage);
+    }
+
+    throw error;
   }
 }
 
@@ -101,68 +158,6 @@ function uint8ArrayToBase64(bytes: Uint8Array) {
   }
 
   return btoa(binary);
-}
-
-function uploadBlobWithProgress({
-  abortSignal,
-  blob,
-  contentType,
-  onProgress,
-  uploadUrl,
-}: {
-  abortSignal?: AbortSignal;
-  blob: Blob;
-  contentType: string;
-  onProgress: (progress: number) => void;
-  uploadUrl: string;
-}) {
-  return new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-
-    xhr.open("PUT", uploadUrl);
-    xhr.setRequestHeader("Content-Type", contentType);
-
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable && event.total > 0) {
-        onProgress(Math.round((event.loaded / event.total) * 40));
-      }
-    };
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve();
-        return;
-      }
-
-      reject(
-        new VideoExportFailedError(
-          getVideoUploadErrorMessage(xhr.responseText, xhr.status),
-        ),
-      );
-    };
-
-    xhr.onerror = () => {
-      reject(
-        new VideoExportFailedError(
-          "Video upload failed. Please check your connection and try again.",
-        ),
-      );
-    };
-
-    xhr.onabort = () => {
-      reject(new VideoExportCancelledError());
-    };
-
-    abortSignal?.addEventListener(
-      "abort",
-      () => {
-        xhr.abort();
-      },
-      { once: true },
-    );
-
-    xhr.send(blob);
-  });
 }
 
 function startIndeterminateProgress({
@@ -193,29 +188,33 @@ function startIndeterminateProgress({
   };
 }
 
-export async function exportVideoOnServer({
+async function prepareServerUploadTarget({
   abortSignal,
   duration,
+  exportId,
   fileSizeBytes,
   height,
   inputFileName,
   onProgress,
   onStageChange,
-  overlayPngBytes,
   shouldCancel,
   videoBlob,
   width,
-}: ExportVideoOnServerInput) {
+}: ServerUploadTargetInput) {
   assertNotCancelled(shouldCancel);
   onStageChange("preparing");
   onProgress(2);
 
+  const resumeJobId = getResumeJobIdForVideoUpload(inputFileName, fileSizeBytes);
+
   const uploadTargetResponse = await fetch("/api/watermark/video/upload-url", {
     body: JSON.stringify({
       duration,
+      exportId,
       fileName: inputFileName,
       fileSizeBytes,
       height,
+      resumeJobId,
       width,
     }),
     headers: {
@@ -237,9 +236,11 @@ export async function exportVideoOnServer({
   }
 
   const uploadTarget = (await uploadTargetResponse.json()) as {
+    bucketName: string;
     jobId: string;
+    tusEndpoint: string;
     uploadPath: string;
-    uploadUrl: string;
+    uploadToken: string;
   };
 
   assertNotCancelled(shouldCancel);
@@ -250,17 +251,289 @@ export async function exportVideoOnServer({
     inputFileName,
     videoBlob.type,
   );
-  const uploadBlob =
-    videoBlob.type === uploadContentType
-      ? videoBlob
-      : new Blob([videoBlob], { type: uploadContentType });
 
-  await uploadBlobWithProgress({
+  await uploadVideoWithTus({
     abortSignal,
-    blob: uploadBlob,
-    contentType: uploadContentType,
+    bucketName: uploadTarget.bucketName,
+    fileName: inputFileName,
+    fileSizeBytes,
+    inputFileName,
+    jobId: uploadTarget.jobId,
     onProgress,
-    uploadUrl: uploadTarget.uploadUrl,
+    shouldCancel,
+    tusEndpoint: uploadTarget.tusEndpoint,
+    uploadContentType,
+    uploadPath: uploadTarget.uploadPath,
+    uploadToken: uploadTarget.uploadToken,
+    videoBlob,
+  });
+
+  return uploadTarget;
+}
+
+async function downloadProcessedVideo({
+  abortSignal,
+  downloadUrl,
+  jobId,
+  onProgress,
+  onStageChange,
+  outputPath,
+  shouldCancel,
+}: {
+  abortSignal?: AbortSignal;
+  downloadUrl: string;
+  jobId: string;
+  onProgress: (progress: number) => void;
+  onStageChange: (stage: ServerVideoExportStage) => void;
+  outputPath: string;
+  shouldCancel: () => boolean;
+}) {
+  assertNotCancelled(shouldCancel);
+  onStageChange("downloading");
+  onProgress(92);
+
+  const downloadResponse = await fetch(downloadUrl, {
+    signal: abortSignal,
+  });
+
+  if (!downloadResponse.ok) {
+    throw new VideoExportFailedError(
+      "Processed video download failed. Please try exporting again.",
+    );
+  }
+
+  const exportedBlob = await downloadResponse.blob();
+
+  if (!exportedBlob.size) {
+    throw new VideoExportFailedError(
+      "Processed video download was empty. Please try again.",
+    );
+  }
+
+  onProgress(100);
+
+  void fetch("/api/watermark/video/cleanup", {
+    body: JSON.stringify({
+      jobId,
+      outputPath,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    keepalive: true,
+    method: "POST",
+  });
+
+  return exportedBlob;
+}
+
+export async function exportLongVideoOnServer(input: SharedServerExportInput) {
+  const uploadTarget = await prepareServerUploadTarget(input);
+
+  assertNotCancelled(input.shouldCancel);
+  input.onStageChange("processing");
+  input.onProgress(32);
+  input.onProcessingDetailChange?.("Splitting video on server…");
+
+  const splitResponse = await fetchServerVideoStep(
+    "/api/watermark/video/job",
+    {
+      body: JSON.stringify({
+        durationSeconds: input.duration,
+        exportId: input.exportId,
+        fileSizeBytes: input.fileSizeBytes,
+        height: input.height,
+        inputFileName: input.inputFileName,
+        jobId: uploadTarget.jobId,
+        videoPath: uploadTarget.uploadPath,
+        width: input.width,
+      }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+      signal: input.abortSignal,
+    },
+    {
+      abortSignal: input.abortSignal,
+      shouldCancel: input.shouldCancel,
+      timeoutMessage:
+        "Video split is taking longer than expected and may have failed. Keep this tab open and try again with a shorter clip if the problem persists.",
+      timeoutMs: LONG_VIDEO_SPLIT_REQUEST_TIMEOUT_MS,
+    },
+  );
+
+  if (splitResponse.status === 499) {
+    throw new VideoExportCancelledError();
+  }
+
+  if (!splitResponse.ok) {
+    const payload = (await splitResponse.json().catch(() => null)) as {
+      error?: string;
+    } | null;
+
+    throw new VideoExportFailedError(
+      payload?.error ?? "Long video split failed. Please try again.",
+    );
+  }
+
+  const splitPayload = (await splitResponse.json()) as {
+    job: {
+      chunkCount: number;
+      jobId: string;
+    };
+  };
+
+  const chunkCount = splitPayload.job.chunkCount;
+  const overlayBase64 = uint8ArrayToBase64(input.overlayPngBytes);
+  const chunkProgressSpan = Math.max(1, 50 / Math.max(chunkCount, 1));
+
+  input.onProgress(34);
+
+  for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
+    assertNotCancelled(input.shouldCancel);
+
+    const chunkProgressStart = 35 + Math.round(chunkIndex * chunkProgressSpan);
+    const chunkProgressEnd = 35 + Math.round((chunkIndex + 1) * chunkProgressSpan);
+    input.onProgress(chunkProgressStart);
+    input.onProcessingDetailChange?.(
+      `Processing chunk ${chunkIndex + 1} of ${chunkCount} on server…`,
+    );
+
+    const stopIndeterminateProgress = startIndeterminateProgress({
+      from: chunkProgressStart,
+      onProgress: input.onProgress,
+      shouldCancel: input.shouldCancel,
+      to: Math.max(chunkProgressStart, chunkProgressEnd - 1),
+    });
+
+    let chunkResponse: Response;
+
+    try {
+      chunkResponse = await fetchServerVideoStep(
+        `/api/watermark/video/job/${uploadTarget.jobId}/chunk/${chunkIndex}`,
+        {
+          body: JSON.stringify({
+            inputFileName: input.inputFileName,
+            overlayBase64,
+          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+          method: "POST",
+          signal: input.abortSignal,
+        },
+        {
+          abortSignal: input.abortSignal,
+          shouldCancel: input.shouldCancel,
+          timeoutMessage: `Video chunk ${chunkIndex + 1} of ${chunkCount} is taking longer than expected and may have failed. Try again with a shorter clip, or contact support if this keeps happening.`,
+          timeoutMs: LONG_VIDEO_CHUNK_REQUEST_TIMEOUT_MS,
+        },
+      );
+    } finally {
+      stopIndeterminateProgress();
+    }
+
+    if (chunkResponse.status === 499) {
+      throw new VideoExportCancelledError();
+    }
+
+    if (!chunkResponse.ok) {
+      const payload = (await chunkResponse.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+
+      throw new VideoExportFailedError(
+        payload?.error ??
+          `Video chunk ${chunkIndex + 1} failed. Please try again.`,
+      );
+    }
+
+    input.onProgress(chunkProgressEnd);
+  }
+
+  assertNotCancelled(input.shouldCancel);
+  input.onProgress(88);
+  input.onProcessingDetailChange?.("Joining processed video…");
+
+  const concatResponse = await fetchServerVideoStep(
+    `/api/watermark/video/job/${uploadTarget.jobId}/concat`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+      signal: input.abortSignal,
+    },
+    {
+      abortSignal: input.abortSignal,
+      shouldCancel: input.shouldCancel,
+      timeoutMessage:
+        "Video join is taking longer than expected and may have failed. Please try exporting again.",
+      timeoutMs: LONG_VIDEO_CONCAT_REQUEST_TIMEOUT_MS,
+    },
+  );
+
+  if (concatResponse.status === 499) {
+    throw new VideoExportCancelledError();
+  }
+
+  if (!concatResponse.ok) {
+    const payload = (await concatResponse.json().catch(() => null)) as {
+      error?: string;
+    } | null;
+
+    throw new VideoExportFailedError(
+      payload?.error ?? "Video concatenation failed. Please try again.",
+    );
+  }
+
+  const concatPayload = (await concatResponse.json()) as {
+    downloadUrl: string;
+    outputPath: string;
+  };
+
+  input.onProcessingDetailChange?.(null);
+
+  return downloadProcessedVideo({
+    abortSignal: input.abortSignal,
+    downloadUrl: concatPayload.downloadUrl,
+    jobId: uploadTarget.jobId,
+    onProgress: input.onProgress,
+    onStageChange: input.onStageChange,
+    outputPath: concatPayload.outputPath,
+    shouldCancel: input.shouldCancel,
+  });
+}
+
+export async function exportVideoOnServer({
+  abortSignal,
+  duration,
+  exportId,
+  fileSizeBytes,
+  height,
+  inputFileName,
+  onProgress,
+  onStageChange,
+  overlayPngBytes,
+  shouldCancel,
+  trimEndSeconds,
+  trimStartSeconds,
+  videoBlob,
+  width,
+}: ExportVideoOnServerInput) {
+  const uploadTarget = await prepareServerUploadTarget({
+    abortSignal,
+    duration,
+    exportId,
+    fileSizeBytes,
+    height,
+    inputFileName,
+    onProgress,
+    onStageChange,
+    shouldCancel,
+    videoBlob,
+    width,
   });
 
   assertNotCancelled(shouldCancel);
@@ -277,19 +550,39 @@ export async function exportVideoOnServer({
   let processResponse: Response;
 
   try {
-    processResponse = await fetch("/api/watermark/video", {
-      body: JSON.stringify({
-        inputFileName,
-        jobId: uploadTarget.jobId,
-        overlayBase64: uint8ArrayToBase64(overlayPngBytes),
-        videoPath: uploadTarget.uploadPath,
-      }),
-      headers: {
-        "Content-Type": "application/json",
+    processResponse = await fetchServerVideoStep(
+      "/api/watermark/video",
+      {
+        body: JSON.stringify({
+          durationSeconds: duration,
+          exportId,
+          fileSizeBytes,
+          height,
+          inputFileName,
+          jobId: uploadTarget.jobId,
+          overlayBase64: uint8ArrayToBase64(overlayPngBytes),
+          trimDurationSeconds:
+            trimEndSeconds !== undefined
+              ? Math.max(0, trimEndSeconds - (trimStartSeconds ?? 0))
+              : undefined,
+          trimStartSeconds,
+          videoPath: uploadTarget.uploadPath,
+          width,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+        signal: abortSignal,
       },
-      method: "POST",
-      signal: abortSignal,
-    });
+      {
+        abortSignal,
+        shouldCancel,
+        timeoutMessage:
+          "Server video processing is taking longer than expected and may have failed. Try a shorter clip or try again.",
+        timeoutMs: SHORT_SERVER_PROCESS_REQUEST_TIMEOUT_MS,
+      },
+    );
   } finally {
     stopIndeterminateProgress();
   }
@@ -314,41 +607,13 @@ export async function exportVideoOnServer({
     outputPath: string;
   };
 
-  assertNotCancelled(shouldCancel);
-  onStageChange("downloading");
-  onProgress(92);
-
-  const downloadResponse = await fetch(processed.downloadUrl, {
-    signal: abortSignal,
+  return downloadProcessedVideo({
+    abortSignal,
+    downloadUrl: processed.downloadUrl,
+    jobId: processed.jobId,
+    onProgress,
+    onStageChange,
+    outputPath: processed.outputPath,
+    shouldCancel,
   });
-
-  if (!downloadResponse.ok) {
-    throw new VideoExportFailedError(
-      "Processed video download failed. Please try exporting again.",
-    );
-  }
-
-  const exportedBlob = await downloadResponse.blob();
-
-  if (!exportedBlob.size) {
-    throw new VideoExportFailedError(
-      "Processed video download was empty. Please try again.",
-    );
-  }
-
-  onProgress(100);
-
-  void fetch("/api/watermark/video/cleanup", {
-    body: JSON.stringify({
-      jobId: processed.jobId,
-      outputPath: processed.outputPath,
-    }),
-    headers: {
-      "Content-Type": "application/json",
-    },
-    keepalive: true,
-    method: "POST",
-  });
-
-  return exportedBlob;
 }

@@ -182,8 +182,12 @@ export function BlogSignPdfArticle({ post }: BlogSignPdfArticleProps) {
                     body: "Apply the same saved signature or initials to every page that requires it before you export.",
                   },
                   {
+                    title: "Add fill-in text fields (optional).",
+                    body: "Use Add Text to place typed fields on pages that need dates, names, or other fill-ins. Each fill page costs 55 credits on export (50 for the page plus a 5-credit fill surcharge).",
+                  },
+                  {
                     title: "Download your signed PDF.",
-                    body: "The rest of the document is untouched — your signature is added as an overlay, and the underlying text stays selectable and searchable, so the document is still fully usable, not flattened into an image.",
+                    body: "The rest of the document is untouched — your signatures, initials, and fill-text fields are added as overlays, and the underlying text stays selectable and searchable, so the document is still fully usable, not flattened into an image.",
                   },
                 ]}
               />

@@ -244,7 +244,11 @@ function UploadVisual() {
     event.preventDefault();
     event.stopPropagation();
     setIsDragging(false);
-    void openInEditor(Array.from(event.dataTransfer.files));
+    void openInEditor(
+      Array.from(
+        (event.dataTransfer as unknown as { files: FileList }).files,
+      ),
+    );
   }
 
   return (
@@ -258,7 +262,7 @@ function UploadVisual() {
         } ${isOpening ? "pointer-events-none opacity-70" : ""}`}
         onClick={(event) => {
           event.stopPropagation();
-          fileInputRef.current?.click();
+          (fileInputRef.current as unknown as { click?: () => void } | null)?.click?.();
         }}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
@@ -267,7 +271,7 @@ function UploadVisual() {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             event.stopPropagation();
-            fileInputRef.current?.click();
+            (fileInputRef.current as unknown as { click?: () => void } | null)?.click?.();
           }
         }}
         role="button"
@@ -292,13 +296,17 @@ function UploadVisual() {
         className="hidden"
         multiple
         onChange={(event) => {
-          const files = event.target.files;
+          const input = event.target as unknown as {
+            files: FileList | null;
+            value: string;
+          };
+          const files = input.files;
 
           if (files?.length) {
             void openInEditor(Array.from(files));
           }
 
-          event.target.value = "";
+          input.value = "";
         }}
         ref={fileInputRef}
         type="file"
