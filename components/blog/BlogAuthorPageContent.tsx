@@ -3,7 +3,7 @@ import { BlogAuthorByline } from "./BlogAuthorByline";
 import { BlogSidebar } from "./BlogSidebar";
 import { Footer } from "../Footer";
 import { pageContainerClass } from "../pageContainer";
-import { getAuthorInitials, getBlogAuthor } from "@/lib/blog/authors";
+import { getBlogAuthor } from "@/lib/blog/authors";
 import { getPostsByAuthor } from "@/lib/blog/posts";
 
 type BlogAuthorPageContentProps = {
@@ -32,8 +32,13 @@ export function BlogAuthorPageContent({ authorSlug }: BlogAuthorPageContentProps
           <div className="mt-14 grid gap-12 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:gap-16">
             <div>
               <div className="flex items-start gap-5">
-                <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-beige/10 bg-night-elevated text-2xl font-semibold text-sand">
-                  {getAuthorInitials(author.name)}
+                <span className="block h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-beige/10 bg-night-elevated">
+                  <img
+                    alt={`${author.name} profile photo`}
+                    className="h-full w-full object-cover"
+                    decoding="async"
+                    src={author.avatarImage}
+                  />
                 </span>
 
                 <div>

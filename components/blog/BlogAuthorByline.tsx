@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { BlogAuthor } from "@/lib/blog/authors";
-import { getAuthorInitials } from "@/lib/blog/authors";
 import type { BlogPost } from "@/lib/blog/posts";
 
 type BlogAuthorBylineProps = {
@@ -33,8 +32,13 @@ export function BlogAuthorByline({
         className="group shrink-0"
         href={authorHref}
       >
-        <span className="flex h-11 w-11 items-center justify-center rounded-full border border-beige/10 bg-night-elevated text-sm font-semibold text-sand transition group-hover:border-sand/40 group-hover:text-beige">
-          {getAuthorInitials(author.name)}
+        <span className="block h-12 w-12 overflow-hidden rounded-xl border border-beige/10 bg-night-elevated transition group-hover:border-sand/40">
+          <img
+            alt={`${author.name} profile photo`}
+            className="h-full w-full object-cover"
+            decoding="async"
+            src={author.avatarImage}
+          />
         </span>
       </Link>
 
