@@ -275,6 +275,7 @@ import { VideoBlurPanel } from "../../../components/watermark/VideoBlurPanel";
 import { VideoOverviewPanel } from "../../../components/watermark/VideoOverviewPanel";
 import { VideoOverviewPlayer } from "../../../components/watermark/VideoOverviewPlayer";
 import { WatermarkAdjustSliders } from "../../../components/watermark/WatermarkAdjustSliders";
+import { WatermarkMobileBar } from "../../../components/watermark/WatermarkMobileBar";
 import {
   type QuickTemplateIcon,
   WatermarkPresetControls,
@@ -290,6 +291,7 @@ import {
   type ExportLoginGatePhase,
 } from "../../../components/watermark/ExportLoginGateModal";
 import { VideoServerProcessingPanel } from "../../../components/watermark/VideoServerProcessingPanel";
+import { EditorExitConfirmModal } from "../../../components/watermark/EditorExitConfirmModal";
 import {
   EditorFormatUploadModal,
   type EditorFormatUploadKind,
@@ -400,7 +402,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 const imageExportMimeType = "image/jpeg";
 const imageExportQuality = IMAGE_EXPORT_JPEG_QUALITY;
@@ -961,6 +963,7 @@ async function sampleOverlayPngBytesCenter(
 
 export default function WatermarkPage() {
   const pathname = usePathname();
+  const router = useRouter();
   const isEditorRoute =
     pathname === "/watermark" || pathname.startsWith("/watermark/");
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1085,6 +1088,7 @@ export default function WatermarkPage() {
     useState(false);
   const [showUnsignedPdfExportConfirm, setShowUnsignedPdfExportConfirm] =
     useState(false);
+  const [showEditorExitConfirm, setShowEditorExitConfirm] = useState(false);
   const [isPdfLoading, setIsPdfLoading] = useState(false);
   const [pdfExportProgress, setPdfExportProgress] = useState<{
     current: number;
@@ -2840,26 +2844,39 @@ export default function WatermarkPage() {
   }
 
   useEffect(() => {
-    const panel = previewPanelRef.current;
+    const panel = previewCheckerboardRef.current ?? previewPanelRef.current;
 
     if (!panel) {
       return;
     }
 
     function updateCanvasSize() {
-      if (!panel) {
+      const sizeNode = previewCheckerboardRef.current ?? previewPanelRef.current;
+
+      if (!sizeNode) {
         return;
       }
 
       const pixelRatio = Math.min(window.devicePixelRatio || 1, 2.5);
       const zoomScale = previewZoomPercent / 100;
-      const baseWidth = Math.max(320, Math.floor(panel.clientWidth));
-      const baseHeight = Math.max(320, Math.floor(panel.clientHeight));
+      const styles = window.getComputedStyle(sizeNode);
+      const paddingX =
+        parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
+      const paddingY =
+        parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
+      const baseWidth = Math.max(
+        240,
+        Math.floor(sizeNode.clientWidth - paddingX),
+      );
+      const baseHeight = Math.max(
+        240,
+        Math.floor(sizeNode.clientHeight - paddingY),
+      );
 
       setCanvasSize({
-        height: Math.max(320, Math.floor(baseHeight * zoomScale)),
+        height: Math.max(240, Math.floor(baseHeight * zoomScale)),
         pixelRatio,
-        width: Math.max(320, Math.floor(baseWidth * zoomScale)),
+        width: Math.max(240, Math.floor(baseWidth * zoomScale)),
       });
     }
 
@@ -8162,6 +8179,16 @@ export default function WatermarkPage() {
     void clearEditorSession();
   }
 
+  function handleEditorExitRequest() {
+    setShowEditorExitConfirm(true);
+  }
+
+  function handleEditorExitConfirm() {
+    setShowEditorExitConfirm(false);
+    clearAllMedia();
+    router.push("/");
+  }
+
   async function materializeRotationIfNeeded() {
     if (!image || rotationAngle === 0) {
       return;
@@ -9590,28 +9617,36 @@ export default function WatermarkPage() {
           : formatUploadPrompt === "video"
             ? "video"
             : null;
+  const showMobileBottomDock = hasMedia && showEditorPanel;
+  const showMobileFormatToolRail = showEditorPanel && hasMedia;
 
   return (
     <div className="flex h-[100svh] w-full flex-col overflow-hidden">
       {authChecked && isAuthenticated ? (
-        <SiteNavClient
-          editorAccount={{
-            creditBalance,
-            userEmail,
-          }}
-          isLoggedIn
-          showInEditor
-        />
+        <div className="hidden shrink-0 md:block">
+          <SiteNavClient
+            editorAccount={{
+              creditBalance,
+              userEmail,
+            }}
+            isLoggedIn
+            showInEditor
+          />
+        </div>
       ) : null}
       <main className="editor-theme flex min-h-0 flex-1 w-full flex-col overflow-hidden">
       <WatermarkFontLoader />
       <motion.div
-        className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[auto_minmax(0,1fr)] md:grid-rows-none"
+        className="flex min-h-0 flex-1 flex-col md:grid md:grid-cols-[auto_minmax(0,1fr)]"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: "easeOut" }}
       >
-        <div className="relative flex min-h-0 max-h-full min-w-0 flex-col overflow-hidden md:flex-row">
+        <div
+          className={`relative order-2 flex min-h-0 min-w-0 flex-col overflow-hidden border-t border-ed-border bg-ed-panel shadow-[0_-8px_32px_rgba(43,43,43,0.08)] max-md:h-auto max-md:max-h-[min(40svh,360px)] md:order-none md:h-full md:max-h-full md:flex-row md:border-t-0 md:border-r md:shadow-none ${
+            showMobileBottomDock ? "max-md:shrink-0" : "max-md:hidden"
+          }`}
+        >
           <input
             accept={acceptedMediaInputTypes}
             className="hidden"
@@ -9742,11 +9777,13 @@ export default function WatermarkPage() {
             type="file"
           />
 
-          <ToolIconRail
-            activePanel={highlightedEditorPanel}
-            mediaKind={mediaKind}
-            onSelectPanel={handleEditorPanelSelect}
-          />
+          <div className="hidden md:contents">
+            <ToolIconRail
+              activePanel={highlightedEditorPanel}
+              mediaKind={mediaKind}
+              onSelectPanel={handleEditorPanelSelect}
+            />
+          </div>
 
           {showEditorPanel ? (
             <EditorToolPanel
@@ -9757,11 +9794,13 @@ export default function WatermarkPage() {
               toolRail={
                 activeEditorPanel === "photos" ? (
                   <div className="flex shrink-0 flex-col md:flex-row">
-                    <PhotosToolRail
-                      activeTool={activePhotoTool}
-                      imageToolsEnabled={imageToolsEnabled}
-                      onSelectTool={handlePhotoToolSelect}
-                    />
+                    <div className="hidden md:contents">
+                      <PhotosToolRail
+                        activeTool={activePhotoTool}
+                        imageToolsEnabled={imageToolsEnabled}
+                        onSelectTool={handlePhotoToolSelect}
+                      />
+                    </div>
                     {activePhotoTool === "watermark" ? (
                       <WatermarkToolRail
                         activeTool={activeWatermarkTool}
@@ -9772,10 +9811,12 @@ export default function WatermarkPage() {
                   </div>
                 ) : activeEditorPanel === "pdfDocs" ? (
                   <div className="flex shrink-0 flex-col md:flex-row">
-                    <PdfDocsToolRail
-                      activeTool={activePdfTool}
-                      onSelectTool={handlePdfDocToolSelect}
-                    />
+                    <div className="hidden md:contents">
+                      <PdfDocsToolRail
+                        activeTool={activePdfTool}
+                        onSelectTool={handlePdfDocToolSelect}
+                      />
+                    </div>
                     {activePdfTool === "watermark" ? (
                       <WatermarkToolRail
                         activeTool={activeWatermarkTool}
@@ -9786,13 +9827,15 @@ export default function WatermarkPage() {
                   </div>
                 ) : activeEditorPanel === "video" ? (
                   <div className="flex shrink-0 flex-col md:flex-row">
-                    <VideoToolRail
-                      activeTool={activeVideoTool}
-                      hasVideo={videoToolsEnabled}
-                      onReshortenVideo={beginReshortenSession}
-                      onSelectTool={handleVideoToolSelect}
-                      showReshortenOnTrim={showReshortenVideoAction}
-                    />
+                    <div className="hidden md:contents">
+                      <VideoToolRail
+                        activeTool={activeVideoTool}
+                        hasVideo={videoToolsEnabled}
+                        onReshortenVideo={beginReshortenSession}
+                        onSelectTool={handleVideoToolSelect}
+                        showReshortenOnTrim={showReshortenVideoAction}
+                      />
+                    </div>
                     {activeVideoTool === "watermark" ? (
                       <WatermarkToolRail
                         activeTool={activeWatermarkTool}
@@ -10092,6 +10135,7 @@ export default function WatermarkPage() {
                   </EditorCard>
                 ) : (
                 <>
+                <div className="hidden space-y-2 md:block">
                 {renderQuickTemplates(
                   "text-template-selection",
                   watermarkTemplates,
@@ -10198,6 +10242,110 @@ export default function WatermarkPage() {
                       videoDurationSeconds={videoDuration}
                   type="text"
                 />
+                </div>
+                <div className="md:hidden">
+                  <WatermarkMobileBar
+                    activeLayerId={activeTextLayerId}
+                    fontFamilyGroups={watermarkFontFamilyGroups}
+                    fontSizeScale={activeTextLayer.fontSizeScale}
+                    layer={activeTextLayer}
+                    layerCount={textLayers.length}
+                    layerIds={textLayers.map((layer) => layer.id)}
+                    mode={watermarkMode}
+                    onAddLayer={addTextLayer}
+                    onFontFamilyChange={(value) => {
+                      if (shouldIgnoreManualSettingsChange()) {
+                        return;
+                      }
+
+                      updateTextLayer(activeTextLayerId, { fontFamily: value });
+                      handleFontFamilyChange(value);
+                    }}
+                    onFontSizeScaleChange={(value) => {
+                      if (shouldIgnoreManualSettingsChange()) {
+                        return;
+                      }
+
+                      updateTextLayer(activeTextLayerId, { fontSizeScale: value });
+                      handleFontSizeScaleChange(value);
+                    }}
+                    onFontWeightChange={(value) => {
+                      if (shouldIgnoreManualSettingsChange()) {
+                        return;
+                      }
+
+                      updateTextLayer(activeTextLayerId, { fontWeight: value });
+                      handleFontWeightChange(value);
+                    }}
+                    onLayerSelect={(id) => {
+                      setActiveTextLayerId(id);
+                      const layer = textLayers.find((entry) => entry.id === id);
+
+                      if (layer) {
+                        syncLegacyFromTextLayer(layer);
+                      }
+
+                      setIsWatermarkHovering(false);
+                    }}
+                    onModeChange={(value) => {
+                      clearActiveTemplates();
+                      setWatermarkMode(value);
+                      setIsWatermarkHovering(false);
+                    }}
+                    onRemoveLayer={removeTextLayer}
+                    onTextChange={(value) => {
+                      updateTextLayer(activeTextLayerId, { text: value });
+                      setWatermarkText(value);
+                    }}
+                    onTextColorChange={(value) => {
+                      if (shouldIgnoreManualSettingsChange()) {
+                        return;
+                      }
+
+                      updateTextLayer(activeTextLayerId, { textColor: value });
+                      handleTextColorChange(value);
+                    }}
+                    onTileAngleChange={(value) => {
+                      if (shouldIgnoreManualSettingsChange()) {
+                        return;
+                      }
+
+                      clearActiveTextTemplate();
+                      setTileAngle(value);
+                    }}
+                    onTileDensityChange={(value) => {
+                      if (shouldIgnoreManualSettingsChange()) {
+                        return;
+                      }
+
+                      clearActiveTextTemplate();
+                      setTileDensity(value);
+                    }}
+                    onTileGapChange={(value) => {
+                      if (shouldIgnoreManualSettingsChange()) {
+                        return;
+                      }
+
+                      clearActiveTextTemplate();
+                      setTileGap(value);
+                    }}
+                    onWatermarkOpacityChange={(value) => {
+                      updateTextLayer(activeTextLayerId, { opacity: value });
+                      handleWatermarkOpacityChange(value);
+                    }}
+                    tileAngle={tileAngle}
+                    tileDensity={tileDensity}
+                    tileGap={tileGap}
+                    tileQuickTemplates={renderQuickTemplates(
+                      "text-template-selection-mobile",
+                      watermarkTemplates,
+                      activeTextTemplate,
+                      applyTextTemplate,
+                    )}
+                    type="text"
+                    watermarkOpacity={activeTextLayer.opacity}
+                  />
+                </div>
                 </>
                 )
               ) : null}
@@ -10218,6 +10366,7 @@ export default function WatermarkPage() {
                   </EditorCard>
                 ) : (
                 <>
+                <div className="hidden space-y-2 md:block">
                 {renderQuickTemplates(
                   "logo-template-selection",
                   logoWatermarkTemplates,
@@ -10291,6 +10440,83 @@ export default function WatermarkPage() {
                       tileGap={tileGap}
                   type="logo"
                 />
+                </div>
+                <div className="md:hidden">
+                  <WatermarkMobileBar
+                    activeLayerId={activeLogoLayerId}
+                    fontSizeScale={activeLogoLayer.fontSizeScale}
+                    layer={activeLogoLayer}
+                    layerCount={logoLayers.length}
+                    layerIds={logoLayers.map((layer) => layer.id)}
+                    logoError={logoError}
+                    mode={watermarkMode}
+                    onAddLayer={addLogoLayer}
+                    onFontSizeScaleChange={(value) => {
+                      if (shouldIgnoreManualSettingsChange()) {
+                        return;
+                      }
+
+                      updateLogoLayer(activeLogoLayerId, { fontSizeScale: value });
+                      handleFontSizeScaleChange(value);
+                    }}
+                    onLayerSelect={(id) => {
+                      setActiveLogoLayerId(id);
+                      const layer = logoLayers.find((entry) => entry.id === id);
+
+                      if (layer) {
+                        syncLegacyFromLogoLayer(layer);
+                      }
+
+                      setIsWatermarkHovering(false);
+                    }}
+                    onLogoPick={openLogoPicker}
+                    onModeChange={(value) => {
+                      clearActiveTemplates();
+                      setWatermarkMode(value);
+                      setIsWatermarkHovering(false);
+                    }}
+                    onRemoveLayer={removeLogoLayer}
+                    onTileAngleChange={(value) => {
+                      if (shouldIgnoreManualSettingsChange()) {
+                        return;
+                      }
+
+                      clearActiveLogoTemplate();
+                      setTileAngle(value);
+                    }}
+                    onTileDensityChange={(value) => {
+                      if (shouldIgnoreManualSettingsChange()) {
+                        return;
+                      }
+
+                      clearActiveLogoTemplate();
+                      setTileDensity(value);
+                    }}
+                    onTileGapChange={(value) => {
+                      if (shouldIgnoreManualSettingsChange()) {
+                        return;
+                      }
+
+                      clearActiveLogoTemplate();
+                      setTileGap(value);
+                    }}
+                    onWatermarkOpacityChange={(value) => {
+                      updateLogoLayer(activeLogoLayerId, { opacity: value });
+                      handleWatermarkOpacityChange(value);
+                    }}
+                    tileAngle={tileAngle}
+                    tileDensity={tileDensity}
+                    tileGap={tileGap}
+                    tileQuickTemplates={renderQuickTemplates(
+                      "logo-template-selection-mobile",
+                      logoWatermarkTemplates,
+                      activeLogoTemplate,
+                      applyLogoTemplate,
+                    )}
+                    type="logo"
+                    watermarkOpacity={activeLogoLayer.opacity}
+                  />
+                </div>
                 </>
                 )
               ) : null}
@@ -10732,25 +10958,37 @@ export default function WatermarkPage() {
                   width={videoSize?.width}
                 />
               ) : activeVideoTool === "caption" ? (
-                <VideoCaptionPanel
-                  activeLayerId={activeVideoCaptionLayerId}
-                  captionsEnabled={captionsMasterEnabled}
-                  fontFamilyGroups={watermarkFontFamilyGroups}
-                  layers={videoCaptionLayers}
-                  onActiveLayerSelect={setActiveVideoCaptionLayerId}
-                  onAddLayer={addVideoCaptionLayer}
-                  onCaptionsEnabledChange={setCaptionsMasterEnabled}
-                  onLayerChange={(layerId, patch) => {
-                    updateVideoCaptionLayer(layerId, patch);
+                <>
+                  <VideoCaptionPanel
+                    activeLayerId={activeVideoCaptionLayerId}
+                    captionsEnabled={captionsMasterEnabled}
+                    fontFamilyGroups={watermarkFontFamilyGroups}
+                    layers={videoCaptionLayers}
+                    onActiveLayerSelect={setActiveVideoCaptionLayerId}
+                    onAddLayer={addVideoCaptionLayer}
+                    onCaptionsEnabledChange={setCaptionsMasterEnabled}
+                    onLayerChange={(layerId, patch) => {
+                      updateVideoCaptionLayer(layerId, patch);
 
-                    if (patch.fontFamily) {
-                      void loadWatermarkFont(patch.fontFamily, 700);
-                    }
-                  }}
-                  onPresetSelect={handleCaptionPresetSelect}
-                  onRemoveLayer={removeVideoCaptionLayer}
-                  videoDurationSeconds={videoDuration}
-                />
+                      if (patch.fontFamily) {
+                        void loadWatermarkFont(patch.fontFamily, 700);
+                      }
+                    }}
+                    onPresetSelect={handleCaptionPresetSelect}
+                    onRemoveLayer={removeVideoCaptionLayer}
+                    videoDurationSeconds={videoDuration}
+                  />
+                  {activeVideoCaptionLayer ? (
+                    <div className="md:hidden">
+                      <VideoCaptionHeadlinePanel
+                        caption={activeVideoCaptionLayer}
+                        onCaptionChange={(patch) => {
+                          updateActiveVideoCaptionLayer(patch);
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                </>
               ) : activeVideoTool === "trim" ? (
                 <VideoTrimPanel
                   canRedoVideoShorten={canRedoVideoShorten}
@@ -10817,7 +11055,7 @@ export default function WatermarkPage() {
         </div>
 
         <section
-          className="relative flex min-h-0 min-w-0 flex-col overflow-hidden"
+          className="relative order-1 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:order-none"
           ref={previewPanelRef}
         >
           {isRestoringAnonymousDraft ? (
@@ -10837,8 +11075,8 @@ export default function WatermarkPage() {
           ) : null}
 
           <div
-            className={`flex min-h-0 min-w-0 flex-1 ${
-              showPreviewSplitAside ? "flex-row" : "flex-col"
+            className={`flex min-h-0 min-w-0 flex-1 flex-col ${
+              showPreviewSplitAside ? "md:flex-row" : ""
             }`}
           >
             <div
@@ -10846,16 +11084,47 @@ export default function WatermarkPage() {
                 showVideoTimelineDock ? "overflow-hidden" : ""
               }`}
             >
+              <div className="shrink-0 border-b border-ed-border bg-ed-panel md:hidden">
+                <ToolIconRail
+                  activePanel={highlightedEditorPanel}
+                  mediaKind={mediaKind}
+                  onSelectPanel={handleEditorPanelSelect}
+                />
+              </div>
+              {showMobileFormatToolRail ? (
+                <div className="shrink-0 border-b border-ed-border bg-ed-panel md:hidden">
+                  {activeEditorPanel === "photos" ? (
+                    <PhotosToolRail
+                      activeTool={activePhotoTool}
+                      imageToolsEnabled={imageToolsEnabled}
+                      onSelectTool={handlePhotoToolSelect}
+                    />
+                  ) : activeEditorPanel === "pdfDocs" ? (
+                    <PdfDocsToolRail
+                      activeTool={activePdfTool}
+                      onSelectTool={handlePdfDocToolSelect}
+                    />
+                  ) : activeEditorPanel === "video" ? (
+                    <VideoToolRail
+                      activeTool={activeVideoTool}
+                      hasVideo={videoToolsEnabled}
+                      onReshortenVideo={beginReshortenSession}
+                      onSelectTool={handleVideoToolSelect}
+                      showReshortenOnTrim={showReshortenVideoAction}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
               <div
                 ref={previewCheckerboardRef}
                 className={`editor-checkerboard group relative flex min-h-0 flex-1 items-center justify-center ${
-                  showVideoTimelineDock || showPreviewSplitAside
+                  showVideoTimelineDock
                     ? previewZoomPercent > PREVIEW_ZOOM_DEFAULT && hasPreviewContent
-                      ? "overflow-auto p-4 md:p-6"
-                      : "overflow-hidden p-4 md:p-6"
+                      ? "overflow-auto p-3 md:p-6"
+                      : "overflow-hidden p-3 md:p-6"
                     : hasPreviewContent
-                      ? "overflow-auto p-4 md:p-6"
-                      : "p-4 md:p-6"
+                      ? "overflow-auto p-3 md:p-6"
+                      : "overflow-hidden p-4 md:p-6"
                 }`}
               >
             {isPdfLoading ? (
@@ -10867,10 +11136,10 @@ export default function WatermarkPage() {
               </div>
             ) : hasPreviewContent ? (
               <>
-                <div className="flex shrink-0 items-center justify-center">
+                <div className="flex max-h-full max-w-full min-w-0 items-center justify-center">
             {(mediaKind === "image" || mediaKind === "pdf") && image ? (
               <canvas
-                className={`touch-none shadow-lg ${
+                className={`max-h-full max-w-full touch-none shadow-lg ${
                   isSignatureDropTarget ? "ring-2 ring-signal ring-offset-2" : ""
                 }`}
                 onDragLeave={handleSignatureDragLeave}
@@ -10993,7 +11262,7 @@ export default function WatermarkPage() {
                 />
               </>
             ) : (
-              <div className="w-full max-w-xl">
+              <div className="flex w-full max-w-sm items-center justify-center px-2 md:max-w-xl">
                 <UploadZone
                   onClick={openFilePicker}
                   onDragOver={handleDragOver}
@@ -11144,13 +11413,13 @@ export default function WatermarkPage() {
             </div>
 
             {showWatermarkAdjustAside ? (
-              <aside className="flex h-full w-[17rem] shrink-0 flex-col overflow-y-auto border-l border-ed-border bg-ed-panel px-2.5 py-2">
+              <aside className="hidden h-full w-[17rem] shrink-0 flex-col overflow-y-auto border-l border-ed-border bg-ed-panel px-2.5 py-2 md:flex">
                 <div className="space-y-2">{renderWatermarkPreviewAside()}</div>
               </aside>
             ) : null}
 
             {showCaptionHeadlineAside ? (
-              <aside className="flex h-full w-[17rem] shrink-0 flex-col overflow-y-auto border-l border-ed-border bg-ed-panel px-2.5 py-2">
+              <aside className="hidden h-full w-[17rem] shrink-0 flex-col overflow-y-auto border-l border-ed-border bg-ed-panel px-2.5 py-2 md:flex">
                 <VideoCaptionHeadlinePanel
                   caption={activeVideoCaptionLayer!}
                   onCaptionChange={(patch) => {
@@ -11187,7 +11456,7 @@ export default function WatermarkPage() {
         exportDisabled={isExportDisabled}
         exportLabel={exportButtonLabel}
         exportTitle={exportDisabledReason}
-        onExit={clearAllMedia}
+        onExit={handleEditorExitRequest}
         onExport={handleExport}
         onRedo={redoWatermarkSettings}
         onUndo={undoWatermarkSettings}
@@ -11204,6 +11473,13 @@ export default function WatermarkPage() {
         onContinue={handleContinueWithWatermarkedExport}
         open={showWatermarkedExportUpsell}
       />
+
+      {showEditorExitConfirm ? (
+        <EditorExitConfirmModal
+          onCancel={() => setShowEditorExitConfirm(false)}
+          onConfirm={handleEditorExitConfirm}
+        />
+      ) : null}
 
       {showUnsignedPdfExportConfirm ? (
         <UnsignedPdfExportConfirmModal
@@ -11614,22 +11890,25 @@ function EditorMediaActionButtons({
 function UploadZone({ onClick, onDragOver, onDrop }: UploadZoneProps) {
   return (
     <div
-      className="cursor-pointer rounded-2xl border border-dashed border-ed-border bg-ed-bg-card px-6 py-12 text-center transition hover:border-sand hover:bg-ed-bg-card"
+      className="w-full cursor-pointer rounded-2xl border border-dashed border-ed-border bg-ed-bg-card px-5 py-8 text-center transition hover:border-sand hover:bg-ed-bg-card md:px-6 md:py-12"
       onClick={onClick}
       onDragOver={onDragOver}
       onDrop={onDrop}
       role="button"
       tabIndex={0}
     >
-      <p className="text-lg font-semibold text-ed-fg">
+      <p className="text-base font-semibold text-ed-fg md:text-lg">
         Drop your images, PDF, or video here
       </p>
       <p className="mt-2 text-sm text-ed-fg-muted">
         Select multiple images for batch watermarking, one PDF, or one video
       </p>
-      <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-ed-fg-muted">
+      <p className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-ed-fg-muted md:mt-6 md:tracking-[0.18em]">
         JPG, PNG, WebP, PDF, MP4, MOV, WebM
       </p>
+      <span className="mt-4 inline-flex rounded-xl bg-signal px-5 py-2.5 text-sm font-semibold text-white md:hidden">
+        Choose file
+      </span>
     </div>
   );
 }

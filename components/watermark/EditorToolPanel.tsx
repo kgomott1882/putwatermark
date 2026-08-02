@@ -15,6 +15,7 @@ const inactiveButtonClassName =
 
 type EditorToolPanelProps = {
   children: ReactNode;
+  className?: string;
   icon?: ReactNode;
   instant?: boolean;
   onClose: () => void;
@@ -24,6 +25,7 @@ type EditorToolPanelProps = {
 
 export function EditorToolPanel({
   children,
+  className = "",
   icon,
   instant = false,
   onClose,
@@ -32,11 +34,11 @@ export function EditorToolPanel({
 }: EditorToolPanelProps) {
   return (
     <aside
-      className={`flex min-h-0 w-full shrink-0 flex-col border-ed-border bg-ed-panel max-md:max-h-[min(42svh,360px)] max-md:border-b md:h-full md:border-r ${
+      className={`flex min-h-0 w-full flex-col bg-ed-panel max-md:min-h-0 max-md:flex-1 max-md:overflow-hidden md:h-full md:shrink-0 md:border-r md:border-ed-border ${
         toolRail ? "md:w-[24.5rem]" : "md:w-[19.5rem]"
-      }`}
+      } ${className}`}
     >
-      <header className="flex shrink-0 items-center gap-1.5 border-b border-ed-border bg-ed-bg-card px-2.5 py-2 shadow-sm">
+      <header className="hidden shrink-0 items-center gap-1.5 border-b border-ed-border bg-ed-bg-card px-2.5 py-2 shadow-sm md:flex">
         <button
           aria-hidden
           className="editor-secondary-button flex h-6 w-6 items-center justify-center rounded-md text-ed-fg"
@@ -65,13 +67,13 @@ export function EditorToolPanel({
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
         {toolRail ? (
-          <div className="flex shrink-0 flex-col overflow-hidden md:overflow-y-auto">
+          <div className="z-10 flex shrink-0 flex-col border-b border-ed-border bg-ed-panel md:overflow-y-auto md:border-b-0">
             {toolRail}
           </div>
         ) : null}
         <motion.div
           animate={{ opacity: 1, x: 0 }}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2.5 py-2"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2 py-1.5 md:px-2.5 md:py-2"
           initial={instant ? false : { opacity: 0, x: 14 }}
           transition={instant ? { duration: 0 } : { duration: 0.38, ease: panelEase }}
         >

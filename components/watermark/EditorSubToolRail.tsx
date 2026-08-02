@@ -19,7 +19,7 @@ export function EditorSubToolRail({ ariaLabel, children }: EditorSubToolRailProp
   return (
     <nav
       aria-label={ariaLabel}
-      className="flex w-full shrink-0 flex-row gap-1 overflow-x-auto overscroll-x-contain border-b border-ed-border bg-ed-panel px-1.5 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] md:w-[5rem] md:flex-col md:overflow-x-visible md:overflow-y-auto md:border-b-0 md:border-r md:py-2 [&::-webkit-scrollbar]:hidden"
+      className="flex w-full shrink-0 flex-row gap-1 overflow-x-auto overscroll-x-contain bg-ed-panel px-1.5 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] md:w-[5rem] md:flex-col md:overflow-x-visible md:overflow-y-auto md:border-b-0 md:border-r md:py-2 [&::-webkit-scrollbar]:hidden"
     >
       <div className="flex flex-row gap-1 md:flex-col">{children}</div>
     </nav>

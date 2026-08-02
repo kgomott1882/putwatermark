@@ -46,9 +46,9 @@ export function EditorBottomBar({
   onZoomOut,
 }: EditorBottomBarProps) {
   return (
-    <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-ed-border bg-ed-panel px-3 py-2">
+    <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-ed-border bg-ed-panel px-2 py-2 sm:gap-3 sm:px-3">
       <button
-        className="editor-secondary-button inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-ed-fg hover:text-ed-fg"
+        className="editor-secondary-button inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-[10px] font-bold uppercase tracking-[0.1em] text-ed-fg hover:text-ed-fg sm:px-4 sm:text-xs sm:tracking-[0.12em]"
         onClick={onExit}
         type="button"
       >
@@ -56,7 +56,7 @@ export function EditorBottomBar({
         Exit
       </button>
 
-      <div className="flex flex-1 items-center justify-center gap-1">
+      <div className="flex min-w-0 flex-1 items-center justify-center gap-1">
         {showHistoryControls ? (
           <>
             <button
@@ -90,7 +90,7 @@ export function EditorBottomBar({
         ) : null}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <div className="editor-secondary-button hidden items-center gap-1 rounded-lg px-2 py-1 text-ed-fg-muted sm:flex">
           <button
             aria-label="Zoom out"

@@ -139,16 +139,9 @@ export function EditorFormatUploadModal({
           Supported formats: {copy.formats}
         </p>
 
-        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+        <div className="mt-6 flex justify-stretch sm:justify-end">
           <button
-            className="editor-secondary-button rounded-xl border-[#e8dfd1] bg-[#f0e9dc]/60 px-4 py-2.5 text-sm font-semibold text-ed-fg hover:border-signal/50"
-            onClick={onClose}
-            type="button"
-          >
-            Cancel
-          </button>
-          <button
-            className="rounded-xl bg-signal px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
+            className="w-full rounded-xl bg-signal px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 sm:w-auto"
             onClick={onUploadClick}
             type="button"
           >

@@ -43,13 +43,6 @@ export function PhotosToolRail({
         onClick={() => onSelectTool("watermark")}
       />
       <EditorSubToolButton
-        active={activeTool === "filters"}
-        disabled={imageToolDisabled}
-        icon={<Sparkles className="h-6 w-6" strokeWidth={1.75} />}
-        label="Filters"
-        onClick={() => onSelectTool("filters")}
-      />
-      <EditorSubToolButton
         active={activeTool === "blur"}
         disabled={imageToolDisabled}
         icon={<ScanFace className="h-6 w-6" strokeWidth={1.75} />}
@@ -76,6 +69,13 @@ export function PhotosToolRail({
         icon={<RotateCw className="h-6 w-6" strokeWidth={1.75} />}
         label="Rotate"
         onClick={() => onSelectTool("rotate")}
+      />
+      <EditorSubToolButton
+        active={activeTool === "filters"}
+        disabled={imageToolDisabled}
+        icon={<Sparkles className="h-6 w-6" strokeWidth={1.75} />}
+        label="Filters"
+        onClick={() => onSelectTool("filters")}
       />
     </EditorSubToolRail>
   );
