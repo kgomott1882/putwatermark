@@ -95,6 +95,12 @@ export const DEFAULT_TEXT_LAYER_FONT_FAMILY = GEOMETRIC_SANS_FONT_FAMILY;
 export const DEFAULT_TEXT_LAYER_FONT_SIZE_SCALE = 50;
 export const DEFAULT_TEXT_LAYER_OPACITY = 20;
 
+/** Above preview zoom/control icons (bottom-right) in single-text mode. */
+export const DEFAULT_SINGLE_TEXT_WATERMARK_POSITION: CustomPosition = {
+  xPercent: 0.88,
+  yPercent: 0.84,
+};
+
 export function createWatermarkLayerId() {
   return `wm-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -103,7 +109,7 @@ export function createDefaultTextLayer(
   partial?: Partial<Pick<TextWatermarkLayer, "text">>,
 ): TextWatermarkLayer {
   return {
-    customPosition: null,
+    customPosition: { ...DEFAULT_SINGLE_TEXT_WATERMARK_POSITION },
     fontFamily: DEFAULT_TEXT_LAYER_FONT_FAMILY,
     fontSizeScale: DEFAULT_TEXT_LAYER_FONT_SIZE_SCALE,
     fontWeight: DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
@@ -113,7 +119,7 @@ export function createDefaultTextLayer(
     textColor: DEFAULT_TEXT_WATERMARK_COLOR,
     textShadowEnabled: DEFAULT_TEXT_SHADOW_ENABLED,
     type: "text",
-    watermarkPosition: "top-left",
+    watermarkPosition: "bottom-right",
   };
 }
 

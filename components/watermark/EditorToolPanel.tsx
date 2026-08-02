@@ -73,7 +73,7 @@ export function EditorToolPanel({
         ) : null}
         <motion.div
           animate={{ opacity: 1, x: 0 }}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2 py-1.5 md:px-2.5 md:py-2"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-1.5 py-1 md:px-2.5 md:py-2"
           initial={instant ? false : { opacity: 0, x: 14 }}
           transition={instant ? { duration: 0 } : { duration: 0.38, ease: panelEase }}
         >
@@ -98,12 +98,12 @@ export function EditorPanelSection({
   return (
     <motion.section
       animate={{ opacity: 1, y: 0 }}
-      className={`space-y-1 ${className}`}
+      className={`space-y-0.5 md:space-y-1 ${className}`}
       initial={{ opacity: 0, y: 4 }}
       transition={{ duration: 0.2, ease: panelEase }}
     >
       {title ? (
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-ed-fg">
+        <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-ed-fg md:text-[10px] md:tracking-[0.12em]">
           {title}
         </p>
       ) : null}
@@ -134,6 +134,7 @@ type EditorSegmentProps = {
   active: boolean;
   children: ReactNode;
   className?: string;
+  compact?: boolean;
   groupId?: string;
   onClick: () => void;
 };
@@ -142,13 +143,18 @@ export function EditorSegment({
   active,
   children,
   className = "",
+  compact = false,
   groupId,
   onClick,
 }: EditorSegmentProps) {
   return (
     <motion.button
       aria-pressed={active}
-      className={`relative rounded-lg px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.04em] transition-all ${
+      className={`relative rounded-md font-semibold uppercase tracking-[0.04em] transition-all ${
+        compact
+          ? "px-2 py-1 text-[10px]"
+          : "rounded-lg px-2.5 py-1.5 text-[11px] max-md:px-2 max-md:py-1 max-md:text-[10px]"
+      } ${
         active ? "font-bold text-ed-fg" : "text-ed-fg-muted hover:bg-ed-bg/70 hover:text-ed-fg"
       } ${className}`}
       onClick={onClick}

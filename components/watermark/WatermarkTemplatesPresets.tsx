@@ -102,20 +102,23 @@ function TemplateIcon({
 
 export function WatermarkQuickTemplates({
   activeTemplate,
+  compact = false,
   layoutId = "template-selection",
   onApplyTemplate,
   quickTemplates,
-}: QuickTemplatesProps) {
+}: QuickTemplatesProps & { compact?: boolean }) {
   return (
     <EditorPanelSection title="Quick templates">
-      <div className="grid grid-cols-3 gap-2">
+      <div className={`grid grid-cols-3 ${compact ? "gap-1" : "gap-2"}`}>
         {quickTemplates.map((template) => {
           const isSelected = activeTemplate === template.id;
 
           return (
             <motion.button
               aria-pressed={isSelected}
-              className={`relative rounded-xl border px-1.5 py-2 text-left transition-colors ${
+              className={`relative rounded-lg border text-left transition-colors ${
+                compact ? "px-1 py-1" : "rounded-xl px-1.5 py-2"
+              } ${
                 isSelected
                   ? "border-signal text-ed-fg"
                   : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:border-signal/50 hover:text-ed-fg"
@@ -144,7 +147,11 @@ export function WatermarkQuickTemplates({
               ) : null}
               <span className="relative z-10">
                 <TemplateIcon isSelected={isSelected} variant={template.icon} />
-                <span className="mt-1 block truncate text-[10px] font-semibold leading-tight">
+                <span
+                  className={`mt-0.5 block truncate font-semibold leading-tight ${
+                    compact ? "text-[8px]" : "mt-1 text-[10px]"
+                  }`}
+                >
                   {template.label}
                 </span>
               </span>

@@ -1192,7 +1192,9 @@ export default function WatermarkPage() {
   const [watermarkPosition, setWatermarkPosition] =
     useState<WatermarkPosition>("top-left");
   const [customPosition, setCustomPosition] = useState<CustomPosition | null>(
-    null,
+    initialTextLayer.customPosition
+      ? { ...initialTextLayer.customPosition }
+      : null,
   );
   const [tileDensity, setTileDensity] = useState<TileDensity>("medium");
   const [tileGap, setTileGap] = useState(120);
@@ -4367,9 +4369,11 @@ export default function WatermarkPage() {
     bounds: TextBounds,
     canvas: HTMLCanvasElement,
   ) {
+    const { width, height } = getCanvasLogicalSize(canvas);
+
     return {
-      xPercent: (bounds.left + bounds.right) / 2 / canvas.width,
-      yPercent: (bounds.top + bounds.bottom) / 2 / canvas.height,
+      xPercent: (bounds.left + bounds.right) / 2 / width,
+      yPercent: (bounds.top + bounds.bottom) / 2 / height,
     };
   }
 
@@ -4830,8 +4834,9 @@ export default function WatermarkPage() {
     event.preventDefault();
 
     const drag = fillDragRef.current;
-    const dx = (point.x - drag.origin.x) / canvas.width;
-    const dy = (point.y - drag.origin.y) / canvas.height;
+    const { width, height } = getCanvasLogicalSize(canvas);
+    const dx = (point.x - drag.origin.x) / width;
+    const dy = (point.y - drag.origin.y) / height;
 
     syncActivePdfPageFillFields((fields) =>
       fields.map((field) => {
@@ -5591,10 +5596,7 @@ export default function WatermarkPage() {
     canvas: HTMLCanvasElement,
     point: { x: number; y: number },
   ) {
-    const position = {
-      xPercent: point.x / canvas.width,
-      yPercent: point.y / canvas.height,
-    };
+    const position = canvasPointToPercent(canvas, point);
 
     if (watermarkType === "text") {
       updateTextLayer(layerId, { customPosition: position });
@@ -6998,10 +7000,7 @@ export default function WatermarkPage() {
     point: { x: number; y: number },
   ) {
     updateVideoCaptionLayer(layerId, {
-      customPosition: {
-        xPercent: clamp(point.x / canvas.width, 0, 1),
-        yPercent: clamp(point.y / canvas.height, 0, 1),
-      },
+      customPosition: canvasPointToPercent(canvas, point),
     });
   }
 
@@ -9435,10 +9434,12 @@ export default function WatermarkPage() {
     templates: readonly T[],
     activeTemplateId: string | null,
     onApply: (template: T) => void,
+    compact = false,
   ) {
     return (
       <WatermarkQuickTemplates
         activeTemplate={activeTemplateId}
+        compact={compact}
         layoutId={layoutId}
         onApplyTemplate={(templateId) => {
           const template = templates.find((entry) => entry.id === templateId);
@@ -9621,7 +9622,7 @@ export default function WatermarkPage() {
   const showMobileFormatToolRail = showEditorPanel && hasMedia;
 
   return (
-    <div className="flex h-[100svh] w-full flex-col overflow-hidden">
+    <div className="flex h-[94dvh] w-full flex-col overflow-hidden pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] md:h-[100svh] md:pt-0 md:pb-0">
       {authChecked && isAuthenticated ? (
         <div className="hidden shrink-0 md:block">
           <SiteNavClient
@@ -10341,6 +10342,7 @@ export default function WatermarkPage() {
                       watermarkTemplates,
                       activeTextTemplate,
                       applyTextTemplate,
+                      true,
                     )}
                     type="text"
                     watermarkOpacity={activeTextLayer.opacity}
@@ -10512,6 +10514,7 @@ export default function WatermarkPage() {
                       logoWatermarkTemplates,
                       activeLogoTemplate,
                       applyLogoTemplate,
+                      true,
                     )}
                     type="logo"
                     watermarkOpacity={activeLogoLayer.opacity}
@@ -11942,25 +11945,29 @@ function getCanvasLogicalSize(canvas: HTMLCanvasElement) {
 function getCanvasPoint(event: PointerEvent<HTMLCanvasElement>) {
   const canvas = event.currentTarget;
   const rect = canvas.getBoundingClientRect();
-  const logicalWidth = canvas.clientWidth || rect.width;
-  const logicalHeight = canvas.clientHeight || rect.height;
+  const { width: logicalWidth, height: logicalHeight } =
+    getCanvasLogicalSize(canvas);
 
   if (!logicalWidth || !logicalHeight) {
     return null;
   }
 
-  const x = clamp(
-    ((event.clientX - rect.left) / logicalWidth) * logicalWidth,
-    0,
-    logicalWidth,
-  );
-  const y = clamp(
-    ((event.clientY - rect.top) / logicalHeight) * logicalHeight,
-    0,
-    logicalHeight,
-  );
+  return {
+    x: clamp(event.clientX - rect.left, 0, logicalWidth),
+    y: clamp(event.clientY - rect.top, 0, logicalHeight),
+  };
+}
 
-  return { x, y };
+function canvasPointToPercent(
+  canvas: HTMLCanvasElement,
+  point: { x: number; y: number },
+): CustomPosition {
+  const { width, height } = getCanvasLogicalSize(canvas);
+
+  return {
+    xPercent: clamp(point.x / width, 0, 1),
+    yPercent: clamp(point.y / height, 0, 1),
+  };
 }
 
 function getCanvasPlacementFromDrag(
@@ -12060,8 +12067,10 @@ function getCanvasHintPosition(
 ) {
   const canvasRect = canvas.getBoundingClientRect();
   const containerRect = container.getBoundingClientRect();
-  const scaleX = canvasRect.width / canvas.width;
-  const scaleY = canvasRect.height / canvas.height;
+  const { width: logicalWidth, height: logicalHeight } =
+    getCanvasLogicalSize(canvas);
+  const scaleX = canvasRect.width / logicalWidth;
+  const scaleY = canvasRect.height / logicalHeight;
   const centerX = (bounds.left + bounds.right) / 2;
   const topY = bounds.top;
 

@@ -175,6 +175,43 @@ body.landing-cursor-none * {
     background-color: #d97757;
     box-shadow: 0 1px 3px rgba(43, 43, 43, 0.2);
   }
+
+  @media (max-width: 767px) {
+    .editor-theme .editor-field {
+      @apply rounded-lg border px-2 py-1 text-xs;
+    }
+
+    .editor-theme .editor-field-sm {
+      @apply rounded-md px-1.5 py-0.5 text-[11px];
+    }
+
+    .editor-theme .editor-range {
+      @apply h-1;
+    }
+
+    .editor-theme .editor-range::-webkit-slider-runnable-track {
+      height: 4px;
+    }
+
+    .editor-theme .editor-range::-webkit-slider-thumb {
+      width: 12px;
+      height: 12px;
+      margin-top: -4px;
+    }
+
+    .editor-theme .editor-range::-moz-range-track {
+      height: 4px;
+    }
+
+    .editor-theme .editor-range::-moz-range-thumb {
+      width: 12px;
+      height: 12px;
+    }
+
+    .editor-theme .editor-segment-track {
+      @apply p-0.5;
+    }
+  }
 }
 
 @layer utilities {
