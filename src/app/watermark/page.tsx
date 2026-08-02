@@ -3370,6 +3370,7 @@ export default function WatermarkPage() {
         tileDensity,
         tileGap,
         watermarkMode: "single",
+        watermarkReferenceWidth: imageWidth,
         watermarkType: "signature",
       });
 
@@ -3405,6 +3406,7 @@ export default function WatermarkPage() {
         tileDensity,
         tileGap,
         watermarkMode,
+        watermarkReferenceWidth: imageWidth,
         watermarkType,
       });
 
@@ -5601,6 +5603,7 @@ export default function WatermarkPage() {
         videoDurationSeconds: videoDuration,
         videoPreviewTimeSeconds: videoPreviewTime,
         watermarkMode,
+        watermarkReferenceWidth: frame.width,
         watermarkType,
       });
 
@@ -6668,6 +6671,7 @@ export default function WatermarkPage() {
               pageWidth,
               pageHeight,
               watermarkInput,
+              canvasSize,
             );
           }
 
@@ -6920,6 +6924,16 @@ export default function WatermarkPage() {
         width: videoSize.width,
       });
 
+      const videoPreviewFrame =
+        videoOverlaySize.width > 0 && videoSize
+          ? getVideoDisplayFrame(
+              videoOverlaySize.width,
+              videoOverlaySize.height,
+              videoSize.width,
+              videoSize.height,
+            )
+          : { height: videoSize.height, width: videoSize.width, x: 0, y: 0 };
+
       const clientOverlayPasses = await buildClientVideoOverlayPasses({
         applyStaticFreeExportStamp,
         durationSeconds: videoDuration,
@@ -6930,6 +6944,7 @@ export default function WatermarkPage() {
           ? videoCaptionLayers
           : undefined,
         videoElement: videoElementRef.current,
+        watermarkReferenceWidth: videoPreviewFrame.width,
         width: videoSize.width,
       });
       const overlayPngBytes = clientOverlayPasses[0]?.overlayPngBytes;
@@ -12597,17 +12612,31 @@ type WatermarkLayerPaintInput = {
   videoDurationSeconds?: number;
   videoPreviewTimeSeconds?: number;
   watermarkMode: WatermarkMode;
+  watermarkReferenceWidth?: number;
   watermarkType: WatermarkType;
+  displayScale?: number;
 };
 
 const defaultWatermarkFontFamily =
   'Arial, Helvetica, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+function resolveWatermarkDisplayScale(
+  clipWidth: number,
+  watermarkReferenceWidth: number,
+) {
+  if (!watermarkReferenceWidth) {
+    return 1;
+  }
+
+  return clipWidth / watermarkReferenceWidth;
+}
 
 function paintWatermarkLayers({
   activeLayerId,
   canvasHeight,
   canvasWidth,
   context,
+  displayScale,
   imageHeight,
   imageWidth,
   imageX,
@@ -12627,11 +12656,15 @@ function paintWatermarkLayers({
   videoDurationSeconds,
   videoPreviewTimeSeconds,
   watermarkMode,
+  watermarkReferenceWidth,
   watermarkType,
 }: WatermarkLayerPaintInput): {
   activeBounds: TextBounds | null;
   boundsByLayer: Map<string, TextBounds>;
 } {
+  const sizingWidth = watermarkReferenceWidth ?? imageWidth;
+  const scale =
+    displayScale ?? resolveWatermarkDisplayScale(imageWidth, sizingWidth);
   const boundsByLayer = new Map<string, TextBounds>();
   let activeBounds: TextBounds | null = null;
 
@@ -12679,6 +12712,7 @@ function paintWatermarkLayers({
   }) => {
     const drawable = getDrawableWatermark({
       context,
+      displayScale: scale,
       fontFamily,
       fontSizeScale,
       fontWeight,
@@ -12686,6 +12720,7 @@ function paintWatermarkLayers({
       logoImage,
       textColor,
       textShadowEnabled,
+      watermarkReferenceWidth: sizingWidth,
       watermarkText,
       watermarkType: layerType,
     });
@@ -12703,12 +12738,14 @@ function paintWatermarkLayers({
         angle: tileAngle,
         context,
         density: tileDensity,
+        displayScale: scale,
         drawable,
         gap: tileGap,
         imageHeight,
         imageWidth,
         imageX,
         imageY,
+        watermarkReferenceWidth: sizingWidth,
       });
       return;
     }
@@ -12864,12 +12901,14 @@ function paintWatermarkLayers({
       canvasHeight,
       canvasWidth,
       context,
+      displayScale: scale,
       forcedOverlayLayer,
       imageHeight,
       imageWidth,
       imageX,
       imageY,
       resolveCustomPosition,
+      watermarkReferenceWidth: sizingWidth,
     });
   }
 
@@ -12880,22 +12919,26 @@ function paintForcedExportStampLayer({
   canvasHeight,
   canvasWidth,
   context,
+  displayScale = 1,
   forcedOverlayLayer,
   imageHeight,
   imageWidth,
   imageX,
   imageY,
   resolveCustomPosition,
+  watermarkReferenceWidth,
 }: {
   canvasHeight: number;
   canvasWidth: number;
   context: CanvasRenderingContext2D;
+  displayScale?: number;
   forcedOverlayLayer: LogoWatermarkLayer;
   imageHeight: number;
   imageWidth: number;
   imageX: number;
   imageY: number;
   resolveCustomPosition?: WatermarkLayerPaintInput["resolveCustomPosition"];
+  watermarkReferenceWidth: number;
 }) {
   const logoImage = forcedOverlayLayer.logoImage;
 
@@ -12922,6 +12965,7 @@ function paintForcedExportStampLayer({
 
   const drawable = getDrawableWatermark({
     context,
+    displayScale,
     fontFamily: defaultWatermarkFontFamily,
     fontSizeScale: forcedOverlayLayer.fontSizeScale,
     fontWeight: DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
@@ -12929,6 +12973,7 @@ function paintForcedExportStampLayer({
     logoImage,
     textColor: DEFAULT_TEXT_WATERMARK_COLOR,
     textShadowEnabled: DEFAULT_TEXT_SHADOW_ENABLED,
+    watermarkReferenceWidth,
     watermarkText: "",
     watermarkType: "logo",
   });
@@ -12997,6 +13042,7 @@ type WatermarkOnlyRenderInput = {
   watermarkPosition: WatermarkPosition;
   watermarkText: string;
   watermarkType: WatermarkType;
+  watermarkReferenceWidth?: number;
   width: number;
 };
 
@@ -13023,6 +13069,7 @@ function drawWatermarkOnly({
   watermarkPosition,
   watermarkText,
   watermarkType,
+  watermarkReferenceWidth,
   width,
 }: WatermarkOnlyRenderInput): TextBounds | null {
   const { activeBounds } = paintWatermarkLayers({
@@ -13069,6 +13116,7 @@ function drawWatermarkOnly({
     tileDensity,
     tileGap,
     watermarkMode,
+    watermarkReferenceWidth: watermarkReferenceWidth ?? width,
     watermarkType,
   });
 
@@ -13083,6 +13131,7 @@ type BuildClientVideoOverlayPassesInput = {
   videoBlurRegions?: VideoBlurRegion[];
   videoCaptionLayers?: VideoCaptionLayer[];
   videoElement?: HTMLVideoElement | null;
+  watermarkReferenceWidth: number;
   width: number;
 };
 
@@ -13216,6 +13265,7 @@ async function buildClientVideoOverlayPasses({
   videoBlurRegions,
   videoCaptionLayers,
   videoElement,
+  watermarkReferenceWidth,
   width,
 }: BuildClientVideoOverlayPassesInput): Promise<VideoOverlayPass[]> {
   logRealVideoExport("STEP 10a/15: buildClientVideoOverlayPasses() entered", {
@@ -13240,6 +13290,7 @@ async function buildClientVideoOverlayPasses({
       videoCaptionLayers: includeUntimedCaptions
         ? videoCaptionLayers
         : undefined,
+      watermarkReferenceWidth,
       width,
     });
 
@@ -13348,6 +13399,7 @@ async function buildClientVideoOverlayPasses({
       videoCaptionLayers: includeUntimedCaptions
         ? videoCaptionLayers
         : undefined,
+      watermarkReferenceWidth,
       width,
     });
 
@@ -13481,6 +13533,7 @@ async function paintWatermarkOverlayCanvasContent(
     watermarkMode,
     watermarkOpacity,
     watermarkPosition,
+    watermarkReferenceWidth,
     watermarkText,
     watermarkType,
   }: WatermarkOverlayCanvasPaintInput,
@@ -13507,6 +13560,7 @@ async function paintWatermarkOverlayCanvasContent(
     watermarkMode,
     watermarkOpacity,
     watermarkPosition,
+    watermarkReferenceWidth,
     watermarkText,
     watermarkType,
     width: contentWidth,
@@ -13549,6 +13603,7 @@ async function renderWatermarkOverlayCanvas({
   watermarkMode,
   watermarkOpacity,
   watermarkPosition,
+  watermarkReferenceWidth,
   watermarkText,
   watermarkType,
   width,
@@ -13580,6 +13635,7 @@ async function renderWatermarkOverlayCanvas({
     watermarkMode,
     watermarkOpacity,
     watermarkPosition,
+    watermarkReferenceWidth,
     watermarkText,
     watermarkType,
   };
@@ -13717,10 +13773,17 @@ async function buildPdfTilePageWatermark(
   pageWidth: number,
   pageHeight: number,
   watermarkInput: PdfTilePageWatermarkInput,
+  canvasSize: CanvasSize,
 ): Promise<PdfTilePatternWatermark> {
   const pageW = Math.max(1, Math.floor(pageWidth));
   const pageH = Math.max(1, Math.floor(pageHeight));
   const exportScale = getPdfWatermarkExportScale(pageW, pageH);
+  const previewImageScale = Math.min(
+    canvasSize.width / pageW,
+    canvasSize.height / pageH,
+  );
+  const previewDisplayWidth = pageW * previewImageScale;
+  const displayScale = pageW / previewDisplayWidth;
   const measureCanvas = document.createElement("canvas");
   const measureContext = measureCanvas.getContext("2d");
 
@@ -13770,6 +13833,7 @@ async function buildPdfTilePageWatermark(
 
   const drawable = getDrawableWatermark({
     context: measureContext,
+    displayScale,
     fontFamily,
     fontSizeScale,
     fontWeight,
@@ -13777,6 +13841,7 @@ async function buildPdfTilePageWatermark(
     logoImage,
     textColor,
     textShadowEnabled,
+    watermarkReferenceWidth: previewDisplayWidth,
     watermarkText,
     watermarkType: drawableType,
   });
@@ -13831,6 +13896,7 @@ function paintWatermarkOnExportCanvas({
   watermarkMode,
   watermarkOpacity,
   watermarkPosition,
+  watermarkReferenceWidth,
   watermarkText,
   watermarkType,
 }: {
@@ -13852,6 +13918,7 @@ function paintWatermarkOnExportCanvas({
   watermarkMode: WatermarkMode;
   watermarkOpacity: number;
   watermarkPosition: WatermarkPosition;
+  watermarkReferenceWidth: number;
   watermarkText: string;
   watermarkType: WatermarkType;
 }) {
@@ -13883,6 +13950,7 @@ function paintWatermarkOnExportCanvas({
     tileDensity,
     tileGap,
     watermarkMode,
+    watermarkReferenceWidth,
     watermarkType,
   });
 }
@@ -14022,6 +14090,7 @@ function renderExportCanvas({
     watermarkMode,
     watermarkOpacity,
     watermarkPosition,
+    watermarkReferenceWidth: previewFrame.width,
     watermarkText,
     watermarkType,
   };
@@ -14183,6 +14252,7 @@ function renderWatermarkOverlayForPdfPage({
     tileDensity,
     tileGap,
     watermarkMode,
+    watermarkReferenceWidth: previewFrame.width,
     watermarkType:
       signaturePlacementsForPaint?.length ? "signature" : watermarkType,
   });
@@ -15253,6 +15323,7 @@ function getTextBounds({
 
 type DrawableInput = {
   context: CanvasRenderingContext2D;
+  displayScale?: number;
   fontFamily: string;
   fontSizeScale: number;
   fontWeight: TextWatermarkFontWeight;
@@ -15260,12 +15331,14 @@ type DrawableInput = {
   logoImage: HTMLImageElement | null;
   textColor: string;
   textShadowEnabled: boolean;
+  watermarkReferenceWidth: number;
   watermarkText: string;
   watermarkType: WatermarkType;
 };
 
 function getDrawableWatermark({
   context,
+  displayScale = 1,
   fontFamily,
   fontSizeScale,
   fontWeight,
@@ -15273,23 +15346,26 @@ function getDrawableWatermark({
   logoImage,
   textColor,
   textShadowEnabled,
+  watermarkReferenceWidth,
   watermarkText,
   watermarkType,
 }: DrawableInput): DrawableWatermark | null {
-  const baseFontSize = Math.max(
-    8,
-    Math.min(imageWidth / 12, 72) * (fontSizeScale / 100),
-  );
+  const baseFontSize =
+    Math.max(
+      8,
+      Math.min(watermarkReferenceWidth / 12, 72) * (fontSizeScale / 100),
+    ) * displayScale;
 
   if (isImageWatermarkType(watermarkType)) {
     if (!logoImage) {
       return null;
     }
 
-    const logoWidth = Math.min(
-      imageWidth * 0.6,
-      Math.max(24, imageWidth * 0.18 * (fontSizeScale / 100)),
+    const logoWidthAtReference = Math.max(
+      24,
+      watermarkReferenceWidth * 0.18 * (fontSizeScale / 100),
     );
+    const logoWidth = Math.min(imageWidth * 0.6, logoWidthAtReference * displayScale);
     const logoHeight = logoWidth * (logoImage.naturalHeight / logoImage.naturalWidth);
 
     return {
@@ -15443,12 +15519,14 @@ type TiledWatermarkInput = {
   angle: TileAngle;
   context: CanvasRenderingContext2D;
   density: TileDensity;
+  displayScale?: number;
   drawable: DrawableWatermark;
   gap: number;
   imageHeight: number;
   imageWidth: number;
   imageX: number;
   imageY: number;
+  watermarkReferenceWidth: number;
 };
 
 function drawTiledWatermark({
@@ -15456,17 +15534,20 @@ function drawTiledWatermark({
   angle,
   context,
   density,
+  displayScale = 1,
   drawable,
   gap,
   imageHeight,
   imageWidth,
   imageX,
   imageY,
+  watermarkReferenceWidth,
 }: TiledWatermarkInput) {
   const densityConfig =
     tileDensities.find((option) => option.value === density) ??
     tileDensities[1];
-  const densitySpacing = imageWidth / densityConfig.repetitionsAcross;
+  const densitySpacing =
+    (watermarkReferenceWidth / densityConfig.repetitionsAcross) * displayScale;
   const diagonal = Math.hypot(imageWidth, imageHeight);
 
   context.save();

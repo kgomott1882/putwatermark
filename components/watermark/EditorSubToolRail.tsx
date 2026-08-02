@@ -36,7 +36,7 @@ export function EditorSubToolRail({
       {onMobileExit ? (
         <button
           aria-label="Exit editor"
-          className="absolute right-1 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-ed-border/80 bg-ed-panel/95 text-ed-fg-muted shadow-sm backdrop-blur-[2px] transition hover:bg-ed-bg-card hover:text-ed-fg md:hidden"
+          className="absolute right-1 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md border border-ed-border/80 bg-ed-panel/95 text-ed-fg-muted shadow-sm backdrop-blur-[2px] transition hover:bg-ed-bg-card hover:text-ed-fg md:hidden"
           onClick={onMobileExit}
           type="button"
         >

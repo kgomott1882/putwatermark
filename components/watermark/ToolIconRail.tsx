@@ -138,12 +138,15 @@ export function ToolIconRail({
           />
           {showBuyCredits ? (
             <Link
-              className="hidden flex-col items-center gap-1.5 rounded-xl bg-signal px-2 py-2 text-[10px] font-bold leading-tight text-white shadow-md transition hover:brightness-110 md:mx-1.5 md:mb-3 md:mt-auto md:flex md:gap-2 md:px-1.5 md:py-3 md:text-[11px]"
+              className="hidden flex-col items-center gap-1.5 rounded-xl bg-signal px-1.5 py-2 text-[10px] font-bold leading-tight text-white shadow-md transition hover:brightness-110 md:mx-1.5 md:mb-3 md:mt-auto md:flex md:gap-1.5 md:px-1 md:py-2.5 md:text-[10px]"
               href="/pricing"
               title="Buy Credits"
             >
-              <Coins className="h-4 w-4 md:h-5 md:w-5" strokeWidth={2} />
-              <span className="whitespace-nowrap">Buy Credits</span>
+              <Coins className="h-4 w-4 shrink-0 md:h-4 md:w-4" strokeWidth={2} />
+              <span className="max-w-full text-center leading-[1.15]">
+                <span className="block">Buy</span>
+                <span className="block">Credits</span>
+              </span>
             </Link>
           ) : null}
         </div>
@@ -151,7 +154,7 @@ export function ToolIconRail({
       {onMobileExit ? (
         <button
           aria-label="Exit editor"
-          className="absolute right-1.5 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-ed-border/80 bg-ed-panel/95 text-ed-fg-muted shadow-sm backdrop-blur-[2px] transition hover:bg-ed-bg-card hover:text-ed-fg md:hidden"
+          className="absolute right-1.5 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md border border-ed-border/80 bg-ed-panel/95 text-ed-fg-muted shadow-sm backdrop-blur-[2px] transition hover:bg-ed-bg-card hover:text-ed-fg md:hidden"
           onClick={onMobileExit}
           type="button"
         >
