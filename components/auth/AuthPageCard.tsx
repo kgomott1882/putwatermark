@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import type { ReactNode } from "react";
 
 type AuthPageCardProps = {
-  children: ReactNode;
+  children?: ReactNode;
   kicker: string;
   lead?: ReactNode;
   title: string;

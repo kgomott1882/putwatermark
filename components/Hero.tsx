@@ -14,14 +14,19 @@ const features = [
   "Merge & compress PDF",
 ] as const;
 
-const formats = [
+type FormatItem = {
+  label: string;
+  note?: string;
+};
+
+const formats: readonly FormatItem[] = [
   { label: "JPG / PNG / WebP" },
   { label: "PDF documents" },
   {
     label: "MP4 / MOV / WebM",
     note: "Videos up to 60 minutes supported",
   },
-] as const;
+];
 
 const containerVariants = {
   hidden: {},
