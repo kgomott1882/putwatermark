@@ -92,7 +92,7 @@ export function PricingPayPalCheckout({
   }
 
   return (
-    <div className="paypal-checkout-host flex w-full flex-col gap-2">
+    <div className="paypal-checkout-host flex w-full flex-col gap-3">
       {uiState === "completed" ? (
         <>
           {message ? (
@@ -144,7 +144,7 @@ export function PricingPayPalCheckout({
               key={checkoutKey}
               style={{
                 color: "gold",
-                height: 40,
+                height: 45,
                 label: "paypal",
                 layout: "vertical",
                 shape: "rect",

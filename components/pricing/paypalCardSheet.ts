@@ -136,20 +136,29 @@ export function minimizePayPalCardSheet() {
 }
 
 export function applyPayPalCardOverlayLayout() {
-  const viewportPadding = Math.max(
-    12,
-    Math.min(16, Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.04)),
+  const viewportPaddingY = Math.max(
+    28,
+    Math.round(window.innerHeight * 0.06),
   );
-  const maxPanelHeight = Math.min(window.innerHeight - viewportPadding * 2, 720);
-  const maxPanelWidth = Math.min(window.innerWidth - viewportPadding * 2, 420);
+  const viewportPaddingX = Math.max(
+    16,
+    Math.round(window.innerWidth * 0.04),
+  );
+  const maxPanelHeight = window.innerHeight - viewportPaddingY * 2;
+  const maxPanelWidth = Math.min(window.innerWidth - viewportPaddingX * 2, 448);
 
   for (const child of getPayPalOverlayRoots()) {
     child.dataset.putwatermarkPaypalOverlay = "true";
     child.style.setProperty("display", "flex", "important");
     child.style.setProperty("align-items", "center", "important");
     child.style.setProperty("justify-content", "center", "important");
-    child.style.setProperty("padding", `${viewportPadding}px`, "important");
+    child.style.setProperty(
+      "padding",
+      `${viewportPaddingY}px ${viewportPaddingX}px`,
+      "important",
+    );
     child.style.setProperty("box-sizing", "border-box", "important");
+    child.style.setProperty("overflow-y", "auto", "important");
 
     const iframe = child.querySelector("iframe");
     const panel =
@@ -163,12 +172,12 @@ export function applyPayPalCardOverlayLayout() {
     panel.style.setProperty("border-radius", "1rem", "important");
     panel.style.setProperty("margin", "auto", "important");
     panel.style.setProperty("-webkit-overflow-scrolling", "touch");
-    panel.style.setProperty("zoom", "0.9", "important");
 
     if (iframe instanceof HTMLIFrameElement) {
       iframe.style.setProperty("display", "block", "important");
       iframe.style.setProperty("width", "100%", "important");
-      iframe.style.setProperty("max-height", `${maxPanelHeight}px`, "important");
+      iframe.style.removeProperty("max-height");
+      iframe.style.removeProperty("height");
     }
   }
 }

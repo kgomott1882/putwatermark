@@ -107,7 +107,7 @@ export function PricingCheckoutModal({
     <div
       aria-labelledby={titleId}
       aria-modal="true"
-      className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4"
+      className="fixed inset-0 z-[70] flex items-center justify-center px-4 py-8 sm:px-6 sm:py-10"
       role="dialog"
     >
       <button
@@ -118,23 +118,23 @@ export function PricingCheckoutModal({
       />
 
       <div
-        className="relative flex max-h-[min(94dvh,720px)] w-full max-w-[min(100%,22.5rem)] flex-col overflow-hidden rounded-2xl border border-beige/10 bg-night-card shadow-[0_24px_80px_rgba(0,0,0,0.55)] sm:max-w-[26rem]"
+        className="relative flex max-h-[calc(100dvh-4rem)] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-beige/10 bg-night-card shadow-[0_24px_80px_rgba(0,0,0,0.55)] sm:max-h-[calc(100dvh-5rem)]"
         onMouseDown={handleModalPanelPointerDown}
         ref={modalPanelRef}
       >
-        <div className="shrink-0 border-b border-beige/10 bg-night-elevated/60 px-4 py-3 sm:px-5 sm:py-4">
-          <div className="flex items-start justify-between gap-3">
+        <div className="shrink-0 border-b border-beige/10 bg-night-elevated/60 px-6 py-5">
+          <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-sand">
                 Checkout
               </p>
               <h2
-                className="mt-0.5 text-base font-semibold leading-snug text-beige sm:text-lg"
+                className="mt-1 text-lg font-semibold leading-snug text-beige"
                 id={titleId}
               >
                 {orderSummary.title}
               </h2>
-              <p className="mt-0.5 text-xl font-bold tracking-[-0.04em] text-beige sm:text-2xl">
+              <p className="mt-1 text-2xl font-bold tracking-[-0.04em] text-beige">
                 {orderSummary.price}
               </p>
             </div>
@@ -151,13 +151,13 @@ export function PricingCheckoutModal({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-5 sm:py-4">
-          <p className="text-xs leading-5 text-beige-dim sm:text-sm sm:leading-6" id={descriptionId}>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
+          <p className="text-sm leading-6 text-beige-dim" id={descriptionId}>
             {orderSummary.detail}
           </p>
 
           <div
-            className="mt-3 rounded-xl border border-ink/10 bg-white p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] sm:p-2.5"
+            className="mt-6 rounded-xl border border-ink/10 bg-white p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]"
             data-checkout-paypal-section="true"
           >
             <PricingPayPalCheckout
