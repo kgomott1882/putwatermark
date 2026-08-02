@@ -61,23 +61,23 @@ export function EditorBottomBar({
           <>
             <button
               aria-label="Undo"
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-[0.1em] text-ed-fg transition hover:bg-ed-fg/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:text-ed-fg-muted"
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-[11px] font-bold uppercase tracking-[0.1em] text-ed-fg transition hover:bg-ed-fg/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:text-ed-fg-muted sm:px-3"
               disabled={!canUndo}
               onClick={onUndo}
               type="button"
             >
               <Undo2 className="h-4 w-4" />
-              Undo
+              <span className="hidden sm:inline">Undo</span>
             </button>
             <button
               aria-label="Redo"
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-[0.1em] text-ed-fg transition hover:bg-ed-fg/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:text-ed-fg-muted"
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-[11px] font-bold uppercase tracking-[0.1em] text-ed-fg transition hover:bg-ed-fg/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:text-ed-fg-muted sm:px-3"
               disabled={!canRedo}
               onClick={onRedo}
               type="button"
             >
               <Redo2 className="h-4 w-4" />
-              Redo
+              <span className="hidden sm:inline">Redo</span>
             </button>
             <button
               aria-label="History"
@@ -116,7 +116,7 @@ export function EditorBottomBar({
         </div>
 
         <button
-          className="inline-flex items-center gap-2 rounded-xl bg-signal px-5 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-xl bg-signal px-3 py-2 text-[10px] font-bold uppercase tracking-[0.1em] text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 sm:gap-2 sm:px-5 sm:text-xs sm:tracking-[0.12em]"
           disabled={exportDisabled}
           onClick={() => {
             console.log("[real-video-export] STEP 1/15: Export MP4 button clicked", {

@@ -9606,12 +9606,12 @@ export default function WatermarkPage() {
       <main className="editor-theme flex min-h-0 flex-1 w-full flex-col overflow-hidden">
       <WatermarkFontLoader />
       <motion.div
-        className="grid min-h-0 flex-1 md:grid-cols-[auto_minmax(0,1fr)]"
+        className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[auto_minmax(0,1fr)] md:grid-rows-none"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: "easeOut" }}
       >
-        <div className="relative flex min-h-0 max-h-full overflow-hidden">
+        <div className="relative flex min-h-0 max-h-full min-w-0 flex-col overflow-hidden md:flex-row">
           <input
             accept={acceptedMediaInputTypes}
             className="hidden"
@@ -9756,7 +9756,7 @@ export default function WatermarkPage() {
               title={editorPanelTitle}
               toolRail={
                 activeEditorPanel === "photos" ? (
-                  <div className="flex shrink-0">
+                  <div className="flex shrink-0 flex-col md:flex-row">
                     <PhotosToolRail
                       activeTool={activePhotoTool}
                       imageToolsEnabled={imageToolsEnabled}
@@ -9771,7 +9771,7 @@ export default function WatermarkPage() {
                     ) : null}
                   </div>
                 ) : activeEditorPanel === "pdfDocs" ? (
-                  <div className="flex shrink-0">
+                  <div className="flex shrink-0 flex-col md:flex-row">
                     <PdfDocsToolRail
                       activeTool={activePdfTool}
                       onSelectTool={handlePdfDocToolSelect}
@@ -9785,7 +9785,7 @@ export default function WatermarkPage() {
                     ) : null}
                   </div>
                 ) : activeEditorPanel === "video" ? (
-                  <div className="flex shrink-0">
+                  <div className="flex shrink-0 flex-col md:flex-row">
                     <VideoToolRail
                       activeTool={activeVideoTool}
                       hasVideo={videoToolsEnabled}
@@ -10810,14 +10810,14 @@ export default function WatermarkPage() {
           ) : null}
 
           {uploadError ? (
-            <div className="absolute bottom-20 left-[5rem] z-10 max-w-xs rounded-xl border border-ed-accent/30 bg-ed-accent/10 px-4 py-3 text-sm text-ed-fg">
+            <div className="absolute bottom-20 left-2 z-10 max-w-[calc(100%-1rem)] rounded-xl border border-ed-accent/30 bg-ed-accent/10 px-4 py-3 text-sm text-ed-fg md:left-[5rem] md:max-w-xs">
               {uploadError}
             </div>
           ) : null}
         </div>
 
         <section
-          className="relative flex min-h-[320px] min-w-0 flex-col overflow-hidden md:min-h-0"
+          className="relative flex min-h-0 min-w-0 flex-col overflow-hidden"
           ref={previewPanelRef}
         >
           {isRestoringAnonymousDraft ? (

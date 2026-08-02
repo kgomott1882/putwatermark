@@ -21,7 +21,7 @@ type RailToolProps = {
 function RailTool({ active, icon, label, onClick }: RailToolProps) {
   return (
     <button
-      className={`flex w-full flex-col items-center gap-1.5 rounded-xl px-1.5 py-2.5 text-[10px] font-medium leading-none transition ${
+      className={`flex shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-medium leading-none transition md:w-full md:gap-1.5 md:px-1.5 md:py-2.5 ${
         active
           ? "bg-ed-bg-card text-ed-fg shadow-sm"
           : "text-ed-fg-muted hover:bg-ed-bg-card/70 hover:text-ed-fg"
@@ -30,7 +30,7 @@ function RailTool({ active, icon, label, onClick }: RailToolProps) {
       type="button"
     >
       <span className="flex h-5 w-5 items-center justify-center">{icon}</span>
-      <span>{label}</span>
+      <span className="whitespace-nowrap">{label}</span>
     </button>
   );
 }
@@ -43,9 +43,9 @@ export function WatermarkToolRail({
   return (
     <nav
       aria-label="Watermark tools"
-      className="flex w-[4.5rem] shrink-0 flex-col border-r border-ed-border bg-ed-panel py-2"
+      className="flex w-full shrink-0 flex-row gap-1 overflow-x-auto overscroll-x-contain border-b border-ed-border bg-ed-panel px-1.5 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] md:w-[4.5rem] md:flex-col md:overflow-x-visible md:overflow-y-auto md:border-b-0 md:border-r md:py-2 [&::-webkit-scrollbar]:hidden"
     >
-      <div className="flex flex-col gap-0.5 px-1.5">
+      <div className="flex flex-row gap-0.5 md:flex-col">
         <RailTool
           active={activeTool === "upload"}
           icon={<Upload className="h-5 w-5" strokeWidth={1.75} />}
@@ -66,7 +66,7 @@ export function WatermarkToolRail({
         />
       </div>
       {!hasMedia ? (
-        <p className="mt-auto px-2 pb-1 text-center text-[9px] leading-3 text-ed-fg-muted">
+        <p className="hidden px-2 pb-1 text-center text-[9px] leading-3 text-ed-fg-muted md:mt-auto md:block">
           Upload a file to start
         </p>
       ) : null}

@@ -19,9 +19,9 @@ export function EditorSubToolRail({ ariaLabel, children }: EditorSubToolRailProp
   return (
     <nav
       aria-label={ariaLabel}
-      className="flex w-[5rem] shrink-0 flex-col border-r border-ed-border bg-ed-panel py-2"
+      className="flex w-full shrink-0 flex-row gap-1 overflow-x-auto overscroll-x-contain border-b border-ed-border bg-ed-panel px-1.5 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] md:w-[5rem] md:flex-col md:overflow-x-visible md:overflow-y-auto md:border-b-0 md:border-r md:py-2 [&::-webkit-scrollbar]:hidden"
     >
-      <div className="flex flex-col gap-1 px-1.5">{children}</div>
+      <div className="flex flex-row gap-1 md:flex-col">{children}</div>
     </nav>
   );
 }
@@ -35,7 +35,7 @@ export function EditorSubToolButton({
 }: EditorSubToolButtonProps) {
   return (
     <button
-      className={`flex w-full flex-col items-center gap-2 rounded-xl px-1.5 py-3 text-[10px] leading-tight transition disabled:cursor-not-allowed ${
+      className={`flex shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] leading-tight transition disabled:cursor-not-allowed md:w-full md:gap-2 md:px-1.5 md:py-3 ${
         active
           ? "bg-ed-bg-card text-ed-fg font-bold shadow-sm"
           : disabled
@@ -47,13 +47,13 @@ export function EditorSubToolButton({
       type="button"
     >
       <span
-        className={`flex h-6 w-6 items-center justify-center ${
+        className={`flex h-5 w-5 items-center justify-center md:h-6 md:w-6 ${
           disabled ? "text-ed-fg-muted/50" : "text-signal"
         }`}
       >
         {icon}
       </span>
-      <span className="text-center">{label}</span>
+      <span className="whitespace-nowrap text-center">{label}</span>
     </button>
   );
 }

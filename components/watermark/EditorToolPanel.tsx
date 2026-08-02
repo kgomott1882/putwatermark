@@ -32,11 +32,11 @@ export function EditorToolPanel({
 }: EditorToolPanelProps) {
   return (
     <aside
-      className={`flex h-full shrink-0 flex-col border-r border-ed-border bg-ed-panel ${
-        toolRail ? "w-[24.5rem]" : "w-[19.5rem]"
+      className={`flex min-h-0 w-full shrink-0 flex-col border-ed-border bg-ed-panel max-md:max-h-[min(42svh,360px)] max-md:border-b md:h-full md:border-r ${
+        toolRail ? "md:w-[24.5rem]" : "md:w-[19.5rem]"
       }`}
     >
-      <header className="flex items-center gap-1.5 border-b border-ed-border bg-ed-bg-card px-2.5 py-2 shadow-sm">
+      <header className="flex shrink-0 items-center gap-1.5 border-b border-ed-border bg-ed-bg-card px-2.5 py-2 shadow-sm">
         <button
           aria-hidden
           className="editor-secondary-button flex h-6 w-6 items-center justify-center rounded-md text-ed-fg"
@@ -63,11 +63,15 @@ export function EditorToolPanel({
         </button>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        {toolRail}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+        {toolRail ? (
+          <div className="flex shrink-0 flex-col overflow-hidden md:overflow-y-auto">
+            {toolRail}
+          </div>
+        ) : null}
         <motion.div
           animate={{ opacity: 1, x: 0 }}
-          className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-2.5 py-2"
           initial={instant ? false : { opacity: 0, x: 14 }}
           transition={instant ? { duration: 0 } : { duration: 0.38, ease: panelEase }}
         >

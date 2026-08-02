@@ -35,7 +35,7 @@ type RailItemProps = {
 function RailItem({ active, disabled, icon, label, onClick }: RailItemProps) {
   return (
     <button
-      className={`flex w-full flex-col items-center gap-2 rounded-xl px-1.5 py-3 text-[11px] leading-tight transition disabled:cursor-not-allowed ${
+      className={`flex shrink-0 flex-col items-center gap-1.5 rounded-xl px-2 py-2 text-[10px] leading-tight transition disabled:cursor-not-allowed md:gap-2 md:px-1.5 md:py-3 md:text-[11px] ${
         active
           ? "bg-ed-bg-card text-ed-fg font-bold shadow-sm"
           : disabled
@@ -47,13 +47,13 @@ function RailItem({ active, disabled, icon, label, onClick }: RailItemProps) {
       type="button"
     >
       <span
-        className={`flex h-6 w-6 items-center justify-center ${
+        className={`flex h-5 w-5 items-center justify-center md:h-6 md:w-6 ${
           disabled ? "text-ed-fg-muted/50" : "text-signal"
         }`}
       >
         {icon}
       </span>
-      <span>{label}</span>
+      <span className="whitespace-nowrap">{label}</span>
     </button>
   );
 }
@@ -105,49 +105,52 @@ export function ToolIconRail({
   return (
     <nav
       aria-label="Editor tools"
-      className="flex h-full w-[5rem] shrink-0 flex-col border-r border-ed-border bg-ed-panel py-2"
+      className="flex w-full shrink-0 flex-row items-stretch gap-1 overflow-x-auto overscroll-x-contain border-b border-ed-border bg-ed-panel px-2 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] md:h-full md:w-[5rem] md:flex-col md:overflow-x-visible md:overflow-y-hidden md:border-b-0 md:border-r md:px-0 md:py-2 [&::-webkit-scrollbar]:hidden"
     >
-      <div className="flex flex-1 flex-col gap-0.5 px-1.5">
+      <div className="flex min-h-0 flex-row gap-1 md:min-h-0 md:flex-1 md:flex-col md:gap-0.5 md:overflow-y-auto md:overscroll-y-contain md:px-1.5">
         <Link
-          className="flex flex-col items-center gap-2 rounded-xl px-1.5 py-3 text-[11px] font-medium leading-tight text-ed-fg-muted transition hover:bg-ed-bg-card/70 hover:text-ed-fg"
+          className="flex shrink-0 flex-col items-center gap-1.5 rounded-xl px-2 py-2 text-[10px] font-medium leading-tight text-ed-fg-muted transition hover:bg-ed-bg-card/70 hover:text-ed-fg md:gap-2 md:px-1.5 md:py-3 md:text-[11px]"
           href="/"
           title="Home"
         >
-          <Home className="h-6 w-6" strokeWidth={1.75} />
-          <span>Home</span>
+          <Home className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.75} />
+          <span className="whitespace-nowrap">Home</span>
         </Link>
 
-        <div className="mx-1 border-t border-ed-border" />
+        <div
+          aria-hidden
+          className="mx-0.5 w-px shrink-0 self-stretch bg-ed-border md:mx-1 md:h-px md:w-auto"
+        />
 
         <RailItem
           active={isPhotosPanel(activePanel)}
           disabled={!photosEnabled}
-          icon={<Images className="h-6 w-6" strokeWidth={1.75} />}
+          icon={<Images className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.75} />}
           label="Photos"
           onClick={() => onSelectPanel("photos")}
         />
         <RailItem
           active={isPdfDocsPanel(activePanel)}
           disabled={!pdfDocsEnabled}
-          icon={<FileText className="h-6 w-6" strokeWidth={1.75} />}
+          icon={<FileText className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.75} />}
           label="Pdf Docs"
           onClick={() => onSelectPanel("pdfDocs")}
         />
         <RailItem
           active={activePanel === "video"}
           disabled={!videosEnabled}
-          icon={<Video className="h-6 w-6" strokeWidth={1.75} />}
+          icon={<Video className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.75} />}
           label="Videos"
           onClick={() => onSelectPanel("video")}
         />
       </div>
 
       <Link
-        className="mx-1.5 mb-3 flex flex-col items-center gap-2 rounded-xl bg-signal px-1.5 py-3 text-[11px] font-bold leading-tight text-white shadow-md transition hover:brightness-110"
+        className="mx-0 mb-0 flex shrink-0 flex-col items-center gap-1.5 self-center rounded-xl bg-signal px-2 py-2 text-[10px] font-bold leading-tight text-white shadow-md transition hover:brightness-110 md:mx-1.5 md:mb-3 md:gap-2 md:px-1.5 md:py-3 md:text-[11px]"
         href="/pricing"
       >
-        <Crown className="h-5 w-5" strokeWidth={2} />
-        <span>Upgrade</span>
+        <Crown className="h-4 w-4 md:h-5 md:w-5" strokeWidth={2} />
+        <span className="whitespace-nowrap">Upgrade</span>
       </Link>
     </nav>
   );
