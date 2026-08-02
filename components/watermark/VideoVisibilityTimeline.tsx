@@ -436,7 +436,7 @@ export function VideoVisibilityTimeline({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     alt=""
-                    className="h-full flex-1 object-cover"
+                    className="h-full flex-1 bg-black/80 object-contain"
                     draggable={false}
                     key={`${thumbnail.timeSeconds}-${index}`}
                     src={thumbnail.dataUrl}

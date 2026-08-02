@@ -9767,6 +9767,20 @@ export default function WatermarkPage() {
     showCaptionTimelineDock ||
     showWatermarkTimelineDock ||
     showVideoBlurTimelineDock;
+  const videoPreviewDisplayFrame =
+    mediaKind === "video" && videoSize
+      ? getVideoDisplayFrame(
+          canvasSize.width,
+          canvasSize.height,
+          videoSize.width,
+          videoSize.height,
+        )
+      : {
+          height: canvasSize.height,
+          width: canvasSize.width,
+          x: 0,
+          y: 0,
+        };
   const showWatermarkAdjustAside =
     isWatermarkPanelActive &&
     hasMedia &&
@@ -11418,6 +11432,8 @@ export default function WatermarkPage() {
                   style={{
                     cursor:
                       resolvedCanvasCursor === "auto" ? undefined : resolvedCanvasCursor,
+                    height: videoPreviewDisplayFrame.height,
+                    width: videoPreviewDisplayFrame.width,
                   }}
                 >
                   <VideoOverviewPlayer
@@ -11443,7 +11459,7 @@ export default function WatermarkPage() {
                     }}
                   >
                     <video
-                      className="block max-h-full max-w-full"
+                      className="block h-full max-h-full w-full max-w-full object-contain"
                       controls={false}
                       key={videoUrl}
                       playsInline
@@ -11457,12 +11473,12 @@ export default function WatermarkPage() {
                 className="relative touch-none shadow-lg"
                 ref={videoPreviewRef}
                 style={{
-                  height: canvasSize.height,
-                  width: canvasSize.width,
+                  height: videoPreviewDisplayFrame.height,
+                  width: videoPreviewDisplayFrame.width,
                 }}
               >
                 <video
-                  className="block max-h-full max-w-full"
+                  className="block h-full w-full object-contain"
                   controls={watermarkType !== "text"}
                   key={videoUrl}
                   playsInline

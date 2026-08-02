@@ -51,7 +51,7 @@ export function PricingPayPalCheckout({
 
   if (!paypalClientId) {
     return (
-      <p className="text-center text-xs leading-6 text-beige-dim">
+      <p className="text-center text-xs leading-6 text-battleship">
         PayPal checkout is not configured on this environment yet.
       </p>
     );
@@ -92,11 +92,11 @@ export function PricingPayPalCheckout({
   }
 
   return (
-    <div className="flex w-full flex-col gap-3">
+    <div className="paypal-checkout-host flex w-full flex-col gap-2">
       {uiState === "completed" ? (
         <>
           {message ? (
-            <p className="text-center text-xs leading-6 text-beige-dim" role="status">
+            <p className="text-center text-xs leading-6 text-battleship" role="status">
               {message}
               {updatedBalance !== null ? (
                 <>
@@ -115,7 +115,7 @@ export function PricingPayPalCheckout({
               Go to Watermark Tool
             </Link>
             <Link
-              className="inline-flex w-full items-center justify-center rounded-xl border border-beige/15 bg-night-elevated px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-beige transition hover:border-sand/40 hover:text-sand"
+              className="inline-flex w-full items-center justify-center rounded-xl border border-ink/15 bg-landing-light px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-ink transition hover:border-ink/25 hover:bg-white"
               href="/account"
             >
               View My Account
@@ -126,7 +126,7 @@ export function PricingPayPalCheckout({
         <>
           <LoadingIndicator label="Confirming your payment..." />
           {message ? (
-            <p className="text-center text-xs leading-6 text-beige-dim" role="status">
+            <p className="text-center text-xs leading-6 text-battleship" role="status">
               {message}
             </p>
           ) : null}
@@ -144,7 +144,7 @@ export function PricingPayPalCheckout({
               key={checkoutKey}
               style={{
                 color: "gold",
-                height: 45,
+                height: 40,
                 label: "paypal",
                 layout: "vertical",
                 shape: "rect",
@@ -221,7 +221,7 @@ export function PricingPayPalCheckout({
           {message ? (
             <p
               className={`text-center text-xs leading-6 ${
-                uiState === "error" ? "text-signal" : "text-beige-dim"
+                uiState === "error" ? "text-signal" : "text-battleship"
               }`}
               role="status"
             >

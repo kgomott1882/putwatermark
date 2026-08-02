@@ -229,4 +229,21 @@ body.landing-cursor-none * {
       -12px 0;
     background-size: 24px 24px;
   }
+
+  .paypal-checkout-host {
+    color-scheme: light only;
+    zoom: 0.9;
+  }
+
+  html.paypal-checkout-open [data-putwatermark-paypal-overlay="true"] iframe {
+    zoom: 0.9;
+  }
+}
+
+html.paypal-checkout-open {
+  color-scheme: light only;
+}
+
+html.paypal-checkout-open body {
+  overflow: hidden;
 }
