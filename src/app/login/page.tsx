@@ -1,8 +1,8 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, type FormEvent, useMemo, useState } from "react";
+import { AuthPageCard, AuthPageShell } from "../../../components/auth/AuthPageCard";
 import { Button } from "../../../components/Button";
 import { getAuthCallbackUrl } from "../../lib/authRedirect";
 import { createClient } from "../../../utils/supabase/client";
@@ -35,18 +35,9 @@ export default function LoginPage() {
 
 function LoginPageFallback() {
   return (
-    <main className="flex min-h-screen w-full items-center justify-center bg-paper px-6 py-16 text-ink sm:px-12 lg:px-20">
-      <section className="w-full max-w-md rounded-[2rem] border border-platinum bg-paper p-8 shadow-2xl shadow-platinum/60 sm:p-10">
-        <div className="text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-battleship">
-            Welcome back
-          </p>
-          <h1 className="mt-4 text-4xl font-bold tracking-[-0.04em] text-ink">
-            Log in
-          </h1>
-        </div>
-      </section>
-    </main>
+    <AuthPageShell>
+      <AuthPageCard kicker="Welcome back" title="Log in" />
+    </AuthPageShell>
   );
 }
 
@@ -144,58 +135,38 @@ function LoginPageContent() {
   }
 
   return (
-    <main className="flex min-h-screen w-full items-center justify-center bg-paper px-6 py-16 text-ink sm:px-12 lg:px-20">
-      <motion.section
-        className="w-full max-w-md rounded-[2rem] border border-platinum bg-paper p-8 shadow-2xl shadow-platinum/60 sm:p-10"
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-      >
-        <div className="text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-battleship">
-            Welcome back
-          </p>
-          <h1 className="mt-4 text-4xl font-bold tracking-[-0.04em] text-ink">
-            Log in
-          </h1>
-        </div>
-
+    <AuthPageShell>
+      <AuthPageCard kicker="Welcome back" title="Log in">
         {isConfirmed ? (
-          <div className="mt-8 rounded-2xl border border-platinum bg-platinum/60 px-4 py-3 text-sm text-ink">
+          <div className="auth-notice mt-8">
             Email confirmed! You can now log in.
           </div>
         ) : null}
 
         {hasConfirmationError ? (
-          <div className="mt-8 rounded-2xl border border-signal/30 bg-signal/10 px-4 py-3 text-sm text-ink">
+          <div className="auth-alert mt-8">
             We could not confirm your email. Please try the confirmation link
             again.
           </div>
         ) : null}
 
         {hasExpiredLinkError ? (
-          <div className="mt-8 rounded-2xl border border-signal/30 bg-signal/10 px-4 py-3 text-sm text-ink">
+          <div className="auth-alert mt-8">
             That link has expired or was already used. Please sign up again or
             request a new confirmation email.
           </div>
         ) : null}
 
-        {formError ? (
-          <div className="mt-8 rounded-2xl border border-signal/30 bg-signal/10 px-4 py-3 text-sm text-ink">
-            {formError}
-          </div>
-        ) : null}
+        {formError ? <div className="auth-alert mt-8">{formError}</div> : null}
 
         {resendMessage ? (
-          <div className="mt-4 rounded-2xl border border-platinum bg-platinum/60 px-4 py-3 text-sm text-ink">
-            {resendMessage}
-          </div>
+          <div className="auth-notice mt-4">{resendMessage}</div>
         ) : null}
 
         {showResendConfirmation || hasExpiredLinkError ? (
           <div className="mt-4 text-center">
             <button
-              className="text-sm font-medium text-ink underline decoration-platinum underline-offset-4 transition hover:text-signal hover:decoration-signal disabled:cursor-not-allowed disabled:opacity-60"
+              className="text-sm font-medium text-battleship underline decoration-ink/10 underline-offset-4 transition hover:text-signal hover:decoration-signal disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isResending}
               onClick={handleResendConfirmation}
               type="button"
@@ -207,11 +178,11 @@ function LoginPageContent() {
 
         <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
           <div>
-            <label className="block text-sm font-medium text-battleship" htmlFor="email">
+            <label className="auth-label" htmlFor="email">
               Email
             </label>
             <input
-              className="mt-2 w-full rounded-2xl border border-platinum bg-paper px-4 py-3 text-ink outline-none transition placeholder:text-battleship/60 focus:border-signal focus:ring-2 focus:ring-signal/20"
+              className="auth-input"
               id="email"
               name="email"
               onChange={(event) => updateValue("email", event.target.value)}
@@ -222,14 +193,11 @@ function LoginPageContent() {
           </div>
 
           <div>
-            <label
-              className="block text-sm font-medium text-battleship"
-              htmlFor="password"
-            >
+            <label className="auth-label" htmlFor="password">
               Password
             </label>
             <input
-              className="mt-2 w-full rounded-2xl border border-platinum bg-paper px-4 py-3 text-ink outline-none transition placeholder:text-battleship/60 focus:border-signal focus:ring-2 focus:ring-signal/20"
+              className="auth-input"
               id="password"
               name="password"
               onChange={(event) => updateValue("password", event.target.value)}
@@ -241,7 +209,7 @@ function LoginPageContent() {
 
           <div className="flex justify-end">
             <a
-              className="text-sm font-medium text-battleship transition hover:text-ink"
+              className="text-sm font-medium text-battleship transition hover:text-signal"
               href="/forgot-password"
             >
               Forgot your password?
@@ -259,12 +227,12 @@ function LoginPageContent() {
 
           <p className="text-center text-sm text-battleship">
             Don&apos;t have an account?{" "}
-            <a className="font-medium text-ink transition hover:text-signal" href="/signup">
+            <a className="auth-link" href="/signup">
               Sign up
             </a>
           </p>
         </form>
-      </motion.section>
-    </main>
+      </AuthPageCard>
+    </AuthPageShell>
   );
 }

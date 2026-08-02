@@ -59,7 +59,7 @@ function FooterLinkColumn({
 }) {
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sand">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-beige">
         {title}
       </p>
       <ul className="mt-5 space-y-3">
@@ -90,7 +90,7 @@ function FooterLinkColumn({
 function FooterSocialColumn() {
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sand">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-beige">
         Social
       </p>
       <ul className="mt-5 space-y-3">
@@ -177,7 +177,16 @@ export function Footer() {
   }
 
   return (
-    <footer className="landing-section border-t">
+    <>
+      <section aria-label="Press and media" className="landing-light-band py-10 md:py-12">
+        <div className={`${pageContainerClass} text-center`}>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ink">
+            As seen on
+          </p>
+        </div>
+      </section>
+
+      <footer className="landing-footer landing-section border-t-0">
       <div className={`${pageContainerClass} py-12 md:py-16`}>
         <div className="flex flex-col gap-6 landing-border border-b pb-10 lg:flex-row lg:items-end lg:justify-between">
           <h2 className="text-[clamp(3rem,11vw,7.5rem)] font-bold leading-[0.9] tracking-[-0.05em] text-beige">
@@ -251,14 +260,14 @@ export function Footer() {
               ) : null}
 
               {successMessage ? (
-                <p className="text-sm text-sand" role="status">
+                <p className="text-sm text-signal" role="status">
                   {successMessage}
                 </p>
               ) : null}
 
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
                 <button
-                  className="group inline-flex items-center gap-3 text-sm font-semibold text-beige transition hover:text-sand disabled:cursor-not-allowed disabled:opacity-60"
+                  className="group inline-flex items-center gap-3 text-sm font-semibold text-beige transition hover:text-signal disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={isSubmitting}
                   type="submit"
                 >
@@ -282,14 +291,14 @@ export function Footer() {
 
         <div className="grid gap-10 pt-10 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-end">
           <p className="landing-muted max-w-md text-sm leading-7">
-            <span className="font-semibold text-sand">PutWatermark</span> is a
+            <span className="font-semibold text-beige">PutWatermark</span> is a
             browser-native watermarking tool for{" "}
             <LandingHighlight>photos, PDFs, and video</LandingHighlight>.
           </p>
 
           <div className="text-sm leading-7">
             <a
-              className="text-sand transition hover:text-beige"
+              className="text-beige transition hover:text-signal"
               href="mailto:hello@putwatermark.com"
             >
               hello@putwatermark.com
@@ -309,7 +318,7 @@ export function Footer() {
             </div>
 
             <Link
-              className="landing-surface inline-flex max-w-[12rem] flex-col gap-1 rounded-xl px-4 py-3 transition hover:border-sand/40"
+              className="landing-surface inline-flex max-w-[12rem] flex-col gap-1 rounded-xl px-4 py-3 transition hover:border-signal/40"
               href="/watermark"
             >
               <span className="text-sm font-semibold text-beige">Open editor</span>
@@ -320,10 +329,11 @@ export function Footer() {
           </div>
         </div>
 
-        <p className="landing-soft mt-10 text-xs">
+        <p className="landing-soft mt-10 text-xs text-beige-dim/80">
           © 2026 PutWatermark. All rights reserved.
         </p>
       </div>
     </footer>
+    </>
   );
 }

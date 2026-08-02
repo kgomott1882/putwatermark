@@ -13,6 +13,7 @@ assert.equal(LONG_VIDEO_CHUNK_MAX_DURATION_SECONDS, 4 * 60);
 assert.equal(estimateLongVideoChunkCount(11 * 60), 3);
 assert.equal(estimateLongVideoChunkCount(25 * 60), 7);
 assert.equal(estimateLongVideoChunkCount(30 * 60), 8);
+assert.equal(estimateLongVideoChunkCount(60 * 60), 15);
 
 assert.deepEqual(calculateLongVideoChunkSurcharge(1), {
   chunkCount: 1,

@@ -17,6 +17,12 @@ import { randomUUID } from "node:crypto";
 import * as tus from "tus-js-client";
 import ffmpegStatic from "ffmpeg-static";
 import {
+  assertLongVideoOutputVerification,
+  formatLongVideoOutputVerification,
+  probeContainerDurationSeconds,
+  verifyLongVideoOutput,
+} from "./lib/longVideoOutputVerify";
+import {
   concatLongVideoExportJob,
   processLongVideoExportChunk,
   splitLongVideoExportJob,
@@ -67,17 +73,6 @@ function runFfmpeg(args: string[]) {
   });
 }
 
-async function ffprobeDurationSeconds(inputPath: string) {
-  const stderr = await runFfmpeg(["-hide_banner", "-i", inputPath, "-f", "null", "-"]);
-  const match = stderr.match(/Duration:\s(\d+):(\d+):(\d+(?:\.\d+)?)/);
-  if (!match) {
-    throw new Error(`Could not parse duration for ${inputPath}`);
-  }
-
-  const [, hours, minutes, seconds] = match;
-  return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds);
-}
-
 async function resolveSourceVideo() {
   for (const candidate of SOURCE_CANDIDATES) {
     try {
@@ -105,7 +100,7 @@ async function ensureLongSourceVideo() {
   try {
     const existing = await stat(outputPath);
     if (existing.size > 0) {
-      const duration = await ffprobeDurationSeconds(outputPath);
+      const duration = await probeContainerDurationSeconds(outputPath);
       if (Math.abs(duration - TARGET_SECONDS) <= 2) {
         return outputPath;
       }
@@ -114,7 +109,7 @@ async function ensureLongSourceVideo() {
     // regenerate below
   }
 
-  const sourceDuration = await ffprobeDurationSeconds(sourcePath);
+  const sourceDuration = await probeContainerDurationSeconds(sourcePath);
   if (sourceDuration + 1 < TARGET_SECONDS) {
     const listPath = path.join(E2E_DIR, "concat-list.txt");
     await writeFile(
@@ -160,7 +155,7 @@ async function ensureLongSourceVideo() {
     ]);
   }
 
-  const duration = await ffprobeDurationSeconds(outputPath);
+  const duration = await probeContainerDurationSeconds(outputPath);
   console.log(`E2E source ready: ${outputPath} (${duration.toFixed(2)}s)`);
   return outputPath;
 }
@@ -312,20 +307,24 @@ async function main() {
   const result = await concatLongVideoExportJob(jobId, userId);
   const outputPath = path.join(E2E_DIR, `output-${jobId}.mp4`);
   const outputBytes = await downloadOutput(result.downloadUrl, outputPath);
-  const outputDuration = await ffprobeDurationSeconds(outputPath);
-  const sourceDuration = await ffprobeDurationSeconds(localSourcePath);
-  const delta = outputDuration - sourceDuration;
+  const sourceDuration = await probeContainerDurationSeconds(localSourcePath);
 
   console.log("\n=== Long video E2E result ===");
   console.log(`Source duration: ${sourceDuration.toFixed(2)}s`);
-  console.log(`Output duration: ${outputDuration.toFixed(2)}s (delta ${delta >= 0 ? "+" : ""}${delta.toFixed(2)}s)`);
   console.log(`Output size: ${(outputBytes / (1024 * 1024)).toFixed(1)}MB`);
   console.log(`Output file: ${outputPath}`);
   console.log(`Total elapsed: ${((Date.now() - startedAt) / 1000 / 60).toFixed(1)} min`);
 
-  if (Math.abs(delta) > 1) {
-    throw new Error(`Duration drift ${delta.toFixed(2)}s exceeds 1s tolerance`);
-  }
+  console.log("\nVerifying playback quality (join A/V sync + tail)...");
+  const verification = await verifyLongVideoOutput({
+    filePath: outputPath,
+    joinSeconds: splitJob.splitAtSeconds,
+    sourceDurationSeconds: sourceDuration,
+    tailWorkDirectory: path.join(E2E_DIR, `tail-check-${jobId}`),
+  });
+  console.log(formatLongVideoOutputVerification(verification));
+  assertLongVideoOutputVerification(verification);
+  console.log("Playback verification passed.");
 
   await cleanupLongVideoExportJob(jobId);
   console.log("Cleaned up remote job artifacts.");

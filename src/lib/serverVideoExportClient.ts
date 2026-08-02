@@ -1,4 +1,12 @@
 import {
+  formatLongVideoChunkFailureMessage,
+  getLongVideoChunkRetryDelayMs,
+  isRetryableLongVideoChunkHttpStatus,
+  isRetryableLongVideoChunkTransportError,
+  LONG_VIDEO_CHUNK_MAX_ATTEMPTS,
+  sleepMs,
+} from "./longVideoChunkRetry";
+import {
   getResumeJobIdForVideoUpload,
   uploadVideoWithTus,
 } from "./serverVideoTusUpload";
@@ -400,52 +408,105 @@ export async function exportLongVideoOnServer(input: SharedServerExportInput) {
       `Processing chunk ${chunkIndex + 1} of ${chunkCount} on server…`,
     );
 
-    const stopIndeterminateProgress = startIndeterminateProgress({
-      from: chunkProgressStart,
-      onProgress: input.onProgress,
-      shouldCancel: input.shouldCancel,
-      to: Math.max(chunkProgressStart, chunkProgressEnd - 1),
-    });
+    let chunkSucceeded = false;
 
-    let chunkResponse: Response;
+    for (
+      let attempt = 0;
+      attempt < LONG_VIDEO_CHUNK_MAX_ATTEMPTS;
+      attempt += 1
+    ) {
+      assertNotCancelled(input.shouldCancel);
 
-    try {
-      chunkResponse = await fetchServerVideoStep(
-        `/api/watermark/video/job/${uploadTarget.jobId}/chunk/${chunkIndex}`,
-        {
-          body: JSON.stringify({
-            inputFileName: input.inputFileName,
-            overlayBase64,
-          }),
-          headers: {
-            "Content-Type": "application/json",
+      if (attempt > 0) {
+        input.onProcessingDetailChange?.(
+          `Retrying chunk ${chunkIndex + 1} of ${chunkCount} (attempt ${attempt + 1} of ${LONG_VIDEO_CHUNK_MAX_ATTEMPTS})…`,
+        );
+        await sleepMs(getLongVideoChunkRetryDelayMs(attempt - 1));
+      }
+
+      const stopIndeterminateProgress = startIndeterminateProgress({
+        from: chunkProgressStart,
+        onProgress: input.onProgress,
+        shouldCancel: input.shouldCancel,
+        to: Math.max(chunkProgressStart, chunkProgressEnd - 1),
+      });
+
+      let chunkResponse: Response | undefined;
+      let transportError: unknown;
+
+      try {
+        chunkResponse = await fetchServerVideoStep(
+          `/api/watermark/video/job/${uploadTarget.jobId}/chunk/${chunkIndex}`,
+          {
+            body: JSON.stringify({
+              inputFileName: input.inputFileName,
+              overlayBase64,
+            }),
+            headers: {
+              "Content-Type": "application/json",
+            },
+            method: "POST",
+            signal: input.abortSignal,
           },
-          method: "POST",
-          signal: input.abortSignal,
-        },
-        {
-          abortSignal: input.abortSignal,
-          shouldCancel: input.shouldCancel,
-          timeoutMessage: `Video chunk ${chunkIndex + 1} of ${chunkCount} is taking longer than expected and may have failed. Try again with a shorter clip, or contact support if this keeps happening.`,
-          timeoutMs: LONG_VIDEO_CHUNK_REQUEST_TIMEOUT_MS,
-        },
-      );
-    } finally {
-      stopIndeterminateProgress();
-    }
+          {
+            abortSignal: input.abortSignal,
+            shouldCancel: input.shouldCancel,
+            timeoutMessage: `Video chunk ${chunkIndex + 1} of ${chunkCount} is taking longer than expected and may have failed. Try again with a shorter clip, or contact support if this keeps happening.`,
+            timeoutMs: LONG_VIDEO_CHUNK_REQUEST_TIMEOUT_MS,
+          },
+        );
+      } catch (error) {
+        if (error instanceof VideoExportCancelledError) {
+          throw error;
+        }
 
-    if (chunkResponse.status === 499) {
-      throw new VideoExportCancelledError();
-    }
+        transportError = error;
+      } finally {
+        stopIndeterminateProgress();
+      }
 
-    if (!chunkResponse.ok) {
-      const payload = (await chunkResponse.json().catch(() => null)) as {
-        error?: string;
-      } | null;
+      if (chunkResponse?.status === 499) {
+        throw new VideoExportCancelledError();
+      }
 
-      throw new VideoExportFailedError(
+      if (chunkResponse?.ok) {
+        chunkSucceeded = true;
+        break;
+      }
+
+      const isLastAttempt = attempt === LONG_VIDEO_CHUNK_MAX_ATTEMPTS - 1;
+      const payload = chunkResponse
+        ? ((await chunkResponse.json().catch(() => null)) as {
+            error?: string;
+          } | null)
+        : null;
+      const serverError =
         payload?.error ??
-          `Video chunk ${chunkIndex + 1} failed. Please try again.`,
+        (transportError instanceof Error
+          ? transportError.message
+          : undefined);
+      const shouldRetry =
+        !isLastAttempt &&
+        (transportError
+          ? isRetryableLongVideoChunkTransportError(transportError)
+          : chunkResponse
+            ? isRetryableLongVideoChunkHttpStatus(chunkResponse.status)
+            : false);
+
+      if (!shouldRetry) {
+        throw new VideoExportFailedError(
+          formatLongVideoChunkFailureMessage(
+            chunkIndex,
+            chunkCount,
+            serverError,
+          ),
+        );
+      }
+    }
+
+    if (!chunkSucceeded) {
+      throw new VideoExportFailedError(
+        formatLongVideoChunkFailureMessage(chunkIndex, chunkCount),
       );
     }
 

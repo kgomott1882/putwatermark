@@ -82,9 +82,9 @@ function getFaqAnswer(question: string, answer: string) {
   if (question === "Is there a size or length limit on watermarking video?") {
     return (
       <>
-        Short clips process instantly in your browser. Longer or larger videos
-        (up to 250MB or 10 minutes) upload with resumable transfers and are
-        processed automatically on our servers. See{" "}
+        Short clips process instantly in your browser. Longer videos (up to 60
+        minutes) upload with resumable transfers and are processed automatically on
+        our servers. See{" "}
         <BlogInlineLink href="/pricing">current details</BlogInlineLink> for
         credit usage on longer exports.
       </>
@@ -160,14 +160,13 @@ export function BlogWatermarkVideoArticle({ post }: BlogWatermarkVideoArticlePro
                   touches a server at all.
                 </>,
                 <>
-                  <strong className="text-beige">Longer or larger videos</strong> are
-                  automatically routed to server-side processing instead. Uploads
-                  use resumable transfers (up to 250MB or 10 minutes), so an
-                  interrupted connection can be resumed when you export again.
-                  You&apos;ll see a slightly different progress indicator while
-                  the file uploads and processes on our infrastructure rather
-                  than your device, but the result is the same watermarked file,
-                  downloaded once it&apos;s ready.
+                  <strong className="text-beige">Longer videos</strong> (up to 60
+                  minutes) are automatically routed to server-side processing instead.
+                  Uploads use resumable transfers, so an interrupted connection can be
+                  resumed when you export again. You&apos;ll see a slightly different
+                  progress indicator while the file uploads and processes on our
+                  infrastructure rather than your device, but the result is the same
+                  watermarked file, downloaded once it&apos;s ready.
                 </>,
                 <>
                   <strong className="text-beige">

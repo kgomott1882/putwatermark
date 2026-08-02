@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 import { type FormEvent, useMemo, useState } from "react";
+import { AuthPageCard, AuthPageShell } from "../../../components/auth/AuthPageCard";
 import { Button } from "../../../components/Button";
 import { getAuthCallbackUrl } from "../../lib/authRedirect";
 import { createClient } from "../../../utils/supabase/client";
@@ -231,35 +231,24 @@ export default function SignupPage() {
   const showSignupForm = !isVerificationPending && !accountExists;
 
   return (
-    <main className="flex min-h-screen w-full items-center justify-center bg-paper px-6 py-16 text-ink sm:px-12 lg:px-20">
-      <motion.section
-        className="w-full max-w-md rounded-[2rem] border border-platinum bg-paper p-8 shadow-2xl shadow-platinum/60 sm:p-10"
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
+    <AuthPageShell>
+      <AuthPageCard
+        kicker={isVerificationPending ? "Almost there" : "Start free"}
+        lead={
+          isVerificationPending
+            ? `We sent a confirmation link to ${pendingEmail}.`
+            : "Verify your email before logging in."
+        }
+        title={isVerificationPending ? "Check your email" : "Create your account"}
       >
-        <div className="text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-battleship">
-            {isVerificationPending ? "Almost there" : "Start free"}
-          </p>
-          <h1 className="mt-4 text-4xl font-bold tracking-[-0.04em] text-ink">
-            {isVerificationPending ? "Check your email" : "Create your account"}
-          </h1>
-          <p className="mt-4 text-sm leading-6 text-battleship">
-            {isVerificationPending
-              ? `We sent a confirmation link to ${pendingEmail}.`
-              : "Verify your email before logging in."}
-          </p>
-        </div>
-
         {accountExists ? (
-          <div className="mt-8 rounded-2xl border border-signal/30 bg-signal/10 px-4 py-4 text-sm text-ink">
+          <div className="auth-alert mt-8 px-4 py-4">
             <p className="font-semibold">An account with this email already exists.</p>
             <p className="mt-2 leading-6">
               Log in with your email and password to continue.
             </p>
             <Link
-              className="mt-4 inline-flex rounded-full bg-signal px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-night transition hover:bg-signal/90"
+              className="mt-4 inline-flex rounded-full bg-signal px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-white transition hover:brightness-95"
               href="/login"
             >
               Go to log in
@@ -268,15 +257,13 @@ export default function SignupPage() {
         ) : null}
 
         {isVerificationPending ? (
-          <div className="mt-8 rounded-2xl border border-platinum bg-platinum/60 px-5 py-5 text-sm leading-6 text-ink">
+          <div className="auth-notice mt-8 px-5 py-5 leading-6">
             <p>{verificationPendingMessage}</p>
             {resendMessage ? (
-              <p className="mt-4 rounded-xl border border-platinum bg-paper px-4 py-3 text-sm text-ink">
-                {resendMessage}
-              </p>
+              <p className="auth-notice mt-4 px-4 py-3">{resendMessage}</p>
             ) : null}
             <button
-              className="mt-5 text-sm font-medium text-ink underline decoration-platinum underline-offset-4 transition hover:text-signal hover:decoration-signal disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-5 text-sm font-medium text-ink underline decoration-ink/10 underline-offset-4 transition hover:text-signal hover:decoration-signal disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isResending}
               onClick={() => handleResendConfirmation(pendingEmail)}
               type="button"
@@ -285,21 +272,14 @@ export default function SignupPage() {
             </button>
             <p className="mt-6 text-center text-sm text-battleship">
               Already confirmed?{" "}
-              <Link
-                className="font-medium text-ink transition hover:text-signal"
-                href="/login"
-              >
+              <Link className="auth-link" href="/login">
                 Log in
               </Link>
             </p>
           </div>
         ) : showSignupForm ? (
           <>
-            {formError ? (
-              <div className="mt-8 rounded-2xl border border-signal/30 bg-signal/10 px-4 py-3 text-sm text-ink">
-                {formError}
-              </div>
-            ) : null}
+            {formError ? <div className="auth-alert mt-8">{formError}</div> : null}
 
             <form className="mt-8 space-y-5" onSubmit={handleSubmit} noValidate>
               <Field
@@ -336,7 +316,7 @@ export default function SignupPage() {
               <label className="flex items-start gap-3 text-sm leading-6 text-battleship">
                 <input
                   checked={values.marketingConsent}
-                  className="mt-1 h-4 w-4 rounded border-platinum text-signal focus:ring-signal"
+                  className="mt-1 h-4 w-4 rounded border-ink/10 text-signal focus:ring-signal"
                   onChange={(event) =>
                     updateValue("marketingConsent", event.target.checked)
                   }
@@ -350,14 +330,14 @@ export default function SignupPage() {
               <p className="text-sm leading-6 text-battleship">
                 By creating an account, you agree to our{" "}
                 <Link
-                  className="font-medium text-ink underline decoration-platinum underline-offset-4 transition hover:text-signal hover:decoration-signal"
+                  className="auth-link underline decoration-ink/10 underline-offset-4 hover:decoration-signal"
                   href="/terms"
                 >
                   Terms of Service
                 </Link>{" "}
                 and{" "}
                 <Link
-                  className="font-medium text-ink underline decoration-platinum underline-offset-4 transition hover:text-signal hover:decoration-signal"
+                  className="auth-link underline decoration-ink/10 underline-offset-4 hover:decoration-signal"
                   href="/privacy"
                 >
                   Privacy Policy
@@ -377,17 +357,14 @@ export default function SignupPage() {
 
             <p className="mt-6 text-center text-sm text-battleship">
               Already have an account?{" "}
-              <Link
-                className="font-medium text-ink transition hover:text-signal"
-                href="/login"
-              >
+              <Link className="auth-link" href="/login">
                 Log in
               </Link>
             </p>
           </>
         ) : null}
-      </motion.section>
-    </main>
+      </AuthPageCard>
+    </AuthPageShell>
   );
 }
 
@@ -410,16 +387,13 @@ function Field({
 }: FieldProps) {
   return (
     <div>
-      <label
-        className="block text-sm font-medium text-battleship"
-        htmlFor={name}
-      >
+      <label className="auth-label" htmlFor={name}>
         {label}
       </label>
       <input
         aria-describedby={error ? `${name}-error` : undefined}
         aria-invalid={Boolean(error)}
-        className="mt-2 w-full rounded-2xl border border-platinum bg-paper px-4 py-3 text-ink outline-none transition placeholder:text-battleship/60 focus:border-signal focus:ring-2 focus:ring-signal/20"
+        className="auth-input"
         id={name}
         name={name}
         onChange={(event) => onChange(event.target.value)}

@@ -24,11 +24,11 @@ export const blogPosts: BlogPost[] = [
     dateModified: "2026-07-15",
     datePublished: "2026-07-15",
     excerpt:
-      "Add a text, logo, or signature watermark to a video directly in your browser — no software to install, with most larger clips handled automatically on our servers.",
+      "Watermark, trim, blur, merge, and caption video in your browser — no software to install. Short clips run locally; longer videos up to 60 minutes are processed on our servers.",
     image: "/Office Meeting.png",
     imageAlt: "Team meeting in an office reviewing video content",
     metaDescription:
-      "Add a text, logo, or signature watermark to a video directly in your browser — no software to install, with most larger clips handled automatically on our servers.",
+      "Watermark, trim, blur, merge, and caption video in your browser — no software to install. Short clips run locally; longer videos up to 60 minutes are processed on our servers.",
     metaTitle: "How to Watermark a Video Online for Free | PutWatermark",
     slug: "how-to-watermark-a-video-online-free",
     tags: ["Video", "Watermarking", "Browser", "Free"],

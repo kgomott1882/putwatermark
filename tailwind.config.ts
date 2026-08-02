@@ -21,12 +21,14 @@ const config: Config = {
         "beige-dim": "#B8B0A4",
         /** Inline keyword accent — golden tan */
         sand: "#CDBA9A",
-        /** Landing dark background */
-        night: "#121212",
-        "night-elevated": "#1A1A1A",
-        "night-card": "#222222",
+        /** Landing dark background — charcoal navy (#23292F) */
+        night: "#23292F",
+        "night-elevated": "#2A3139",
+        "night-card": "#2F3740",
+        /** Light landing band background (#F2F2F2) */
+        "landing-light": "#F2F2F2",
         payne: "#4C5C68",
-        charcoal: "#2A2826",
+        charcoal: "#2A3139",
         /** Editor grayscale palette — four-step hierarchy; editor-only usage */
         "ed-bg": "#FFFFFF",
         "ed-panel": "#D4D4D4",

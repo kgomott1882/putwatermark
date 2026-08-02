@@ -8,12 +8,20 @@ import { pageContainerClass } from "./pageContainer";
 
 const features = [
   "Text & logo marks",
-  "Batch image export",
-  "PDF page preview",
-  "Video watermarking",
+  "Batch export (photos + multi-page PDF)",
+  "Video editor (trim, blur, merge, captions)",
+  "Sign & fill PDFs",
+  "Merge & compress PDF",
 ] as const;
 
-const formats = ["JPG / PNG / WebP", "PDF documents", "MP4 / MOV / WebM"] as const;
+const formats = [
+  { label: "JPG / PNG / WebP" },
+  { label: "PDF documents" },
+  {
+    label: "MP4 / MOV / WebM",
+    note: "Videos up to 60 minutes supported",
+  },
+] as const;
 
 const containerVariants = {
   hidden: {},
@@ -114,11 +122,15 @@ export function Hero() {
               </p>
               <ul className="mt-4 space-y-3">
                 {formats.map((item) => (
-                  <li
-                    className="text-xs font-medium uppercase tracking-[0.12em] text-beige md:text-[13px]"
-                    key={item}
-                  >
-                    {item}
+                  <li key={item.label}>
+                    <p className="text-xs font-medium uppercase tracking-[0.12em] text-beige md:text-[13px]">
+                      {item.label}
+                    </p>
+                    {item.note ? (
+                      <p className="mt-1 text-[10px] font-medium normal-case tracking-[0.04em] text-beige-dim md:text-[11px]">
+                        {item.note}
+                      </p>
+                    ) : null}
                   </li>
                 ))}
               </ul>

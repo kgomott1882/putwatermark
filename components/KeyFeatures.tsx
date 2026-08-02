@@ -15,11 +15,25 @@ type Feature = {
 
 const features: Feature[] = [
   {
-    title: "Text & logo",
+    title: "More than a watermark",
     description:
-      "Type your text or drop in your logo to watermark your content in seconds.",
+      "Crop, resize, rotate, and apply effects, or use the blur brush to hide sensitive details in any photo before you export.",
     href: "/watermark",
-    image: "/Sonos.jpeg",
+    image: "/Photo%20editor%20tool.png",
+  },
+  {
+    title: "A real video editor, not just a stamp",
+    description:
+      "Trim clips, blur sensitive footage with a mosaic brush, merge multiple videos into one, add captions, and control exactly when your watermark appears — all in your browser. Long videos up to 60 minutes are supported too.",
+    href: "/watermark",
+    image: "/Video%20Editor.png",
+  },
+  {
+    title: "Sign & fill documents",
+    description:
+      "Draw or type a signature, add fill-in text on PDFs, and save placements for reuse — perfect for signing contracts and filling in forms.",
+    href: "/watermark",
+    image: "/Tablet_signing.jpeg",
   },
   {
     title: "Batch export & PDF",
@@ -29,11 +43,18 @@ const features: Feature[] = [
     image: "/Batch%20Pics.jpeg",
   },
   {
-    title: "Sign & fill documents",
+    title: "Merge & compress PDFs",
     description:
-      "Draw or type a signature, add fill-in text on PDF pages, save signatures for reuse, and drag placements onto any photo, video, or PDF — perfect for signing contracts and filling in forms.",
+      "Combine multiple PDFs into one file or shrink oversized documents down to size — no separate app needed.",
     href: "/watermark",
-    image: "/Tablet_signing.jpeg",
+    image: "/PDF%20Merge.png",
+  },
+  {
+    title: "Text & logo",
+    description:
+      "Type your text or drop in your logo to watermark your content in seconds.",
+    href: "/watermark",
+    image: "/Sonos.jpeg",
   },
 ];
 
@@ -52,7 +73,7 @@ export function KeyFeatures() {
           title="Everything you need"
         />
 
-        <div className="mt-16 grid gap-6 lg:grid-cols-3">
+        <div className="mt-16 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {features.map((feature, index) => (
             <FeatureCard feature={feature} index={index} key={feature.title} />
           ))}
@@ -109,10 +130,28 @@ function FeatureCard({
             </>
           ) : feature.title === "Sign & fill documents" ? (
             <>
-              Draw or type a signature, add fill-in text on PDFs, save placements
-              for reuse, and drag them onto any{" "}
-              <LandingHighlight>photo, video, or PDF</LandingHighlight> — perfect
-              for signing contracts and filling in forms.
+              Draw or type a signature, add fill-in text on PDFs, and save
+              placements for reuse — perfect for signing contracts and filling in
+              forms.
+            </>
+          ) : feature.title === "A real video editor, not just a stamp" ? (
+            <>
+              Trim clips, blur sensitive footage, merge multiple videos, add
+              captions, and control when your{" "}
+              <LandingHighlight>watermark appears</LandingHighlight> — all in your
+              browser. Long videos up to 60 minutes are supported too.
+            </>
+          ) : feature.title === "Merge & compress PDFs" ? (
+            <>
+              Combine multiple PDFs into one file or{" "}
+              <LandingHighlight>shrink oversized documents</LandingHighlight> down
+              to size — no separate app needed.
+            </>
+          ) : feature.title === "More than a watermark" ? (
+            <>
+              Crop, resize, rotate, and apply effects, or use the{" "}
+              <LandingHighlight>blur brush</LandingHighlight> to hide sensitive
+              details in any photo before you export.
             </>
           ) : (
             feature.description

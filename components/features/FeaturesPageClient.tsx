@@ -83,7 +83,7 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "Tile watermarking",
       description:
-        "Repeat your watermark across the image with adjustable density (sparse, medium, dense), angle (0°, 45°, 90°, 180°), and gap spacing.",
+        "Repeat your watermark across the image and position the tiled pattern manually on your preview — tune angle and spacing yourself, without rigid sparse, medium, or dense presets.",
       Icon: Grid3x3,
       image: "/Shoes.jpeg",
       imageAlt: "Tiled watermark pattern across a product photo",
@@ -122,6 +122,22 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
       imageAlt: "Photo with a sepia-style effect applied",
     },
     {
+      title: "Video editor",
+      description:
+        "Trim clips, blur sensitive footage with a mosaic brush, merge multiple videos into one, add captions, and control exactly when your watermark appears — all in your browser.",
+      Icon: Video,
+      image: "/youtubers-watermarked.jpg",
+      imageAlt: "Video editor with watermark overlay on a clip",
+    },
+    {
+      title: "Merge & compress PDFs",
+      description:
+        "Combine multiple PDFs into one file or shrink oversized documents down to size — no separate app needed.",
+      Icon: FileText,
+      image: "/Pics/feature-pdf-support.jpg",
+      imageAlt: "PDF merge and compress tools in the editor",
+    },
+    {
       title: "Live preview & full history",
       description:
         "Every adjustment updates instantly on screen before you export — crop, resize, rotate, effects, and watermark settings — so you see exactly what you will get. Undo and redo changes from the editor bar, stepping backward or forward through text, logo, position, opacity, tile, and related adjustments without losing your place.",
@@ -142,7 +158,7 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "Video",
       description:
-        "MP4, MOV, and WebM clips under 60 seconds and 1080p process instantly in your browser. Longer or larger videos (up to 250MB or 10 minutes) upload with resumable transfers and are processed on our servers.",
+        "MP4, MOV, and WebM clips under 60 seconds and 1080p process instantly in your browser — trim, blur, merge, caption, and watermark in one editor. Longer videos (up to 60 minutes) upload with resumable transfers and are processed on our servers.",
       Icon: Video,
       image: "/youtubers-watermarked.jpg",
       imageAlt: "Video frame with a watermark overlay",
@@ -150,7 +166,7 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "PDF",
       description:
-        "Multi-page documents are supported with the same watermark placement on every page. Original text stays selectable and searchable — only the watermark itself is added as an overlay.",
+        "Multi-page documents are supported with watermark placement on every page, plus sign & fill, merge multiple PDFs into one file, and compress oversized documents — original text stays selectable and searchable.",
       Icon: FileText,
       image: "/Pics/feature-pdf-support.jpg",
       imageAlt: "PDF document with watermark support",
@@ -240,8 +256,8 @@ export function FeaturesPageClient() {
             index="Features"
             lead={
               <>
-                Browse by category to see what{" "}
-                <LandingHighlight>PutWatermark can do</LandingHighlight>.
+                Watermark photos and PDFs, edit video, sign documents, and more — browse
+                what <LandingHighlight>PutWatermark can do</LandingHighlight>.
               </>
             }
             title="Built-in capabilities"

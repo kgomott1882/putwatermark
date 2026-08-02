@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 export function LandingHighlight({ children }: { children: ReactNode }) {
-  return <span className="text-sand">{children}</span>;
+  return <span className="text-signal">{children}</span>;
 }
 
 export function LandingSubSeparator({ className = "" }: { className?: string }) {
@@ -133,8 +133,8 @@ export function HeroOrbs() {
   return (
     <div aria-hidden className="relative mx-auto h-[22rem] w-full max-w-md lg:mx-0 lg:h-[28rem] lg:max-w-none">
       <div className="absolute left-[18%] top-[18%] h-28 w-28 rotate-12 rounded-[2rem] border border-signal/30 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.18),transparent_55%),linear-gradient(145deg,rgba(217,119,87,0.55),rgba(217,119,87,0.15))] shadow-[0_0_80px_rgba(217,119,87,0.35)]" />
-      <div className="absolute right-[8%] top-[8%] h-36 w-36 -rotate-6 rounded-[2.5rem] border border-beige/10 bg-[radial-gradient(circle_at_35%_35%,rgba(242,235,227,0.1),transparent_60%),linear-gradient(160deg,rgba(42,40,38,0.95),rgba(26,26,26,0.75))]" />
-      <div className="absolute bottom-[10%] left-[34%] h-32 w-32 rotate-[18deg] rounded-[2rem] border border-sand/25 bg-[radial-gradient(circle_at_40%_40%,rgba(205,186,154,0.14),transparent_58%),linear-gradient(145deg,rgba(217,119,87,0.25),rgba(42,40,38,0.85))]" />
+      <div className="absolute right-[8%] top-[8%] h-36 w-36 -rotate-6 rounded-[2.5rem] border border-beige/10 bg-[radial-gradient(circle_at_35%_35%,rgba(242,235,227,0.1),transparent_60%),linear-gradient(160deg,rgba(47,55,64,0.95),rgba(35,41,47,0.85))]" />
+      <div className="absolute bottom-[10%] left-[34%] h-32 w-32 rotate-[18deg] rounded-[2rem] border border-signal/25 bg-[radial-gradient(circle_at_40%_40%,rgba(217,119,87,0.18),transparent_58%),linear-gradient(145deg,rgba(217,119,87,0.28),rgba(47,55,64,0.88))]" />
       <div className="absolute bottom-[22%] right-[18%] h-20 w-20 rounded-2xl border border-beige/10 bg-night-card" />
     </div>
   );

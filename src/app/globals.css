@@ -36,6 +36,50 @@ body.landing-cursor-none * {
     @apply bg-night text-beige;
   }
 
+  .landing-light-band {
+    @apply border-t border-ink/5 bg-landing-light text-ink;
+  }
+
+  .landing-light-muted {
+    @apply text-battleship;
+  }
+
+  .landing-footer {
+    @apply bg-night text-beige-dim;
+  }
+
+  .auth-page {
+    @apply flex flex-1 w-full items-center justify-center bg-landing-light px-6 py-16 text-ink sm:px-12 lg:py-20;
+  }
+
+  .auth-card {
+    @apply w-full max-w-md rounded-[2rem] border border-ink/5 bg-paper p-8 shadow-[0_24px_80px_rgba(35,41,47,0.08)] sm:p-10;
+  }
+
+  .auth-kicker {
+    @apply text-sm font-semibold uppercase tracking-[0.22em] text-battleship;
+  }
+
+  .auth-label {
+    @apply block text-sm font-medium text-battleship;
+  }
+
+  .auth-input {
+    @apply mt-2 w-full rounded-2xl border border-ink/10 bg-paper px-4 py-3 text-ink outline-none transition placeholder:text-battleship/60 focus:border-signal focus:ring-2 focus:ring-signal/20;
+  }
+
+  .auth-alert {
+    @apply rounded-2xl border border-signal/30 bg-signal/10 px-4 py-3 text-sm text-ink;
+  }
+
+  .auth-notice {
+    @apply rounded-2xl border border-ink/10 bg-landing-light px-4 py-3 text-sm text-ink;
+  }
+
+  .auth-link {
+    @apply font-medium text-ink transition hover:text-signal;
+  }
+
   .landing-section {
     @apply w-full border-t border-beige/10 py-24;
   }
@@ -61,7 +105,7 @@ body.landing-cursor-none * {
   }
 
   .landing-soft {
-    @apply text-beige-dim/80;
+    @apply text-beige-dim/70;
   }
 
   .landing-accent {

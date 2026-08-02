@@ -19,7 +19,7 @@ const capabilities: Capability[] = [
     description: (
       <>
         Watermark <LandingHighlight>JPG, PNG, WebP, PDF, MP4, MOV, and WEBM</LandingHighlight>{" "}
-        files directly in your browser.
+        files directly in your browser. Videos up to 60 minutes supported.
       </>
     ),
     Icon: Video,
