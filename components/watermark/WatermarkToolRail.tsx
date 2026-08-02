@@ -13,15 +13,16 @@ type WatermarkToolRailProps = {
 
 type RailToolProps = {
   active: boolean;
+  className?: string;
   icon: ReactNode;
   label: string;
   onClick: () => void;
 };
 
-function RailTool({ active, icon, label, onClick }: RailToolProps) {
+function RailTool({ active, className = "", icon, label, onClick }: RailToolProps) {
   return (
     <button
-      className={`flex shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] font-medium leading-none transition md:w-full md:gap-1.5 md:rounded-xl md:px-1.5 md:py-2.5 md:text-[10px] ${
+      className={`flex shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] font-medium leading-none transition md:w-full md:gap-1.5 md:rounded-xl md:px-1.5 md:py-2.5 md:text-[10px] ${className} ${
         active
           ? "bg-ed-bg-card text-ed-fg shadow-sm"
           : "text-ed-fg-muted hover:bg-ed-bg-card/70 hover:text-ed-fg"
@@ -48,6 +49,7 @@ export function WatermarkToolRail({
       <div className="flex flex-row gap-0.5 md:flex-col">
         <RailTool
           active={activeTool === "upload"}
+          className="hidden md:flex"
           icon={<Upload className="h-4 w-4 md:h-5 md:w-5" strokeWidth={1.75} />}
           label="Upload"
           onClick={() => onSelectTool("upload")}

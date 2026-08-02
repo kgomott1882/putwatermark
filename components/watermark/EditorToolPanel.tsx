@@ -34,7 +34,7 @@ export function EditorToolPanel({
 }: EditorToolPanelProps) {
   return (
     <aside
-      className={`flex min-h-0 w-full flex-col bg-ed-panel max-md:min-h-0 max-md:flex-1 max-md:overflow-hidden md:h-full md:shrink-0 md:border-r md:border-ed-border ${
+      className={`flex min-h-0 w-full flex-col bg-ed-panel max-md:h-full max-md:min-h-0 max-md:overflow-hidden md:h-full md:shrink-0 md:border-r md:border-ed-border ${
         toolRail ? "md:w-[24.5rem]" : "md:w-[19.5rem]"
       } ${className}`}
     >
@@ -87,12 +87,14 @@ export function EditorToolPanel({
 type EditorPanelSectionProps = {
   children: ReactNode;
   className?: string;
+  hideTitleOnMobile?: boolean;
   title?: string;
 };
 
 export function EditorPanelSection({
   children,
   className = "",
+  hideTitleOnMobile = false,
   title,
 }: EditorPanelSectionProps) {
   return (
@@ -103,7 +105,11 @@ export function EditorPanelSection({
       transition={{ duration: 0.2, ease: panelEase }}
     >
       {title ? (
-        <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-ed-fg md:text-[10px] md:tracking-[0.12em]">
+        <p
+          className={`text-[9px] font-bold uppercase tracking-[0.1em] text-ed-fg md:text-[10px] md:tracking-[0.12em] ${
+            hideTitleOnMobile ? "hidden md:block" : ""
+          }`}
+        >
           {title}
         </p>
       ) : null}

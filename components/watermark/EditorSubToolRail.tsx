@@ -1,10 +1,12 @@
 "use client";
 
+import { X } from "lucide-react";
 import type { ReactNode } from "react";
 
 export type EditorSubToolRailProps = {
   ariaLabel: string;
   children: ReactNode;
+  onMobileExit?: () => void;
 };
 
 export type EditorSubToolButtonProps = {
@@ -12,17 +14,36 @@ export type EditorSubToolButtonProps = {
   disabled?: boolean;
   icon: ReactNode;
   label: string;
+  mobileLabel?: string;
   onClick: () => void;
 };
 
-export function EditorSubToolRail({ ariaLabel, children }: EditorSubToolRailProps) {
+export function EditorSubToolRail({
+  ariaLabel,
+  children,
+  onMobileExit,
+}: EditorSubToolRailProps) {
   return (
-    <nav
-      aria-label={ariaLabel}
-      className="flex w-full shrink-0 flex-row gap-1 overflow-x-auto overscroll-x-contain bg-ed-panel px-1.5 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] md:w-[5rem] md:flex-col md:overflow-x-visible md:overflow-y-auto md:border-b-0 md:border-r md:py-2 [&::-webkit-scrollbar]:hidden"
-    >
-      <div className="flex flex-row gap-1 md:flex-col">{children}</div>
-    </nav>
+    <div className="relative">
+      <nav
+        aria-label={ariaLabel}
+        className={`flex min-w-0 w-full shrink-0 flex-row gap-0.5 overflow-x-auto overscroll-x-contain bg-ed-panel px-1 py-1 [-ms-overflow-style:none] [scrollbar-width:none] md:w-[5rem] md:flex-col md:gap-1 md:overflow-x-visible md:overflow-y-auto md:border-b-0 md:border-r md:px-1.5 md:py-2 [&::-webkit-scrollbar]:hidden ${
+          onMobileExit ? "max-md:pr-8" : ""
+        }`}
+      >
+        <div className="flex flex-row gap-0.5 md:flex-col md:gap-1">{children}</div>
+      </nav>
+      {onMobileExit ? (
+        <button
+          aria-label="Exit editor"
+          className="absolute right-1 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-ed-border/80 bg-ed-panel/95 text-ed-fg-muted shadow-sm backdrop-blur-[2px] transition hover:bg-ed-bg-card hover:text-ed-fg md:hidden"
+          onClick={onMobileExit}
+          type="button"
+        >
+          <X className="h-3.5 w-3.5" strokeWidth={2} />
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -31,11 +52,14 @@ export function EditorSubToolButton({
   disabled = false,
   icon,
   label,
+  mobileLabel,
   onClick,
 }: EditorSubToolButtonProps) {
+  const compactLabel = mobileLabel ?? label;
+
   return (
     <button
-      className={`flex shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] leading-tight transition disabled:cursor-not-allowed md:w-full md:gap-2 md:px-1.5 md:py-3 ${
+      className={`flex shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] leading-tight transition disabled:cursor-not-allowed md:w-full md:gap-2 md:rounded-xl md:px-1.5 md:py-3 md:text-[10px] ${
         active
           ? "bg-ed-bg-card text-ed-fg font-bold shadow-sm"
           : disabled
@@ -53,7 +77,8 @@ export function EditorSubToolButton({
       >
         {icon}
       </span>
-      <span className="whitespace-nowrap text-center">{label}</span>
+      <span className="whitespace-nowrap text-center md:hidden">{compactLabel}</span>
+      <span className="hidden whitespace-nowrap text-center md:inline">{label}</span>
     </button>
   );
 }

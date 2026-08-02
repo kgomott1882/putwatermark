@@ -79,13 +79,13 @@ export function EditorFormatUploadModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-ed-fg/45 px-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-ed-fg/45 px-4 max-md:bg-ed-fg/50 md:backdrop-blur-[2px]"
       onClick={onClose}
     >
       <div
         aria-labelledby="editor-format-upload-title"
         aria-modal="true"
-        className="w-full max-w-md rounded-2xl border border-[#e8dfd1] bg-[#faf6f0] p-6 shadow-xl"
+        className="max-h-[min(90dvh,640px)] w-full max-w-md overflow-y-auto rounded-2xl border border-[#e8dfd1] bg-[#faf6f0] p-5 shadow-xl md:p-6"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
       >
@@ -103,7 +103,7 @@ export function EditorFormatUploadModal({
           </div>
           <button
             aria-label="Close upload dialog"
-            className="editor-secondary-button flex h-8 w-8 items-center justify-center rounded-lg border-[#e8dfd1] bg-[#f0e9dc]/60 text-ed-fg-muted hover:text-ed-fg"
+            className="editor-secondary-button flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-[#e8dfd1] bg-[#f0e9dc]/60 text-ed-fg-muted hover:text-ed-fg"
             onClick={onClose}
             type="button"
           >
@@ -141,7 +141,7 @@ export function EditorFormatUploadModal({
 
         <div className="mt-6 flex justify-stretch sm:justify-end">
           <button
-            className="w-full rounded-xl bg-signal px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 sm:w-auto"
+            className="w-full rounded-xl bg-signal px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 active:brightness-95 sm:w-auto"
             onClick={onUploadClick}
             type="button"
           >

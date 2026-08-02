@@ -19,10 +19,12 @@ export type CustomPosition = {
 import {
   DEFAULT_TEXT_SHADOW_ENABLED,
   DEFAULT_TEXT_WATERMARK_COLOR,
-  DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
   type TextWatermarkFontWeight,
 } from "./watermarkTextStyle";
-import { GEOMETRIC_SANS_FONT_FAMILY } from "./watermarkFonts";
+import { DEFAULT_WATERMARK_FONT_FAMILY } from "./watermarkFonts";
+
+export type TileDensity = "sparse" | "medium" | "dense";
+export type TileAngle = 0 | 45 | 90 | 180;
 
 export type TextWatermarkLayer = {
   customPosition: CustomPosition | null;
@@ -91,15 +93,50 @@ export type WatermarkLayerSnapshot =
 const defaultFontFamily =
   'Arial, Helvetica, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
-export const DEFAULT_TEXT_LAYER_FONT_FAMILY = GEOMETRIC_SANS_FONT_FAMILY;
-export const DEFAULT_TEXT_LAYER_FONT_SIZE_SCALE = 50;
-export const DEFAULT_TEXT_LAYER_OPACITY = 20;
+export const DEFAULT_TEXT_LAYER_FONT_FAMILY = DEFAULT_WATERMARK_FONT_FAMILY;
+export const DEFAULT_TEXT_LAYER_FONT_SIZE_SCALE = 25;
+export const DEFAULT_TEXT_LAYER_OPACITY = 55;
+export const DEFAULT_TEXT_LAYER_FONT_WEIGHT: TextWatermarkFontWeight = 700;
 
 /** Above preview zoom/control icons (bottom-right) in single-text mode. */
 export const DEFAULT_SINGLE_TEXT_WATERMARK_POSITION: CustomPosition = {
   xPercent: 0.88,
   yPercent: 0.84,
 };
+
+export type TextWatermarkModeDefaults = {
+  customPosition: CustomPosition | null;
+  fontFamily: string;
+  fontSizeScale: number;
+  fontWeight: TextWatermarkFontWeight;
+  opacity: number;
+  textColor: string;
+  watermarkPosition: WatermarkPosition;
+};
+
+export const SINGLE_TEXT_WATERMARK_DEFAULTS: TextWatermarkModeDefaults = {
+  customPosition: { ...DEFAULT_SINGLE_TEXT_WATERMARK_POSITION },
+  fontFamily: DEFAULT_TEXT_LAYER_FONT_FAMILY,
+  fontSizeScale: DEFAULT_TEXT_LAYER_FONT_SIZE_SCALE,
+  fontWeight: DEFAULT_TEXT_LAYER_FONT_WEIGHT,
+  opacity: DEFAULT_TEXT_LAYER_OPACITY,
+  textColor: DEFAULT_TEXT_WATERMARK_COLOR,
+  watermarkPosition: "bottom-right",
+};
+
+export const TILE_TEXT_WATERMARK_DEFAULTS: TextWatermarkModeDefaults = {
+  customPosition: null,
+  fontFamily: DEFAULT_TEXT_LAYER_FONT_FAMILY,
+  fontSizeScale: DEFAULT_TEXT_LAYER_FONT_SIZE_SCALE,
+  fontWeight: DEFAULT_TEXT_LAYER_FONT_WEIGHT,
+  opacity: DEFAULT_TEXT_LAYER_OPACITY,
+  textColor: DEFAULT_TEXT_WATERMARK_COLOR,
+  watermarkPosition: "bottom-right",
+};
+
+export const DEFAULT_TILE_ANGLE: TileAngle = 45;
+export const DEFAULT_TILE_DENSITY: TileDensity = "medium";
+export const DEFAULT_TILE_GAP = 120;
 
 export function createWatermarkLayerId() {
   return `wm-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -109,17 +146,17 @@ export function createDefaultTextLayer(
   partial?: Partial<Pick<TextWatermarkLayer, "text">>,
 ): TextWatermarkLayer {
   return {
-    customPosition: { ...DEFAULT_SINGLE_TEXT_WATERMARK_POSITION },
-    fontFamily: DEFAULT_TEXT_LAYER_FONT_FAMILY,
-    fontSizeScale: DEFAULT_TEXT_LAYER_FONT_SIZE_SCALE,
-    fontWeight: DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
+    customPosition: { ...SINGLE_TEXT_WATERMARK_DEFAULTS.customPosition! },
+    fontFamily: SINGLE_TEXT_WATERMARK_DEFAULTS.fontFamily,
+    fontSizeScale: SINGLE_TEXT_WATERMARK_DEFAULTS.fontSizeScale,
+    fontWeight: SINGLE_TEXT_WATERMARK_DEFAULTS.fontWeight,
     id: createWatermarkLayerId(),
-    opacity: DEFAULT_TEXT_LAYER_OPACITY,
+    opacity: SINGLE_TEXT_WATERMARK_DEFAULTS.opacity,
     text: partial?.text ?? "",
-    textColor: DEFAULT_TEXT_WATERMARK_COLOR,
+    textColor: SINGLE_TEXT_WATERMARK_DEFAULTS.textColor,
     textShadowEnabled: DEFAULT_TEXT_SHADOW_ENABLED,
     type: "text",
-    watermarkPosition: "bottom-right",
+    watermarkPosition: SINGLE_TEXT_WATERMARK_DEFAULTS.watermarkPosition,
   };
 }
 
@@ -232,7 +269,7 @@ export async function deserializeTextLayer(
     customPosition: snapshot.customPosition ? { ...snapshot.customPosition } : null,
     fontFamily: snapshot.fontFamily,
     fontSizeScale: snapshot.fontSizeScale,
-    fontWeight: snapshot.fontWeight ?? DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
+    fontWeight: snapshot.fontWeight ?? DEFAULT_TEXT_LAYER_FONT_WEIGHT,
     id: snapshot.id,
     opacity: snapshot.opacity,
     text: snapshot.text,
@@ -291,7 +328,7 @@ export function legacySnapshotToTextLayer(snapshot: {
     customPosition: snapshot.customPosition ? { ...snapshot.customPosition } : null,
     fontFamily: snapshot.fontFamily,
     fontSizeScale: snapshot.fontSizeScale,
-    fontWeight: snapshot.fontWeight ?? DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
+    fontWeight: snapshot.fontWeight ?? DEFAULT_TEXT_LAYER_FONT_WEIGHT,
     id: createWatermarkLayerId(),
     opacity: snapshot.watermarkOpacity,
     text: snapshot.watermarkText,

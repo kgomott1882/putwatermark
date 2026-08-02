@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import {
   ArrowLeft,
   ArrowRight,
+  Coins,
   History,
   Minus,
   Plus,
@@ -47,8 +49,17 @@ export function EditorBottomBar({
 }: EditorBottomBarProps) {
   return (
     <footer className="flex shrink-0 items-center justify-between gap-1.5 border-t border-ed-border bg-ed-panel px-1.5 py-1.5 sm:gap-3 sm:px-3 sm:py-2">
+      <Link
+        className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-signal px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.08em] text-white shadow-sm transition hover:brightness-110 md:hidden"
+        href="/pricing"
+        title="Buy Credits"
+      >
+        <Coins className="h-3.5 w-3.5" strokeWidth={2} />
+        Credits
+      </Link>
+
       <button
-        className="editor-secondary-button inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.08em] text-ed-fg hover:text-ed-fg sm:gap-1.5 sm:rounded-xl sm:px-2.5 sm:py-2 sm:text-[10px] sm:tracking-[0.1em] md:px-4 md:text-xs md:tracking-[0.12em]"
+        className="editor-secondary-button hidden shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.08em] text-ed-fg hover:text-ed-fg sm:gap-1.5 sm:rounded-xl sm:px-2.5 sm:py-2 sm:text-[10px] sm:tracking-[0.1em] md:inline-flex md:px-4 md:text-xs md:tracking-[0.12em]"
         onClick={onExit}
         type="button"
       >

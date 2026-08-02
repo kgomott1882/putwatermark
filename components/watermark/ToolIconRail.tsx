@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Coins, FileText, Images, Video } from "lucide-react";
+import { Coins, FileText, Images, Video, X } from "lucide-react";
 import type { ReactNode } from "react";
 
 export type EditorPanelId =
@@ -21,7 +21,9 @@ export type EditorMediaKind = "image" | "pdf" | "video";
 type ToolIconRailProps = {
   activePanel: EditorPanelId | null;
   mediaKind: EditorMediaKind | null;
+  onMobileExit?: () => void;
   onSelectPanel: (panel: EditorPanelId) => void;
+  showBuyCredits?: boolean;
 };
 
 type RailItemProps = {
@@ -96,48 +98,66 @@ function isEditorTabEnabled(
 export function ToolIconRail({
   activePanel,
   mediaKind,
+  onMobileExit,
   onSelectPanel,
+  showBuyCredits = true,
 }: ToolIconRailProps) {
   const photosEnabled = isEditorTabEnabled("photos", mediaKind);
   const pdfDocsEnabled = isEditorTabEnabled("pdfDocs", mediaKind);
   const videosEnabled = isEditorTabEnabled("video", mediaKind);
 
   return (
-    <nav
-      aria-label="Editor tools"
-      className="flex w-full shrink-0 flex-row items-center justify-center bg-ed-panel px-2 py-1.5 md:h-full md:w-[5rem] md:flex-col md:items-stretch md:justify-start md:overflow-x-visible md:overflow-y-hidden md:border-r md:px-0 md:py-2"
-    >
-      <div className="flex flex-row items-center justify-center gap-1 md:min-h-0 md:flex-1 md:flex-col md:items-stretch md:justify-start md:gap-0.5 md:overflow-y-auto md:overscroll-y-contain md:px-1.5">
-        <RailItem
-          active={isPhotosPanel(activePanel)}
-          disabled={!photosEnabled}
-          icon={<Images className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.75} />}
-          label="Photos"
-          onClick={() => onSelectPanel("photos")}
-        />
-        <RailItem
-          active={isPdfDocsPanel(activePanel)}
-          disabled={!pdfDocsEnabled}
-          icon={<FileText className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.75} />}
-          label="Pdf Docs"
-          onClick={() => onSelectPanel("pdfDocs")}
-        />
-        <RailItem
-          active={activePanel === "video"}
-          disabled={!videosEnabled}
-          icon={<Video className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.75} />}
-          label="Videos"
-          onClick={() => onSelectPanel("video")}
-        />
-        <Link
-          className="flex shrink-0 flex-col items-center gap-1.5 rounded-xl bg-signal px-2 py-2 text-[10px] font-bold leading-tight text-white shadow-md transition hover:brightness-110 md:mx-1.5 md:mb-3 md:mt-auto md:gap-2 md:px-1.5 md:py-3 md:text-[11px]"
-          href="/pricing"
-          title="Buy Credits"
+    <div className="relative">
+      <nav
+        aria-label="Editor tools"
+        className={`flex min-w-0 flex-1 shrink-0 flex-row items-center justify-center bg-ed-panel px-2 py-1.5 md:h-full md:w-[5rem] md:flex-col md:items-stretch md:justify-start md:overflow-x-visible md:overflow-y-hidden md:border-r md:px-0 md:py-2 ${
+          onMobileExit ? "max-md:pr-8" : ""
+        }`}
+      >
+        <div className="flex flex-row items-center justify-center gap-1 md:min-h-0 md:flex-1 md:flex-col md:items-stretch md:justify-start md:gap-0.5 md:overflow-y-auto md:overscroll-y-contain md:px-1.5">
+          <RailItem
+            active={isPhotosPanel(activePanel)}
+            disabled={!photosEnabled}
+            icon={<Images className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.75} />}
+            label="Photos"
+            onClick={() => onSelectPanel("photos")}
+          />
+          <RailItem
+            active={isPdfDocsPanel(activePanel)}
+            disabled={!pdfDocsEnabled}
+            icon={<FileText className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.75} />}
+            label="Pdf Docs"
+            onClick={() => onSelectPanel("pdfDocs")}
+          />
+          <RailItem
+            active={activePanel === "video"}
+            disabled={!videosEnabled}
+            icon={<Video className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.75} />}
+            label="Videos"
+            onClick={() => onSelectPanel("video")}
+          />
+          {showBuyCredits ? (
+            <Link
+              className="hidden flex-col items-center gap-1.5 rounded-xl bg-signal px-2 py-2 text-[10px] font-bold leading-tight text-white shadow-md transition hover:brightness-110 md:mx-1.5 md:mb-3 md:mt-auto md:flex md:gap-2 md:px-1.5 md:py-3 md:text-[11px]"
+              href="/pricing"
+              title="Buy Credits"
+            >
+              <Coins className="h-4 w-4 md:h-5 md:w-5" strokeWidth={2} />
+              <span className="whitespace-nowrap">Buy Credits</span>
+            </Link>
+          ) : null}
+        </div>
+      </nav>
+      {onMobileExit ? (
+        <button
+          aria-label="Exit editor"
+          className="absolute right-1.5 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-ed-border/80 bg-ed-panel/95 text-ed-fg-muted shadow-sm backdrop-blur-[2px] transition hover:bg-ed-bg-card hover:text-ed-fg md:hidden"
+          onClick={onMobileExit}
+          type="button"
         >
-          <Coins className="h-4 w-4 md:h-5 md:w-5" strokeWidth={2} />
-          <span className="whitespace-nowrap">Buy Credits</span>
-        </Link>
-      </div>
-    </nav>
+          <X className="h-3.5 w-3.5" strokeWidth={2} />
+        </button>
+      ) : null}
+    </div>
   );
 }

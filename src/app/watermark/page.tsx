@@ -305,9 +305,14 @@ import {
 import {
   createDefaultLogoLayer,
   createDefaultTextLayer,
+  DEFAULT_TILE_ANGLE,
+  DEFAULT_TILE_DENSITY,
+  DEFAULT_TILE_GAP,
   legacySnapshotToLogoLayer,
   legacySnapshotToTextLayer,
   revokeLogoLayerUrls,
+  SINGLE_TEXT_WATERMARK_DEFAULTS,
+  TILE_TEXT_WATERMARK_DEFAULTS,
   type LogoWatermarkLayer,
   type TextWatermarkLayer,
 } from "../../lib/watermarkLayers";
@@ -999,6 +1004,11 @@ export default function WatermarkPage() {
   const imageFrameRef = useRef<ImageFrame | null>(null);
   const isDraggingRef = useRef(false);
   const draggingLayerIdRef = useRef<string | null>(null);
+  const watermarkDragOverrideRef = useRef<{
+    customPosition: CustomPosition;
+    layerId: string;
+  } | null>(null);
+  const watermarkDragRafRef = useRef<number | null>(null);
   const isDraggingCaptionRef = useRef(false);
   const draggingCaptionLayerIdRef = useRef<string | null>(null);
   const captionBoundsRef = useRef<Map<string, TextBounds>>(new Map());
@@ -1216,6 +1226,7 @@ export default function WatermarkPage() {
   const [uploadError, setUploadError] = useState("");
   const [logoError, setLogoError] = useState("");
   const [isDraggingWatermark, setIsDraggingWatermark] = useState(false);
+  const [, setWatermarkDragFrame] = useState(0);
   const [isWatermarkHovering, setIsWatermarkHovering] = useState(false);
   const [isDraggingCaption, setIsDraggingCaption] = useState(false);
   const [isCaptionHovering, setIsCaptionHovering] = useState(false);
@@ -2875,10 +2886,22 @@ export default function WatermarkPage() {
         Math.floor(sizeNode.clientHeight - paddingY),
       );
 
-      setCanvasSize({
-        height: Math.max(240, Math.floor(baseHeight * zoomScale)),
-        pixelRatio,
-        width: Math.max(240, Math.floor(baseWidth * zoomScale)),
+      setCanvasSize((current) => {
+        const next = {
+          height: Math.max(240, Math.floor(baseHeight * zoomScale)),
+          pixelRatio,
+          width: Math.max(240, Math.floor(baseWidth * zoomScale)),
+        };
+
+        if (
+          Math.abs(current.width - next.width) <= 1 &&
+          Math.abs(current.height - next.height) <= 1 &&
+          current.pixelRatio === next.pixelRatio
+        ) {
+          return current;
+        }
+
+        return next;
       });
     }
 
@@ -3369,7 +3392,7 @@ export default function WatermarkPage() {
         imageWidth,
         imageX,
         imageY,
-        logoLayers,
+        logoLayers: getLogoLayersForPaint(),
         signatureFontSizeScale: fontSizeScale,
         signatureImage:
           watermarkType === "signature" ? logoImage : null,
@@ -3377,7 +3400,7 @@ export default function WatermarkPage() {
         signaturePosition: watermarkPosition,
         signatureCustomPosition: customPosition,
         signaturePlacements: undefined,
-        textLayers,
+        textLayers: getTextLayersForPaint(),
         tileAngle,
         tileDensity,
         tileGap,
@@ -3432,110 +3455,7 @@ export default function WatermarkPage() {
   });
 
   useEffect(() => {
-    if (mediaKind !== "video") {
-      return;
-    }
-
-    const canvas = videoOverlayCanvasRef.current;
-
-    if (!canvas || !videoOverlaySize.width || !videoOverlaySize.height) {
-      return;
-    }
-
-    const context = canvas.getContext("2d");
-
-    if (!context) {
-      return;
-    }
-
-    canvas.width = videoOverlaySize.width;
-    canvas.height = videoOverlaySize.height;
-    context.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (shouldPaintVideoWatermarkPreview() && videoSize) {
-      const video = videoElementRef.current;
-      const frame =
-        video && video.readyState >= 2
-          ? getVideoElementFrameInCanvas(canvas, video)
-          : getVideoDisplayFrame(
-              canvas.width,
-              canvas.height,
-              videoSize.width,
-              videoSize.height,
-            );
-      const { activeBounds, boundsByLayer } = paintWatermarkLayers({
-        activeLayerId:
-          watermarkType === "text"
-            ? activeTextLayerId
-            : watermarkType === "logo"
-              ? activeLogoLayerId
-              : activeTextLayerId,
-        canvasHeight: canvas.height,
-        canvasWidth: canvas.width,
-        context,
-        imageHeight: frame.height,
-        imageWidth: frame.width,
-        imageX: frame.x,
-        imageY: frame.y,
-        logoLayers,
-        signatureFontSizeScale: fontSizeScale,
-        signatureImage: watermarkType === "signature" ? logoImage : null,
-        signatureOpacity: watermarkOpacity,
-        signaturePosition: watermarkPosition,
-        signatureCustomPosition: customPosition,
-        textLayers,
-        tileAngle,
-        tileDensity,
-        tileGap,
-        videoDurationSeconds: videoDuration,
-        videoPreviewTimeSeconds: videoPreviewTime,
-        watermarkMode,
-        watermarkType,
-      });
-
-      layerBoundsRef.current = boundsByLayer;
-      textBoundsRef.current = activeBounds;
-    } else {
-      layerBoundsRef.current = new Map();
-      textBoundsRef.current = null;
-    }
-
-    if (
-      captionsMasterEnabled &&
-      videoCaptionLayers.some((layer) => isCaptionLayerActive(layer))
-    ) {
-      captionBoundsRef.current = drawVideoCaptions(
-        context,
-        canvas.width,
-        canvas.height,
-        videoCaptionLayers,
-        videoPreviewTime,
-        videoDuration,
-        {
-          highlightLayerId:
-            activeEditorPanel === "video" && activeVideoTool === "caption"
-              ? activeVideoCaptionLayerId
-              : undefined,
-        },
-      );
-    } else {
-      captionBoundsRef.current = new Map();
-    }
-
-    const video = videoElementRef.current;
-
-    if (video && videoSize && activeVideoTool === "blur") {
-      drawVideoBlurPreview(
-        context,
-        canvas,
-        video,
-        videoBlurRegions,
-        videoPreviewTime,
-        videoSize.width,
-        videoSize.height,
-        true,
-      );
-    }
+    paintVideoOverlayCanvas();
   }, [
     activeEditorPanel,
     activeVideoBlurRegionId,
@@ -5591,6 +5511,233 @@ export default function WatermarkPage() {
     );
   }
 
+  function getTextLayersForPaint() {
+    const override = watermarkDragOverrideRef.current;
+
+    if (!override || watermarkType !== "text") {
+      return textLayers;
+    }
+
+    return textLayers.map((layer) =>
+      layer.id === override.layerId
+        ? { ...layer, customPosition: override.customPosition }
+        : layer,
+    );
+  }
+
+  function getLogoLayersForPaint() {
+    const override = watermarkDragOverrideRef.current;
+
+    if (!override || watermarkType !== "logo") {
+      return logoLayers;
+    }
+
+    return logoLayers.map((layer) =>
+      layer.id === override.layerId
+        ? { ...layer, customPosition: override.customPosition }
+        : layer,
+    );
+  }
+
+  function paintVideoOverlayCanvas() {
+    if (mediaKind !== "video") {
+      return;
+    }
+
+    const canvas = videoOverlayCanvasRef.current;
+
+    if (!canvas || !videoOverlaySize.width || !videoOverlaySize.height) {
+      return;
+    }
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      return;
+    }
+
+    canvas.width = videoOverlaySize.width;
+    canvas.height = videoOverlaySize.height;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+
+    const paintTextLayers = getTextLayersForPaint();
+    const paintLogoLayers = getLogoLayersForPaint();
+
+    if (shouldPaintVideoWatermarkPreview() && videoSize) {
+      const video = videoElementRef.current;
+      const frame =
+        video && video.readyState >= 2
+          ? getVideoElementFrameInCanvas(canvas, video)
+          : getVideoDisplayFrame(
+              canvas.width,
+              canvas.height,
+              videoSize.width,
+              videoSize.height,
+            );
+      const { activeBounds, boundsByLayer } = paintWatermarkLayers({
+        activeLayerId:
+          watermarkType === "text"
+            ? activeTextLayerId
+            : watermarkType === "logo"
+              ? activeLogoLayerId
+              : activeTextLayerId,
+        canvasHeight: canvas.height,
+        canvasWidth: canvas.width,
+        context,
+        imageHeight: frame.height,
+        imageWidth: frame.width,
+        imageX: frame.x,
+        imageY: frame.y,
+        logoLayers: paintLogoLayers,
+        signatureFontSizeScale: fontSizeScale,
+        signatureImage: watermarkType === "signature" ? logoImage : null,
+        signatureOpacity: watermarkOpacity,
+        signaturePosition: watermarkPosition,
+        signatureCustomPosition: customPosition,
+        textLayers: paintTextLayers,
+        tileAngle,
+        tileDensity,
+        tileGap,
+        videoDurationSeconds: videoDuration,
+        videoPreviewTimeSeconds: videoPreviewTime,
+        watermarkMode,
+        watermarkType,
+      });
+
+      layerBoundsRef.current = boundsByLayer;
+      textBoundsRef.current = activeBounds;
+    } else {
+      layerBoundsRef.current = new Map();
+      textBoundsRef.current = null;
+    }
+
+    if (
+      captionsMasterEnabled &&
+      videoCaptionLayers.some((layer) => isCaptionLayerActive(layer))
+    ) {
+      captionBoundsRef.current = drawVideoCaptions(
+        context,
+        canvas.width,
+        canvas.height,
+        videoCaptionLayers,
+        videoPreviewTime,
+        videoDuration,
+        {
+          highlightLayerId:
+            activeEditorPanel === "video" && activeVideoTool === "caption"
+              ? activeVideoCaptionLayerId
+              : undefined,
+        },
+      );
+    } else {
+      captionBoundsRef.current = new Map();
+    }
+
+    const video = videoElementRef.current;
+
+    if (video && videoSize && activeVideoTool === "blur") {
+      drawVideoBlurPreview(
+        context,
+        canvas,
+        video,
+        videoBlurRegions,
+        videoPreviewTime,
+        videoSize.width,
+        videoSize.height,
+        true,
+      );
+    }
+  }
+
+  function scheduleWatermarkDragRepaint() {
+    if (watermarkDragRafRef.current !== null) {
+      return;
+    }
+
+    watermarkDragRafRef.current = window.requestAnimationFrame(() => {
+      watermarkDragRafRef.current = null;
+
+      if (mediaKind === "video") {
+        paintVideoOverlayCanvas();
+        return;
+      }
+
+      if (mediaKind === "image" || mediaKind === "pdf") {
+        setWatermarkDragFrame((frame) => frame + 1);
+      }
+    });
+  }
+
+  function applyWatermarkDragPosition(
+    layerId: string,
+    canvas: HTMLCanvasElement,
+    point: { x: number; y: number },
+  ) {
+    watermarkDragOverrideRef.current = {
+      customPosition: canvasPointToPercent(canvas, point),
+      layerId,
+    };
+    scheduleWatermarkDragRepaint();
+  }
+
+  function commitWatermarkDragPosition() {
+    const override = watermarkDragOverrideRef.current;
+    watermarkDragOverrideRef.current = null;
+
+    if (!override) {
+      return;
+    }
+
+    if (watermarkType === "text") {
+      updateTextLayer(override.layerId, {
+        customPosition: override.customPosition,
+      });
+      syncLegacyFromTextLayer({
+        ...activeTextLayer,
+        customPosition: override.customPosition,
+      });
+      return;
+    }
+
+    if (watermarkType === "logo") {
+      updateLogoLayer(override.layerId, {
+        customPosition: override.customPosition,
+      });
+      syncLegacyFromLogoLayer({
+        ...activeLogoLayer,
+        customPosition: override.customPosition,
+      });
+      return;
+    }
+
+    setCustomPosition(override.customPosition);
+    syncActivePdfPageSignature((current) => ({
+      ...current,
+      customPosition: override.customPosition,
+    }));
+  }
+
+  function discardWatermarkDragPosition() {
+    watermarkDragOverrideRef.current = null;
+    cancelWatermarkDragRepaint();
+
+    if (mediaKind === "video") {
+      paintVideoOverlayCanvas();
+      return;
+    }
+
+    if (mediaKind === "image" || mediaKind === "pdf") {
+      setWatermarkDragFrame((frame) => frame + 1);
+    }
+  }
+
+  function cancelWatermarkDragRepaint() {
+    if (watermarkDragRafRef.current !== null) {
+      window.cancelAnimationFrame(watermarkDragRafRef.current);
+      watermarkDragRafRef.current = null;
+    }
+  }
+
   function setLayerCustomPosition(
     layerId: string,
     canvas: HTMLCanvasElement,
@@ -7166,7 +7313,7 @@ export default function WatermarkPage() {
           }
         }
 
-        setLayerCustomPosition(layer.id, event.currentTarget, point);
+        applyWatermarkDragPosition(layer.id, event.currentTarget, point);
         return;
       }
     }
@@ -7202,7 +7349,7 @@ export default function WatermarkPage() {
     setIsWatermarkHovering(true);
     setShowWatermarkDragHint(false);
     event.currentTarget.setPointerCapture(event.pointerId);
-    setLayerCustomPosition(
+    applyWatermarkDragPosition(
       draggingLayerIdRef.current ?? activeTextLayerId,
       event.currentTarget,
       point,
@@ -7291,7 +7438,7 @@ export default function WatermarkPage() {
     }
 
     event.preventDefault();
-    setLayerCustomPosition(
+    applyWatermarkDragPosition(
       draggingLayerIdRef.current ??
         (watermarkType === "text"
           ? activeTextLayerId
@@ -7367,6 +7514,7 @@ export default function WatermarkPage() {
     }
 
     event.preventDefault();
+    commitWatermarkDragPosition();
     isDraggingRef.current = false;
     draggingLayerIdRef.current = null;
     setIsDraggingWatermark(false);
@@ -7438,6 +7586,7 @@ export default function WatermarkPage() {
     signatureDragRef.current = null;
     isDraggingRef.current = false;
     draggingLayerIdRef.current = null;
+    discardWatermarkDragPosition();
     isDraggingCaptionRef.current = false;
     draggingCaptionLayerIdRef.current = null;
     setIsDraggingWatermark(false);
@@ -7906,11 +8055,62 @@ export default function WatermarkPage() {
     blurDragRef.current = null;
   }
 
+  function applyTextWatermarkModeDefaults(mode: WatermarkMode) {
+    const defaults =
+      mode === "single"
+        ? SINGLE_TEXT_WATERMARK_DEFAULTS
+        : TILE_TEXT_WATERMARK_DEFAULTS;
+
+    clearActiveTextTemplate();
+    setWatermarkMode(mode);
+    setActiveTextTemplate(null);
+
+    updateTextLayer(activeTextLayerId, {
+      customPosition: defaults.customPosition
+        ? { ...defaults.customPosition }
+        : null,
+      fontFamily: defaults.fontFamily,
+      fontSizeScale: defaults.fontSizeScale,
+      fontWeight: defaults.fontWeight,
+      opacity: defaults.opacity,
+      textColor: defaults.textColor,
+      watermarkPosition: defaults.watermarkPosition,
+    });
+
+    setFontFamily(defaults.fontFamily);
+    setFontSizeScale(defaults.fontSizeScale);
+    setFontWeight(defaults.fontWeight);
+    setWatermarkOpacity(defaults.opacity);
+    setTextColor(defaults.textColor);
+    setCustomPosition(
+      defaults.customPosition ? { ...defaults.customPosition } : null,
+    );
+    setWatermarkPosition(defaults.watermarkPosition);
+
+    if (mode === "tile") {
+      setTileAngle(DEFAULT_TILE_ANGLE);
+      setTileDensity(DEFAULT_TILE_DENSITY);
+      setTileGap(DEFAULT_TILE_GAP);
+    }
+
+    setIsWatermarkHovering(false);
+  }
+
   function handleWatermarkToolSelect(tool: WatermarkToolId) {
     setActiveWatermarkTool(tool);
 
     if (tool === "text") {
+      const shouldApplySingleDefaults =
+        watermarkType === "logo" ||
+        activeWatermarkTool === "logo" ||
+        activeWatermarkTool === "upload";
+
       handleWatermarkTypeChange("text");
+
+      if (shouldApplySingleDefaults) {
+        applyTextWatermarkModeDefaults("single");
+      }
+
       return;
     }
 
@@ -9283,6 +9483,22 @@ export default function WatermarkPage() {
     watermarkType,
   ]);
 
+  useEffect(() => {
+    if (hasMedia && activeWatermarkTool === "upload") {
+      setActiveWatermarkTool("text");
+    }
+  }, [activeWatermarkTool, hasMedia]);
+
+  useEffect(() => {
+    if (mediaKind !== "video" || activeVideoTool !== "overview") {
+      return;
+    }
+
+    if (window.matchMedia("(max-width: 767px)").matches) {
+      handleVideoToolSelect("watermark");
+    }
+  }, [activeVideoTool, mediaKind]);
+
   function renderWatermarkAdjustSliders(layerType: "text" | "logo") {
     const layer = layerType === "text" ? activeTextLayer : activeLogoLayer;
     const layerId =
@@ -9297,6 +9513,11 @@ export default function WatermarkPage() {
               groupId={`watermark-mode-${layerType}`}
               key={value}
               onClick={() => {
+                if (layerType === "text") {
+                  applyTextWatermarkModeDefaults(value);
+                  return;
+                }
+
                 clearActiveTemplates();
                 setWatermarkMode(value);
                 setIsWatermarkHovering(false);
@@ -9620,6 +9841,15 @@ export default function WatermarkPage() {
             : null;
   const showMobileBottomDock = hasMedia && showEditorPanel;
   const showMobileFormatToolRail = showEditorPanel && hasMedia;
+  const reserveMobileVideoTimelineSlot =
+    mediaKind === "video" &&
+    hasMedia &&
+    activeEditorPanel === "video" &&
+    !showVideoOverviewPreview &&
+    (activeVideoTool === "caption" ||
+      activeVideoTool === "watermark" ||
+      activeVideoTool === "trim" ||
+      activeVideoTool === "blur");
 
   return (
     <div className="flex h-[94dvh] w-full flex-col overflow-hidden pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] md:h-[100svh] md:pt-0 md:pb-0">
@@ -9639,12 +9869,10 @@ export default function WatermarkPage() {
       <WatermarkFontLoader />
       <motion.div
         className="flex min-h-0 flex-1 flex-col md:grid md:grid-cols-[auto_minmax(0,1fr)]"
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: "easeOut" }}
+        initial={false}
       >
         <div
-          className={`relative order-2 flex min-h-0 min-w-0 flex-col overflow-hidden border-t border-ed-border bg-ed-panel shadow-[0_-8px_32px_rgba(43,43,43,0.08)] max-md:h-auto max-md:max-h-[min(40svh,360px)] md:order-none md:h-full md:max-h-full md:flex-row md:border-t-0 md:border-r md:shadow-none ${
+          className={`relative order-2 flex min-h-0 min-w-0 flex-col overflow-hidden border-t border-ed-border bg-ed-panel shadow-[0_-8px_32px_rgba(43,43,43,0.08)] max-md:h-[min(40svh,360px)] max-md:min-h-[min(40svh,360px)] max-md:max-h-[min(40svh,360px)] md:order-none md:h-full md:max-h-full md:flex-row md:border-t-0 md:border-r md:shadow-none ${
             showMobileBottomDock ? "max-md:shrink-0" : "max-md:hidden"
           }`}
         >
@@ -9832,6 +10060,7 @@ export default function WatermarkPage() {
                       <VideoToolRail
                         activeTool={activeVideoTool}
                         hasVideo={videoToolsEnabled}
+                        hideOverviewOnMobile
                         onReshortenVideo={beginReshortenSession}
                         onSelectTool={handleVideoToolSelect}
                         showReshortenOnTrim={showReshortenVideoAction}
@@ -10289,9 +10518,7 @@ export default function WatermarkPage() {
                       setIsWatermarkHovering(false);
                     }}
                     onModeChange={(value) => {
-                      clearActiveTemplates();
-                      setWatermarkMode(value);
-                      setIsWatermarkHovering(false);
+                      applyTextWatermarkModeDefaults(value);
                     }}
                     onRemoveLayer={removeTextLayer}
                     onTextChange={(value) => {
@@ -11088,11 +11315,15 @@ export default function WatermarkPage() {
               }`}
             >
               <div className="shrink-0 border-b border-ed-border bg-ed-panel md:hidden">
-                <ToolIconRail
-                  activePanel={highlightedEditorPanel}
-                  mediaKind={mediaKind}
-                  onSelectPanel={handleEditorPanelSelect}
-                />
+                {!hasMedia ? (
+                  <ToolIconRail
+                    activePanel={highlightedEditorPanel}
+                    mediaKind={mediaKind}
+                    onMobileExit={handleEditorExitRequest}
+                    onSelectPanel={handleEditorPanelSelect}
+                    showBuyCredits={false}
+                  />
+                ) : null}
               </div>
               {showMobileFormatToolRail ? (
                 <div className="shrink-0 border-b border-ed-border bg-ed-panel md:hidden">
@@ -11100,17 +11331,21 @@ export default function WatermarkPage() {
                     <PhotosToolRail
                       activeTool={activePhotoTool}
                       imageToolsEnabled={imageToolsEnabled}
+                      onMobileExit={handleEditorExitRequest}
                       onSelectTool={handlePhotoToolSelect}
                     />
                   ) : activeEditorPanel === "pdfDocs" ? (
                     <PdfDocsToolRail
                       activeTool={activePdfTool}
+                      onMobileExit={handleEditorExitRequest}
                       onSelectTool={handlePdfDocToolSelect}
                     />
                   ) : activeEditorPanel === "video" ? (
                     <VideoToolRail
                       activeTool={activeVideoTool}
                       hasVideo={videoToolsEnabled}
+                      hideOverviewOnMobile
+                      onMobileExit={handleEditorExitRequest}
                       onReshortenVideo={beginReshortenSession}
                       onSelectTool={handleVideoToolSelect}
                       showReshortenOnTrim={showReshortenVideoAction}
@@ -11207,14 +11442,8 @@ export default function WatermarkPage() {
                 className="relative touch-none shadow-lg"
                 ref={videoPreviewRef}
                 style={{
-                  height: Math.floor(
-                    (previewPanelRef.current?.clientHeight ?? 320) *
-                      (previewZoomPercent / 100),
-                  ),
-                  width: Math.floor(
-                    (previewPanelRef.current?.clientWidth ?? 320) *
-                      (previewZoomPercent / 100),
-                  ),
+                  height: canvasSize.height,
+                  width: canvasSize.width,
                 }}
               >
                 <video
@@ -11275,6 +11504,13 @@ export default function WatermarkPage() {
             )}
               </div>
 
+              <div
+                className={`shrink-0 border-t border-ed-border bg-ed-panel ${
+                  reserveMobileVideoTimelineSlot
+                    ? "max-md:h-[112px] max-md:min-h-[112px] max-md:max-h-[112px] max-md:shrink-0 max-md:overflow-hidden"
+                    : ""
+                }`}
+              >
               {showVideoTrimDock ? (
                 <VideoVisibilityTimeline
                   currentTimeSeconds={videoPreviewTime}
@@ -11413,6 +11649,7 @@ export default function WatermarkPage() {
                   }
                 />
               ) : null}
+              </div>
             </div>
 
             {showWatermarkAdjustAside ? (
@@ -11446,7 +11683,11 @@ export default function WatermarkPage() {
           ) : null}
 
           {canvasMetaLabel ? (
-            <p className="border-t border-ed-border bg-ed-bg-card py-2 text-center text-xs text-ed-fg-muted">
+            <p
+              className={`border-t border-ed-border bg-ed-bg-card py-2 text-center text-xs text-ed-fg-muted ${
+                showVideoTimelineDock ? "max-md:hidden" : ""
+              }`}
+            >
               {canvasMetaLabel}
             </p>
           ) : null}
@@ -11516,7 +11757,11 @@ export default function WatermarkPage() {
         <EditorFormatUploadModal
           kind={formatUploadPrompt}
           onClose={() => setFormatUploadPrompt(null)}
-          onUploadClick={() => openFormatUploadPicker(formatUploadPrompt)}
+          onUploadClick={() => {
+            const kind = formatUploadPrompt;
+            setFormatUploadPrompt(null);
+            openFormatUploadPicker(kind);
+          }}
         />
       ) : null}
     </main>
