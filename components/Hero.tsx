@@ -92,10 +92,10 @@ export function Hero() {
           <div className="relative min-h-[22rem] overflow-hidden rounded-[1.75rem] landing-border border lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:min-h-0 lg:self-stretch">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              alt="Hero"
+              alt="Portrait photo for the PutWatermark landing page hero"
               className="absolute inset-0 h-full w-full object-cover object-[50%_24%]"
               decoding="async"
-              src="/Hero%20Lady.png"
+              src="/Lady%20Black.png"
             />
           </div>
 

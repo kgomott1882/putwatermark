@@ -240,7 +240,7 @@ export function SiteNavClient({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             alt=""
-            className="h-9 w-9 object-contain"
+            className="h-9 w-9 rounded-[0.45rem] object-cover"
             decoding="async"
             src={siteIconSrc}
           />

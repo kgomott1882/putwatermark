@@ -21,7 +21,7 @@ export default async function AppleIcon() {
       <div
         style={{
           alignItems: "center",
-          background: "#000000",
+          background: "#D97757",
           display: "flex",
           height: "100%",
           justifyContent: "center",
@@ -34,7 +34,7 @@ export default async function AppleIcon() {
           height={imageSize}
           src={iconSrc}
           style={{
-            objectFit: "cover",
+            objectFit: "contain",
           }}
           width={imageSize}
         />
