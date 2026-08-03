@@ -26,7 +26,7 @@ type CreateOrderRequestBody = {
 function rejectUnexpectedPricingFields(body: CreateOrderRequestBody) {
   if (body.priceUSD !== undefined) {
     throw new PurchaseCreateOrderError(
-      "priceUSD is not accepted. Pricing is resolved server-side.",
+      "priceUSD is not accepted. Pricing is resolved on the server.",
     );
   }
 }

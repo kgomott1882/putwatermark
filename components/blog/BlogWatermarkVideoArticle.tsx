@@ -118,7 +118,7 @@ export function BlogWatermarkVideoArticle({ post }: BlogWatermarkVideoArticlePro
             <p>
               A photo is a single frame. A video is potentially thousands of frames, and
               &ldquo;watermarking&rdquo; it means applying that same overlay consistently
-              across every one of them, then re-encoding the whole file — which takes real
+              across every one of them, then re encoding the whole file, which takes real
               processing power. This is exactly where a lot of free online tools fall short:
               they can handle a few seconds of footage in a browser, then hit a wall on
               anything longer, either rejecting the file outright or taking so long the tab
@@ -135,7 +135,7 @@ export function BlogWatermarkVideoArticle({ post }: BlogWatermarkVideoArticlePro
                 },
                 {
                   title: "Design your watermark exactly as you would for a photo.",
-                  body: "Type text or upload a logo, position it with the same grid or free-drag controls, adjust opacity and size, and tile it in a repeating pattern if you want stronger protection than a single mark provides. You can also add a signature instead, if you're marking the video as reviewed or approved rather than protecting it from copying.",
+                  body: "Type text or upload a logo, position it with the same grid or free drag controls, adjust opacity and size, and tile it in a repeating pattern if you want stronger protection than a single mark provides. You can also add a signature instead, if you're marking the video as reviewed or approved rather than protecting it from copying.",
                 },
                 {
                   title: "Preview it live",
@@ -143,7 +143,7 @@ export function BlogWatermarkVideoArticle({ post }: BlogWatermarkVideoArticlePro
                 },
                 {
                   title: "Export.",
-                  body: "What happens next depends on the video's length and resolution — and it's handled automatically, without you needing to choose anything.",
+                  body: "What happens next depends on the video's length and resolution, and it's handled automatically, without you needing to choose anything.",
                 },
               ]}
             />
@@ -161,7 +161,7 @@ export function BlogWatermarkVideoArticle({ post }: BlogWatermarkVideoArticlePro
                 </>,
                 <>
                   <strong className="text-beige">Longer videos</strong> (up to 60
-                  minutes) are automatically routed to server-side processing instead.
+                  minutes) are automatically routed to server side processing instead.
                   Uploads use resumable transfers, so an interrupted connection can be
                   resumed when you export again. You&apos;ll see a slightly different
                   progress indicator while the file uploads and processes on our
@@ -170,37 +170,37 @@ export function BlogWatermarkVideoArticle({ post }: BlogWatermarkVideoArticlePro
                 </>,
                 <>
                   <strong className="text-beige">
-                    Server-processed videos are deleted after processing.
+                    Server processed videos are deleted after processing.
                   </strong>{" "}
-                  They are stored only temporarily — typically within minutes, and no
-                  later than 24 hours — then permanently removed. Nothing is retained
-                  long-term.
+                  They are stored only temporarily, typically within minutes and no
+                  later than 24 hours, then permanently removed. Nothing is retained
+                  long term.
                 </>,
               ]}
             />
             <p>
-              PutWatermark routes each export automatically — short in-browser clips and
-              longer server-side jobs — so you do not need to choose a processing path
+              PutWatermark routes each export automatically: short in browser clips and
+              longer server side jobs. You do not need to choose a processing path
               yourself. Most larger videos are processed on our servers when possible;
               very large files may need to be split for now.
             </p>
           </ArticleSection>
 
-          <ArticleSection title="Tips for Video-Specific Watermark Placement">
+          <ArticleSection title="Tips for Video Specific Watermark Placement">
             <BulletList
               items={[
                 <>
                   <strong className="text-beige">A single corner mark</strong> works well
-                  for finished, delivered footage — it&apos;s unobtrusive and reads as
+                  for finished, delivered footage. It&apos;s unobtrusive and reads as
                   clean branding, similar to how a single watermark works on a photo.
                 </>,
                 <>
                   <strong className="text-beige">A tiled, repeating pattern</strong> is
                   worth using for footage shared before a transaction is final, or anything
-                  at real risk of being clipped and reposted elsewhere — screen recording
+                  at real risk of being clipped and reposted elsewhere. Screen recording
                   defeats most protection methods, but a tiled watermark at least ensures
                   your mark travels with the footage regardless of how it&apos;s cropped or
-                  re-shared. See{" "}
+                  re shared. See{" "}
                   <BlogInlineLink href="/blog/single-vs-tiled-watermarks">
                     single vs. tiled watermarks
                   </BlogInlineLink>{" "}
@@ -208,7 +208,7 @@ export function BlogWatermarkVideoArticle({ post }: BlogWatermarkVideoArticlePro
                 </>,
                 <>
                   <strong className="text-beige">Keep opacity moderate for delivered work.</strong>{" "}
-                  Video is watched, not just glanced at — a heavy, distracting watermark is
+                  Video is watched, not just glanced at. A heavy, distracting watermark is
                   more noticeable over the length of a clip than it would be on a still
                   photo.
                 </>,

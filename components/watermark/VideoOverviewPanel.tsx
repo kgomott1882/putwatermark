@@ -13,7 +13,7 @@ type VideoOverviewPanelProps = {
 
 function formatFileSize(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) {
-    return "—";
+    return "N/A";
   }
 
   if (bytes < 1024) {
@@ -60,7 +60,7 @@ export function VideoOverviewPanel({
                 Resolution
               </p>
               <p className="mt-0.5 text-xs font-semibold tabular-nums text-ed-fg">
-                {width && height ? `${width}×${height}` : "—"}
+                {width && height ? `${width}×${height}` : "N/A"}
               </p>
             </div>
             <div className="rounded-lg border border-ed-border bg-ed-bg px-2 py-1.5">

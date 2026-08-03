@@ -46,8 +46,8 @@ export function VideoBlurPanel({
         <EditorCard className="space-y-1.5 p-1.5 md:space-y-3 md:p-3">
           <p className="hidden text-sm leading-6 text-ed-fg-muted md:block">
             Click and drag on the video to pixelate faces or sensitive areas.
-            Set when each blur appears using the timeline below — for example,
-            show it only between 3–4 seconds.
+            Set when each blur appears using the timeline below. For example,
+            show it only between 3 to 4 seconds.
           </p>
 
           <div className="flex items-center justify-between gap-2">

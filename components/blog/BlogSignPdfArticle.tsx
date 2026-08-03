@@ -117,15 +117,15 @@ export function BlogSignPdfArticle({ post }: BlogSignPdfArticleProps) {
           <ArticleSection title="Why Sign Documents Online Instead of on Paper">
             <div className="space-y-5">
                   <p>
-                    The traditional process — print, sign, scan, email — is slow and
+                    The traditional process (print, sign, scan, email) is slow and
                     easy to mess up (a bad scan, a signature that doesn&apos;t line up,
                     a missing page). Signing directly on the PDF avoids all of that:
                   </p>
                   <BulletList
                     items={[
                       "Freelancers and contractors can sign and return a contract in under a minute instead of hunting for a printer.",
-                      "Small businesses can get proposals and invoices signed by clients without a back-and-forth of attachments.",
-                      "Anyone reviewing a document — a lease, a form, a permission slip — can approve it on the spot, from a phone or laptop.",
+                      "Small businesses can get proposals and invoices signed by clients without a back and forth of attachments.",
+                      "Anyone reviewing a document, like a lease, a form, or a permission slip, can approve it on the spot, from a phone or laptop.",
                     ]}
                   />
                   <p>
@@ -133,7 +133,7 @@ export function BlogSignPdfArticle({ post }: BlogSignPdfArticleProps) {
                     signing something. In the U.S., electronic signatures carry the same
                     legal weight as handwritten ones for the vast majority of contracts and
                     agreements, as long as both parties intended to sign and agreed to do
-                    business electronically — see{" "}
+                    business electronically. See{" "}
                     <BlogInlineLink href={WATERMARK_BLOG_HREF}>
                       How to Watermark Photos, PDFs, and Videos Online for Free
                     </BlogInlineLink>{" "}
@@ -148,7 +148,7 @@ export function BlogSignPdfArticle({ post }: BlogSignPdfArticleProps) {
                 items={[
                   {
                     title: "Upload your PDF.",
-                    body: "Drag it into the tool or select it from your device. Multi-page documents are supported, and the file stays in your browser while you edit and sign.",
+                    body: "Drag it into the tool or select it from your device. Multi page documents are supported, and the file stays in your browser while you edit and sign.",
                   },
                   {
                     title: "Create your signature.",
@@ -161,7 +161,7 @@ export function BlogSignPdfArticle({ post }: BlogSignPdfArticleProps) {
                             just like signing on paper.
                           </li>
                           <li>
-                            Type your name and have it rendered in a handwriting-style
+                            Type your name and have it rendered in a handwriting style
                             script font, if you&apos;d rather not draw with a mouse.
                           </li>
                         </ul>
@@ -174,7 +174,7 @@ export function BlogSignPdfArticle({ post }: BlogSignPdfArticleProps) {
                   },
                   {
                     title: "Drag your signature into place on the page.",
-                    body: "Resize it if needed, and adjust its position precisely — this isn't a fixed stamp in the corner, you control exactly where it lands.",
+                    body: "Resize it if needed, and adjust its position precisely. This isn't a fixed stamp in the corner; you control exactly where it lands.",
                   },
                   {
                     title:
@@ -182,12 +182,12 @@ export function BlogSignPdfArticle({ post }: BlogSignPdfArticleProps) {
                     body: "Apply the same saved signature or initials to every page that requires it before you export.",
                   },
                   {
-                    title: "Add fill-in text fields (optional).",
-                    body: "Use Add Text to place typed fields on pages that need dates, names, or other fill-ins. Each fill page costs 55 credits on export (50 for the page plus a 5-credit fill surcharge).",
+                    title: "Add fill in text fields (optional).",
+                    body: "Use Add Text to place typed fields on pages that need dates, names, or other fill ins. Each fill page costs 55 credits on export (50 for the page plus a 5 credit fill surcharge).",
                   },
                   {
                     title: "Download your signed PDF.",
-                    body: "The rest of the document is untouched — your signatures, initials, and fill-text fields are added as overlays, and the underlying text stays selectable and searchable, so the document is still fully usable, not flattened into an image.",
+                    body: "The rest of the document is untouched. Your signatures, initials, and fill text fields are added as overlays, and the underlying text stays selectable and searchable, so the document is still fully usable, not flattened into an image.",
                   },
                 ]}
               />
@@ -206,17 +206,17 @@ export function BlogSignPdfArticle({ post }: BlogSignPdfArticleProps) {
               <p>For a signature to hold up, four things generally need to be true:</p>
               <BulletList
                 items={[
-                  "Intent to sign — both parties meant to sign, not accidentally clicked something.",
-                  "Consent to do business electronically — both sides agreed to handle the transaction digitally.",
-                  "The signature is associated with the record — it's clearly tied to the specific document being signed.",
-                  "The signed document can be retained and reproduced — both parties can access and keep a copy.",
+                  "Intent to sign: both parties meant to sign, not accidentally clicked something.",
+                  "Consent to do business electronically: both sides agreed to handle the transaction digitally.",
+                  "The signature is associated with the record: it's clearly tied to the specific document being signed.",
+                  "The signed document can be retained and reproduced: both parties can access and keep a copy.",
                 ]}
               />
               <p>
                 Some documents are excluded from electronic signing regardless of these
-                conditions — wills, certain court orders, and a handful of other specific
-                categories. For anything else — contracts, proposals, invoices, agreements,
-                forms — an electronic signature is typically just as binding as a wet-ink
+                conditions: wills, certain court orders, and a handful of other specific
+                categories. For anything else (contracts, proposals, invoices, agreements,
+                forms), an electronic signature is typically just as binding as a wet ink
                 one.
               </p>
               <p className="landing-muted text-sm leading-7 md:text-base">
@@ -230,15 +230,15 @@ export function BlogSignPdfArticle({ post }: BlogSignPdfArticleProps) {
 
             <ArticleSection title="Drawn vs. Typed Signatures: Which Should You Use?">
               <p>
-                Both are legitimate electronic signatures under the law described above —
-                the legal validity comes from intent and consent, not from the specific
+                Both are legitimate electronic signatures under the law described above.
+                The legal validity comes from intent and consent, not from the specific
                 visual method used to create the mark.
               </p>
               <BulletList
                 items={[
                   "Draw it if you want something that looks like your actual handwriting, or if you're signing on a touchscreen where drawing feels natural.",
-                  "Type it if you're on a laptop without a trackpad you trust for drawing, or you just want something clean and consistent every time — typing your name renders it in a handwriting-style font rather than plain typed text, so it still reads as a signature rather than a label.",
-                  "Save one of each if you're not sure — you can switch between them per document.",
+                  "Type it if you're on a laptop without a trackpad you trust for drawing, or you just want something clean and consistent every time. Typing your name renders it in a handwriting style font rather than plain typed text, so it still reads as a signature rather than a label.",
+                  "Save one of each if you're not sure. You can switch between them per document.",
                 ]}
               />
             </ArticleSection>
@@ -253,13 +253,13 @@ export function BlogSignPdfArticle({ post }: BlogSignPdfArticleProps) {
                   "A signature indicates you (or someone) reviewed, approved, or agreed to a specific document.",
                   <>
                     A watermark protects a document or file from unauthorized use or copying,
-                    and doesn&apos;t imply approval — a &ldquo;DRAFT&rdquo; watermark, for
+                    and doesn&apos;t imply approval. A &ldquo;DRAFT&rdquo; watermark, for
                     example, means the opposite of a finished, signed agreement.
                   </>,
                 ]}
               />
               <p>
-                You can use both on the same PDF — sign a contract and watermark it
+                You can use both on the same PDF. Sign a contract and watermark it
                 &ldquo;COPY&rdquo; for the version you send before the final signed
                 original, for instance. The{" "}
                 <BlogInlineLink href={WATERMARK_BLOG_HREF}>
@@ -280,8 +280,8 @@ export function BlogSignPdfArticle({ post }: BlogSignPdfArticleProps) {
                     <p className="landing-muted mt-3 text-sm leading-7 md:text-base">
                       {item.question === "Is there a subscription to sign documents?" ? (
                         <>
-                          No. There is no monthly subscription — only{" "}
-                          <BlogInlineLink href="/pricing">pay-as-you-go credits</BlogInlineLink>{" "}
+                          No. There is no monthly subscription, only{" "}
+                          <BlogInlineLink href="/pricing">pay as you go credits</BlogInlineLink>{" "}
                           when you need additional volume or paid features.
                         </>
                       ) : (

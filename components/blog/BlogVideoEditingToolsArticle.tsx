@@ -64,7 +64,7 @@ export function BlogVideoEditingToolsArticle({
             <p>
               Cut down a clip without opening a separate app. Drag the trim handles to set
               your start and end points, preview the trimmed range, and export just the
-              section you need — useful for pulling a highlight out of a longer recording,
+              section you need. Useful for pulling a highlight out of a longer recording,
               or cutting dead air off the front and back of a clip before you watermark and
               share it.
             </p>
@@ -72,9 +72,9 @@ export function BlogVideoEditingToolsArticle({
 
           <ArticleSection title="Blur Sensitive Footage">
             <p>
-              Sometimes a video has something in it you don&apos;t want visible — a license
+              Sometimes a video has something in it you don&apos;t want visible, like a license
               plate, a face, a document on a desk in the background. The blur tool lets
-              you paint a mosaic-style blur over a specific area of the frame, and set
+              you paint a mosaic style blur over a specific area of the frame, and set
               exactly which part of the timeline it applies to. The blur only shows during
               the time range you choose, so the rest of your video stays untouched.
             </p>
@@ -84,8 +84,8 @@ export function BlogVideoEditingToolsArticle({
             <p>
               Recorded several short clips that really belong together as one video? Upload
               them, arrange them in order, and merge them into a single file. This is
-              useful for combining multiple takes, joining screen-recording segments, or
-              assembling a sequence of clips into one continuous video — all before you add
+              useful for combining multiple takes, joining screen recording segments, or
+              assembling a sequence of clips into one continuous video, all before you add
               a watermark or export.
             </p>
           </ArticleSection>
@@ -112,7 +112,7 @@ export function BlogVideoEditingToolsArticle({
           <ArticleSection title="How Long a Video Can You Edit?">
             <p>
               Short clips (under a minute, 1080p or lower) process instantly right in your
-              browser. Longer videos — up to 60 minutes — are handled through server-side
+              browser. Longer videos, up to 60 minutes, are handled through server side
               processing, splitting the video into segments, editing each one, and stitching
               them back together automatically. You don&apos;t need to manage any of that
               yourself; you just upload and export like normal, and the length is handled
@@ -128,8 +128,8 @@ export function BlogVideoEditingToolsArticle({
           <ArticleSection title="No Separate Apps Needed">
             <p>
               Trim, blur, merge, captions, and watermarking used to mean juggling three or
-              four different tools. PutWatermark handles all of it in one browser-based
-              editor — upload once, apply whatever combination of edits you need, and export
+              four different tools. PutWatermark handles all of it in one browser based
+              editor. Upload once, apply whatever combination of edits you need, and export
               a single finished file.
             </p>
           </ArticleSection>

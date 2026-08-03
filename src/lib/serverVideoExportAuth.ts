@@ -25,7 +25,7 @@ export async function requireAuthenticatedUserId() {
 
   if (!user.email_confirmed_at) {
     throw new ServerVideoProcessingError(
-      "Confirm your email address before exporting server-processed videos.",
+      "Confirm your email address before exporting server processed videos.",
     );
   }
 
@@ -74,7 +74,7 @@ export async function requireCleanServerVideoExportAuthorization({
 
   if (!isServerRoutedVideoFileMeta(fileMeta)) {
     throw new ServerVideoProcessingError(
-      "This video does not require server-side export.",
+      "This video does not require server side export.",
     );
   }
 

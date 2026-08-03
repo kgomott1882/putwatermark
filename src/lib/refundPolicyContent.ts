@@ -6,7 +6,7 @@ export const refundPolicySections: LegalDocumentSection[] = [
   {
     title: "Overview",
     body: [
-      "PutWatermark uses a pay-as-you-go credit model with no subscription. This policy explains when credits or purchases can be refunded. It should be read alongside our [Terms of Service](/terms).",
+      "PutWatermark uses a pay as you go credit model with no subscription. This policy explains when credits or purchases can be refunded. It should be read alongside our [Terms of Service](/terms).",
     ],
   },
   {
@@ -19,7 +19,7 @@ export const refundPolicySections: LegalDocumentSection[] = [
   {
     title: "Credits Already Spent on Exports",
     body: [
-      "Credits already spent on a completed export are non-refundable, since the associated processing has already occurred. This applies whether the export was a photo, PDF, or video, and whether processing happened in your browser or on our servers.",
+      "Credits already spent on a completed export are not refundable, since the associated processing has already occurred. This applies whether the export was a photo, PDF, or video, and whether processing happened in your browser or on our servers.",
     ],
   },
   {

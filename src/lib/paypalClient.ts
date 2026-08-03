@@ -127,7 +127,7 @@ function formatPayPalUsdAmount(priceUSD: number) {
 function buildPurchaseDescription(quote: ResolvedPurchaseQuote) {
   const creditsLabel = quote.credits.toLocaleString("en-US");
 
-  return `PutWatermark ${quote.label} — ${creditsLabel} credits`;
+  return `PutWatermark ${quote.label}, ${creditsLabel} credits`;
 }
 
 async function readPayPalErrorMessage(response: Response) {

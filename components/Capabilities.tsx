@@ -70,7 +70,7 @@ export function Capabilities() {
           index="003"
           lead={
             <>
-              Works everywhere you do —{" "}
+              Works everywhere you do:{" "}
               <LandingHighlight>desktop, tablet, or phone</LandingHighlight>.
             </>
           }
@@ -132,7 +132,7 @@ export function Capabilities() {
 
         <div className="landing-surface mt-8 flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
           <p className="max-w-2xl text-lg font-semibold leading-8 text-beige">
-            <LandingHighlight>Real-time processing</LandingHighlight> in the browser — no
+            <LandingHighlight>Real time processing</LandingHighlight> in the browser. No
             uploads to a queue, no waiting for renders.
           </p>
           <Link

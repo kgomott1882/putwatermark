@@ -1501,7 +1501,7 @@ export default function WatermarkPage() {
 
     try {
       await restoreVideoShortenSnapshot(originalSnapshot);
-      setExportNotice("Restored the original full-length video.");
+      setExportNotice("Restored the original full length video.");
     } catch (error) {
       setUploadError(
         error instanceof Error
@@ -2399,7 +2399,7 @@ export default function WatermarkPage() {
       setLoginGateError(
         error instanceof Error
           ? error.message
-          : "Could not save your work before sign-in.",
+          : "Could not save your work before sign in.",
       );
       setShowExportLoginGate(false);
       resumeExportAfterLoginRef.current = false;
@@ -2440,7 +2440,7 @@ export default function WatermarkPage() {
       setExportError(
         error instanceof Error
           ? error.message
-          : "Could not restore your saved draft after sign-in.",
+          : "Could not restore your saved draft after sign in.",
       );
     } finally {
       setIsRestoringAnonymousDraft(false);
@@ -2594,7 +2594,7 @@ export default function WatermarkPage() {
 
     if (!pdfBytesRef.current) {
       throw new ExportCreditCheckError(
-        "Reload the PDF before exporting sign-and-fill content.",
+        "Reload the PDF before exporting sign and fill content.",
       );
     }
 
@@ -2802,7 +2802,7 @@ export default function WatermarkPage() {
           setExportError(
             error instanceof Error
               ? error.message
-              : "Could not restore your saved draft after sign-in.",
+              : "Could not restore your saved draft after sign in.",
           );
         } finally {
           setIsRestoringAnonymousDraft(false);
@@ -6621,7 +6621,7 @@ export default function WatermarkPage() {
         !isCleanExportTier(auth.tier)
       ) {
         throw new ExportCreditCheckError(
-          "This PDF export requires sufficient credits. Add credits or remove paid sign-and-fill content, then try again.",
+          "This PDF export requires sufficient credits. Add credits or remove paid sign and fill content, then try again.",
         );
       }
 
@@ -6907,13 +6907,13 @@ export default function WatermarkPage() {
 
       if (timedLayerCount > 0 && exportRoute !== "client") {
         throw new VideoExportFailedError(
-          "Timed text watermarks are available for in-browser export on videos up to 60 seconds. Server export support is coming soon.",
+          "Timed text watermarks are available for in browser export on videos up to 60 seconds. Server export support is coming soon.",
         );
       }
 
       if (hasVideoBlurToExport() && exportRoute !== "client") {
         throw new VideoExportFailedError(
-          "Timed video blur is available for in-browser export on videos up to 60 seconds. Server export support is coming soon.",
+          "Timed video blur is available for in browser export on videos up to 60 seconds. Server export support is coming soon.",
         );
       }
 
@@ -8877,7 +8877,7 @@ export default function WatermarkPage() {
       });
       setLogoImage(activeLayer.backgroundRemovedLogoImage);
       setIsLogoBackgroundRemoved(true);
-      setLogoBackgroundMessage("Best-effort background removal is on.");
+      setLogoBackgroundMessage("Best effort background removal is on.");
       return;
     }
 
@@ -8885,7 +8885,7 @@ export default function WatermarkPage() {
 
     if (!result) {
       setLogoBackgroundMessage(
-        "Couldn't detect a plain background - try a logo with a solid-color background, or use a PNG with transparency already applied",
+        "Couldn't detect a plain background. Try a logo with a solid color background, or use a PNG with transparency already applied",
       );
       return;
     }
@@ -8914,7 +8914,7 @@ export default function WatermarkPage() {
       setBackgroundRemovedLogoImage(cleanedLogo);
       setLogoImage(cleanedLogo);
       setIsLogoBackgroundRemoved(true);
-      setLogoBackgroundMessage("Best-effort background removal is on.");
+      setLogoBackgroundMessage("Best effort background removal is on.");
     };
     cleanedLogo.onerror = () => {
       setLogoBackgroundMessage(
@@ -9359,8 +9359,8 @@ export default function WatermarkPage() {
         : exportServerStage === "processing"
           ? longVideoProcessingDetail ??
             (currentVideoExportRoute === "long-server"
-              ? "Processing long video on our servers — keep this tab open"
-              : "Processing on our servers — this may take longer")
+              ? "Processing long video on our servers. Keep this tab open"
+              : "Processing on our servers. This may take longer")
           : exportServerStage === "downloading"
             ? "Downloading processed video..."
             : "Export progress";
@@ -10895,7 +10895,7 @@ export default function WatermarkPage() {
                   {pdfDocumentTool !== "fill" ? (
                     <p className="text-[9px] leading-3 text-ed-fg-muted/80">
                       Each page can hold multiple signatures, initials, and
-                      fill-text fields. Select a placement to resize it, use Done
+                      fill text fields. Select a placement to resize it, use Done
                       when finished, or × to remove one instance.
                     </p>
                   ) : null}
@@ -11778,7 +11778,7 @@ export default function WatermarkPage() {
       />
 
       <SignFillCreditsRequiredModal
-        description="Videos over 60 seconds, above 1080p, or processed on our servers require credits. Buy credits to export, or use a shorter clip within in-browser limits for a free watermarked export."
+        description="Videos over 60 seconds, above 1080p, or processed on our servers require credits. Buy credits to export, or use a shorter clip within in browser limits for a free watermarked export."
         onClose={handleDismissServerVideoCreditGate}
         open={showServerVideoCreditGate}
         title="Server video export requires credits"
@@ -11891,7 +11891,7 @@ function PaginatedThreeColumnStrip<T>({
           </button>
 
           <p className="text-center text-[10px] font-medium tabular-nums text-ed-fg-muted">
-            {safeStartIndex + 1}–
+            {safeStartIndex + 1} to{" "}
             {Math.min(safeStartIndex + stripVisibleCount, items.length)} of{" "}
             {items.length}
           </p>

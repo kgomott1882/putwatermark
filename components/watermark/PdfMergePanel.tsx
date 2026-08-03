@@ -26,7 +26,7 @@ type PdfMergePanelProps = {
 
 function formatFileSize(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) {
-    return "—";
+    return "N/A";
   }
 
   if (bytes < 1024 * 1024) {
@@ -55,7 +55,7 @@ export function PdfMergePanel({
         <EditorCard className="space-y-3 p-3">
           <p className="text-sm leading-6 text-ed-fg-muted">
             Combine PDFs in the order you want with the easiest PDF merger
-            available. Your open document stays first — add more PDFs to merge
+            available. Your open document stays first. Add more PDFs to merge
             with it.
           </p>
 

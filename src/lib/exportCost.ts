@@ -304,7 +304,7 @@ async function resolveLongVideoChunkCountForBilling(
 
   if (!exportId) {
     throw new ExportCostError(
-      "Long-video export billing requires an exportId.",
+      "Long video export billing requires an exportId.",
     );
   }
 
@@ -312,7 +312,7 @@ async function resolveLongVideoChunkCountForBilling(
 
   if (!job || job.chunk_count < 1) {
     throw new ExportCostError(
-      "Could not verify long-video processing cost from the completed export job.",
+      "Could not verify long video processing cost from the completed export job.",
     );
   }
 
@@ -350,7 +350,7 @@ export function formatVideoExportCostNotice({
 
   if (longVideoChunkSurcharge > 0) {
     parts.push(
-      `${longVideoChunkSurcharge} credits (${longVideoExtraChunks} ${longVideoLabel}extra chunks × ${LONG_VIDEO_CHUNK_SURCHARGE_CREDITS_PER_EXTRA_CHUNK}, long-video processing)`,
+      `${longVideoChunkSurcharge} credits (${longVideoExtraChunks} ${longVideoLabel}extra chunks × ${LONG_VIDEO_CHUNK_SURCHARGE_CREDITS_PER_EXTRA_CHUNK}, long video processing)`,
     );
   }
 

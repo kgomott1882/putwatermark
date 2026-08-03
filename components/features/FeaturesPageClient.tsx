@@ -67,7 +67,7 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "Logo watermarks",
       description:
-        "Upload your own logo and position it like text. Best-effort background removal helps plain-background logos — this is logo-only, not full photo background removal.",
+        "Upload your own logo and position it like text. Best effort background removal helps plain background logos. This is logo only, not full photo background removal.",
       Icon: ImageIcon,
       image: "/Logo watermaks.png",
       imageAlt: "Logo watermark applied to an image",
@@ -75,15 +75,15 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "Sign & fill",
       description:
-        "Draw a signature or type your name in a script font, add initials, and place fill-in text fields on PDF pages. Export uses 50 credits per billable page, with a 5-credit fill surcharge on pages that contain fill text.",
+        "Draw a signature or type your name in a script font, add initials, and place fill in text fields on PDF pages. Export uses 50 credits per billable page, with a 5 credit fill surcharge on pages that contain fill text.",
       Icon: PenLine,
       image: "/Signatures.png",
-      imageAlt: "Signature and fill-text fields placed on a document",
+      imageAlt: "Signature and fill text fields placed on a document",
     },
     {
       title: "Tile watermarking",
       description:
-        "Repeat your watermark across the image and position the tiled pattern manually on your preview — tune angle and spacing yourself, without rigid sparse, medium, or dense presets.",
+        "Repeat your watermark across the image and position the tiled pattern manually on your preview. Tune angle and spacing yourself, without rigid sparse, medium, or dense presets.",
       Icon: Grid3x3,
       image: "/Shoes.jpeg",
       imageAlt: "Tiled watermark pattern across a product photo",
@@ -101,7 +101,7 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "Crop, resize, rotate",
       description:
-        "Adjust your photo before or after watermarking with built-in crop handles, resize controls, and rotation.",
+        "Adjust your photo before or after watermarking with built in crop handles, resize controls, and rotation.",
       Icon: Crop,
       image: "/Crop.png",
       imageAlt: "Photo with crop and resize handles in the editor",
@@ -109,22 +109,22 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "Photo effects",
       description:
-        "Five built-in looks in the Effects panel. Select one to preview it on your photo:",
+        "Five built in looks in the Effects panel. Select one to preview it on your photo:",
       bullets: [
-        "Border — Add a thin, medium, or thick frame in ink or paper.",
-        "Exposure — Brighten or darken the image from -50% to +50%.",
-        "Grayscale — Convert the photo to full black and white.",
-        "Sepia — Apply a warm sepia tone across the image.",
-        "Vintage — Muted, warm-toned color with a soft vignette.",
+        "Border: Add a thin, medium, or thick frame in ink or paper.",
+        "Exposure: Brighten or darken the image from -50% to +50%.",
+        "Grayscale: Convert the photo to full black and white.",
+        "Sepia: Apply a warm sepia tone across the image.",
+        "Vintage: Muted, warm toned color with a soft vignette.",
       ],
       Icon: Sparkles,
       image: "/Photo effects.png",
-      imageAlt: "Photo with a sepia-style effect applied",
+      imageAlt: "Photo with a sepia style effect applied",
     },
     {
       title: "Video editor",
       description:
-        "Trim clips, blur sensitive footage with a mosaic brush, merge multiple videos into one, add captions, and control exactly when your watermark appears — all in your browser.",
+        "Trim clips, blur sensitive footage with a mosaic brush, merge multiple videos into one, add captions, and control exactly when your watermark appears, all in your browser.",
       Icon: Video,
       image: "/youtubers-watermarked.jpg",
       imageAlt: "Video editor with watermark overlay on a clip",
@@ -132,7 +132,7 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "Merge & compress PDFs",
       description:
-        "Combine multiple PDFs into one file or shrink oversized documents down to size — no separate app needed.",
+        "Combine multiple PDFs into one file or shrink oversized documents down to size. No separate app needed.",
       Icon: FileText,
       image: "/Pics/feature-pdf-support.jpg",
       imageAlt: "PDF merge and compress tools in the editor",
@@ -140,7 +140,7 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "Live preview & full history",
       description:
-        "Every adjustment updates instantly on screen before you export — crop, resize, rotate, effects, and watermark settings — so you see exactly what you will get. Undo and redo changes from the editor bar, stepping backward or forward through text, logo, position, opacity, tile, and related adjustments without losing your place.",
+        "Every adjustment updates instantly on screen before you export: crop, resize, rotate, effects, and watermark settings. You see exactly what you will get. Undo and redo changes from the editor bar, stepping backward or forward through text, logo, position, opacity, tile, and related adjustments without losing your place.",
       Icon: Eye,
       image: "/White_man_working.jpeg",
       imageAlt: "Person reviewing a photo on a laptop in the editor",
@@ -150,7 +150,7 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "Images",
       description:
-        "JPG, PNG, and WebP photos are supported in the editor. Watermark them, then crop, resize, rotate, and apply effects — all before export.",
+        "JPG, PNG, and WebP photos are supported in the editor. Watermark them, then crop, resize, rotate, and apply effects, all before export.",
       Icon: Upload,
       image: "/Grid_collage_humans.jpg",
       imageAlt: "Grid collage of portrait photos",
@@ -158,7 +158,7 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "Video",
       description:
-        "MP4, MOV, and WebM clips under 60 seconds and 1080p process instantly in your browser — trim, blur, merge, caption, and watermark in one editor. Longer videos (up to 60 minutes) upload with resumable transfers and are processed on our servers.",
+        "MP4, MOV, and WebM clips under 60 seconds and 1080p process instantly in your browser. Trim, blur, merge, caption, and watermark in one editor. Longer videos (up to 60 minutes) upload with resumable transfers and are processed on our servers.",
       Icon: Video,
       image: "/youtubers-watermarked.jpg",
       imageAlt: "Video frame with a watermark overlay",
@@ -166,7 +166,7 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "PDF",
       description:
-        "Multi-page documents are supported with watermark placement on every page, plus sign & fill, merge multiple PDFs into one file, and compress oversized documents — original text stays selectable and searchable.",
+        "Multi page documents are supported with watermark placement on every page, plus sign & fill, merge multiple PDFs into one file, and compress oversized documents. Original text stays selectable and searchable.",
       Icon: FileText,
       image: "/Pics/feature-pdf-support.jpg",
       imageAlt: "PDF document with watermark support",
@@ -176,7 +176,7 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
     {
       title: "Browser Based",
       description:
-        "PutWatermark runs in any modern browser. Open the editor and start working — no download or installation required.",
+        "PutWatermark runs in any modern browser. Open the editor and start working. No download or installation required.",
       Icon: Globe,
       image: "/Browser Based.png",
       imageAlt: "Watermarking tool running in a web browser",
@@ -190,9 +190,9 @@ const tabContent: Record<FeatureTabId, CapabilityCard[]> = {
       imageAlt: "Laptop, tablet, and smartphone showing the editor",
     },
     {
-      title: "Client-Side Processing",
+      title: "Client Side Processing",
       description:
-        "Most operations — images, PDFs, and short videos — run entirely on your device for speed and privacy. Larger videos are processed on our servers when possible; very large files may need to be split for now. Files are deleted immediately afterward.",
+        "Most operations, including images, PDFs, and short videos, run entirely on your device for speed and privacy. Larger videos are processed on our servers when possible; very large files may need to be split for now. Files are deleted immediately afterward.",
       Icon: ShieldCheck,
       image: "/Client-Side Processing.png",
       imageAlt: "Files processed locally on the user's device",
@@ -256,11 +256,11 @@ export function FeaturesPageClient() {
             index="Features"
             lead={
               <>
-                Watermark photos and PDFs, edit video, sign documents, and more — browse
+                Watermark photos and PDFs, edit video, sign documents, and more. Browse
                 what <LandingHighlight>PutWatermark can do</LandingHighlight>.
               </>
             }
-            title="Built-in capabilities"
+            title="Built in capabilities"
           />
 
           <div className="mt-14 landing-border border-b">
@@ -317,7 +317,7 @@ export function FeaturesPageClient() {
 
           <div className="mt-16 flex flex-col items-start justify-between gap-6 landing-border border-t pt-12 md:flex-row md:items-center">
             <p className="landing-muted max-w-xl text-sm leading-7 md:text-base">
-              Ready to try it? Open the editor, upload a file, and preview freely —{" "}
+              Ready to try it? Open the editor, upload a file, and preview freely.{" "}
               <LandingHighlight>create a free account when you export</LandingHighlight>.
             </p>
             <LandingCta href="/watermark">Try it now</LandingCta>
@@ -410,9 +410,9 @@ function ComparisonTableCard({ index }: { index: number }) {
           <BentoDotGrid />
         </div>
         <p className="landing-muted mt-4 max-w-2xl text-sm leading-7 md:text-[0.95rem]">
-          A quick look at browser-based watermarking versus traditional
-          desktop software — no specific product names, just the usual
-          trade-offs.
+          A quick look at browser based watermarking versus traditional
+          desktop software. No specific product names, just the usual
+          trade offs.
         </p>
       </div>
 

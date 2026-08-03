@@ -91,7 +91,7 @@ export function BlogSidebar({
         <section className="landing-surface rounded-2xl p-5">
           <p className="text-sm font-semibold text-beige">Try it free</p>
           <p className="landing-muted mt-2 text-sm leading-7">
-            Watermark or sign a file in your browser — no account required to
+            Watermark or sign a file in your browser. No account required to
             start.
           </p>
           <Link

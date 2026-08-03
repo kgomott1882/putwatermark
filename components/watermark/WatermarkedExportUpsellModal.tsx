@@ -102,7 +102,7 @@ export function WatermarkedExportUpsellModal({
             id={descriptionId}
           >
             Free exports include a centered PutWatermark.com watermark. Buy credits to export clean,
-            watermark-free files with your own branding instead.
+            watermark free files with your own branding instead.
           </p>
 
           <div className="mt-6 space-y-2.5">

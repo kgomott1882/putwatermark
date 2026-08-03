@@ -148,7 +148,7 @@ export function isServerSideVideoExportRoute(
 }
 
 export function getVideoExportRejectionMessage() {
-  return `This video exceeds our processing limits (up to ${SERVER_VIDEO_MAX_FILE_MB}MB or ${SERVER_VIDEO_MAX_DURATION_MINUTES} minutes for standard server export, or up to ${LONG_VIDEO_MAX_FILE_MB}MB or ${LONG_VIDEO_MAX_DURATION_MINUTES} minutes for long-video export). Try a shorter or smaller clip.`;
+  return `This video exceeds our processing limits (up to ${SERVER_VIDEO_MAX_FILE_MB}MB or ${SERVER_VIDEO_MAX_DURATION_MINUTES} minutes for standard server export, or up to ${LONG_VIDEO_MAX_FILE_MB}MB or ${LONG_VIDEO_MAX_DURATION_MINUTES} minutes for long video export). Try a shorter or smaller clip.`;
 }
 
 export function getVideoExportDisabledReason(

@@ -50,7 +50,7 @@ export function AboutPageContent() {
             <div className="bg-night-card p-8">
               <p className="landing-muted text-sm leading-7">
                 Upload a file, add your watermark, and export in minutes.{" "}
-                <LandingHighlight>No signup required to try it</LandingHighlight> — see
+                <LandingHighlight>No signup required to try it</LandingHighlight>. See
                 the result first, then decide if you need credits for higher volume.
               </p>
             </div>

@@ -281,7 +281,7 @@ export function getCaptionLayerTimingLabel(
   const start = hasStart ? layer.visibleFromSeconds! : 0;
   const end = hasEnd ? layer.visibleUntilSeconds! : durationSeconds;
 
-  return `${formatCaptionTimingSeconds(start)}–${formatCaptionTimingSeconds(end)}`;
+  return `${formatCaptionTimingSeconds(start)} to ${formatCaptionTimingSeconds(end)}`;
 }
 
 function wrapCaptionLines(

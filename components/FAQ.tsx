@@ -16,27 +16,27 @@ const faqItems: FaqItem[] = [
   {
     question: "What is PutWatermark?",
     answer:
-      "PutWatermark is a browser-based editor for photos, PDFs, and videos — free to try, with no signup required. Watermark with text or logos, batch-export photos, sign & fill PDFs, merge and compress PDFs, and edit video (trim, blur, merge, captions) before export. No software to install and no upfront payment to get started.",
+      "PutWatermark is a browser based editor for photos, PDFs, and videos. It is free to try, with no signup required. Watermark with text or logos, batch export photos, sign & fill PDFs, merge and compress PDFs, and edit video (trim, blur, merge, captions) before export. No software to install and no upfront payment to get started.",
   },
   {
     question: "Do I need to create an account to use PutWatermark?",
     answer:
-      "No signup is required to try the editor — upload, watermark, and preview freely. Create a free account when you're ready to export; your draft is saved for 48 hours if you sign up mid-session.",
+      "No signup is required to try the editor. Upload, watermark, and preview freely. Create a free account when you're ready to export; your draft is saved for 48 hours if you sign up mid session.",
   },
   {
     question: "What file types are supported?",
     answer:
-      "Photos (JPG, PNG, WebP), PDFs, and videos (MP4, MOV, WebM — up to 60 minutes). Upload one PDF or one video at a time, or select multiple images for batch export.",
+      "Photos (JPG, PNG, WebP), PDFs, and videos (MP4, MOV, WebM, up to 60 minutes). Upload one PDF or one video at a time, or select multiple images for batch export.",
   },
   {
     question: "Is there a subscription?",
     answer:
-      "No subscriptions. PutWatermark uses pay-as-you-go credits only — buy a credit pack when you need it, with no recurring billing.",
+      "No subscriptions. PutWatermark uses pay as you go credits only. Buy a credit pack when you need it, with no recurring billing.",
   },
   {
     question: "Do you store my files?",
     answer:
-      "Photos and PDFs are processed locally in your browser and are never uploaded to our servers. Large videos that exceed in-browser limits are routed to server-side processing; those files are deleted immediately after processing completes.",
+      "Photos and PDFs are processed locally in your browser and are never uploaded to our servers. Large videos that exceed in browser limits are routed to server side processing; those files are deleted immediately after processing completes.",
   },
   {
     question: "Can I watermark multiple files at once?",
@@ -46,17 +46,17 @@ const faqItems: FaqItem[] = [
   {
     question: "What can I customize about my watermark?",
     answer:
-      "Use text or a logo, position it anywhere (including free-drag), and adjust opacity, font, and styling. You can also tile watermarks with adjustable density, angle, and gap, plus use templates for quick styling.",
+      "Use text or a logo, position it anywhere (including free drag), and adjust opacity, font, and styling. You can also tile watermarks with adjustable density, angle, and gap, plus use templates for quick styling.",
   },
   {
     question: "Does watermarking reduce my file's quality?",
     answer:
-      "No. Exports are generated at full resolution. PDF exports preserve selectable, searchable text — the watermark is added as an overlay without flattening your document.",
+      "No. Exports are generated at full resolution. PDF exports preserve selectable, searchable text. The watermark is added as an overlay without flattening your document.",
   },
   {
     question: "What happens to large videos?",
     answer:
-      "Videos under 60 seconds and 1080p process instantly in your browser — trim, blur, merge, add captions, and watermark in the same editor. Longer videos (up to 60 minutes) upload with resumable transfers and are processed on our servers.",
+      "Videos under 60 seconds and 1080p process instantly in your browser. Trim, blur, merge, add captions, and watermark in the same editor. Longer videos (up to 60 minutes) upload with resumable transfers and are processed on our servers.",
   },
 ];
 

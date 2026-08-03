@@ -93,7 +93,7 @@ const comparisonRows = [
   {
     label: "Setup",
     traditional: "Requires download and installation",
-    putwatermark: "None — works instantly in any browser",
+    putwatermark: "None. Works instantly in any browser",
   },
   {
     label: "Device access",
@@ -107,7 +107,7 @@ const comparisonRows = [
   },
   {
     label: "Learning curve",
-    traditional: "Often complex, feature-heavy interfaces",
+    traditional: "Often complex, feature heavy interfaces",
     putwatermark: "Simple, guided controls",
   },
   {
@@ -158,11 +158,11 @@ export function BlogPostArticle({ post }: BlogPostArticleProps) {
                     ]}
                   />
                   <p>
-                    A watermark doesn&apos;t just deter theft — it&apos;s proof. If your
+                    A watermark doesn&apos;t just deter theft. It&apos;s proof. If your
                     name, logo, or a &ldquo;DRAFT&rdquo; mark is visibly embedded in a file,
                     anyone who sees it knows exactly where it came from and what state
                     it&apos;s in. For photographers especially, understanding ownership
-                    basics helps — see{" "}
+                    basics helps. See{" "}
                     <BlogExternalLink href="https://www.copyright.gov/engage/photographers/">
                       What Photographers Should Know about Copyright
                     </BlogExternalLink>{" "}
@@ -185,7 +185,7 @@ export function BlogPostArticle({ post }: BlogPostArticleProps) {
                 items={[
                   {
                     title: "Upload your photo.",
-                    body: "Drag it into the tool or select it from your device — JPG, PNG, and WebP are all supported. Nothing is uploaded to a server; the file stays in your browser.",
+                    body: "Drag it into the tool or select it from your device. JPG, PNG, and WebP are all supported. Nothing is uploaded to a server; the file stays in your browser.",
                   },
                   {
                     title: "Choose text or a logo.",
@@ -204,7 +204,7 @@ export function BlogPostArticle({ post }: BlogPostArticleProps) {
                     body: (
                       <>
                         Instead of a single mark, repeat your watermark in a pattern across
-                        the whole image — adjust the density, angle, and spacing so
+                        the whole image. Adjust the density, angle, and spacing so
                         it&apos;s difficult to crop out. Learn more about{" "}
                         <BlogInlineLink href="/features?tab=watermarking">
                           tiled watermarking
@@ -224,25 +224,25 @@ export function BlogPostArticle({ post }: BlogPostArticleProps) {
             <ArticleSection title="How to Watermark a PDF">
               <p>
                 Watermarking a PDF works differently from a photo, because the document
-                usually needs to stay readable and searchable — you&apos;re not just
+                usually needs to stay readable and searchable. You&apos;re not just
                 stamping an image, you&apos;re marking a real document. PDF is an open,
                 standardized format maintained by the{" "}
                 <BlogExternalLink href="https://pdfa.org/">PDF Association</BlogExternalLink>
-                , which is why multi-page workflows stay consistent across tools.
+                , which is why multi page workflows stay consistent across tools.
               </p>
               <BulletList
                 items={[
-                  "Upload your PDF. Multi-page documents are supported; you'll see a thumbnail of every page.",
+                  "Upload your PDF. Multi page documents are supported; you'll see a thumbnail of every page.",
                   <>
                     Set your watermark once. Whatever text, logo, or signature you choose
-                    applies consistently across every page — see our{" "}
+                    applies consistently across every page. See our{" "}
                     <BlogInlineLink href="/features?tab=file-support">
                       PDF support features
                     </BlogInlineLink>{" "}
                     for how this works in the editor.
                   </>,
                   "Preview each page before exporting, to confirm the watermark placement works across different page layouts.",
-                  "Export your watermarked PDF. The original document's text stays selectable and searchable — only the watermark itself is an image overlay, so you're not sacrificing document quality to protect it.",
+                  "Export your watermarked PDF. The original document's text stays selectable and searchable. Only the watermark itself is an image overlay, so you're not sacrificing document quality to protect it.",
                 ]}
               />
               <p>
@@ -257,7 +257,7 @@ export function BlogPostArticle({ post }: BlogPostArticleProps) {
               <BulletList
                 items={[
                   "Upload your video. MP4, MOV, and WebM formats are supported.",
-                  "Design your watermark exactly as you would for a photo — text, logo, position, opacity, and tiling all work the same way, live over your video preview.",
+                  "Design your watermark exactly as you would for a photo: text, logo, position, opacity, and tiling all work the same way, live over your video preview.",
                   "Export. Short clips (under 60 seconds, up to 1080p) process instantly, right in your browser. Longer videos (up to 60 minutes) upload with resumable transfers and are processed on our servers. Nothing is stored afterward.",
                 ]}
               />
@@ -267,27 +267,27 @@ export function BlogPostArticle({ post }: BlogPostArticleProps) {
               <p>
                 On PDFs, use{" "}
                 <BlogInlineLink href="/features?tab=watermarking">Sign & Fill</BlogInlineLink>{" "}
-                to add signatures, initials, and typed fill-in fields:
+                to add signatures, initials, and typed fill in fields:
               </p>
               <BulletList
                 items={[
-                  "Create your signature — draw it with your mouse or finger, or type your name and render it in a handwriting-style font.",
-                  "Save it for reuse — keep your full signature and your initials separately, ready to use again in the same session.",
-                  "Add fill-in text on PDF pages with Add Text when a form needs dates, names, or other typed answers.",
+                  "Create your signature. Draw it with your mouse or finger, or type your name and render it in a handwriting style font.",
+                  "Save it for reuse. Keep your full signature and your initials separately, ready to use again in the same session.",
+                  "Add fill in text on PDF pages with Add Text when a form needs dates, names, or other typed answers.",
                   "Drag placements into place on any PDF page, and adjust size before exporting.",
                 ]}
               />
               <p>
                 This is useful for signing agreements, completing forms, approving proofs, or
-                marking documents as reviewed — without printing, signing, and scanning.
+                marking documents as reviewed, without printing, signing, and scanning.
               </p>
             </ArticleSection>
 
-            <ArticleSection title="Watermarking Software vs. Browser-Based Tools">
+            <ArticleSection title="Watermarking Software vs. Browser Based Tools">
               <p>
                 PutWatermark uses a simple{" "}
-                <BlogInlineLink href="/pricing">pay-as-you-go credit system</BlogInlineLink>{" "}
-                rather than a subscription — here&apos;s how browser-based watermarking
+                <BlogInlineLink href="/pricing">pay as you go credit system</BlogInlineLink>{" "}
+                rather than a subscription. Here&apos;s how browser based watermarking
                 compares to traditional desktop software:
               </p>
               <div className="landing-surface mt-6 overflow-x-auto rounded-2xl">
@@ -301,7 +301,7 @@ export function BlogPostArticle({ post }: BlogPostArticleProps) {
                         Traditional Desktop Software
                       </th>
                       <th className="px-5 py-4 text-xs font-semibold uppercase tracking-[0.14em] text-sand md:px-6">
-                        Browser-Based (PutWatermark)
+                        Browser Based (PutWatermark)
                       </th>
                     </tr>
                   </thead>
@@ -332,12 +332,12 @@ export function BlogPostArticle({ post }: BlogPostArticleProps) {
                 <li>
                   <BlogExternalLink href="https://www.copyright.gov/engage/photographers/">
                     What Photographers Should Know about Copyright
-                  </BlogExternalLink>{" "}
-                  — U.S. Copyright Office guidance for photographers and visual creators.
+                  </BlogExternalLink>
+                  , from the U.S. Copyright Office, for photographers and visual creators.
                 </li>
                 <li>
-                  <BlogExternalLink href="https://pdfa.org/">PDF Association</BlogExternalLink>{" "}
-                  — the industry group behind the open PDF standard and best practices for
+                  <BlogExternalLink href="https://pdfa.org/">PDF Association</BlogExternalLink>
+                  , the industry group behind the open PDF standard and best practices for
                   document workflows.
                 </li>
               </ul>
@@ -355,7 +355,7 @@ export function BlogPostArticle({ post }: BlogPostArticleProps) {
                         <>
                           No. PutWatermark uses{" "}
                           <BlogInlineLink href="/pricing">
-                            pay-as-you-go credits
+                            pay as you go credits
                           </BlogInlineLink>{" "}
                           rather than a monthly subscription.
                         </>

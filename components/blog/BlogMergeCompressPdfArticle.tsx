@@ -99,8 +99,8 @@ export function BlogMergeCompressPdfArticle({ post }: BlogMergeCompressPdfArticl
             <p>Merging comes up more often than people expect. A few common cases:</p>
             <BulletList
               items={[
-                "You've scanned a multi-page contract one page at a time, and now you have five separate PDFs that need to become one.",
-                "You're assembling a report, portfolio, or application packet from several source documents — a cover letter, a resume, and a few supporting files — and want to send it as a single attachment instead of five.",
+                "You've scanned a multi page contract one page at a time, and now you have five separate PDFs that need to become one.",
+                "You're assembling a report, portfolio, or application packet from several source documents (a cover letter, a resume, and a few supporting files) and want to send it as a single attachment instead of five.",
                 "You've collected signed pages from multiple people and need to combine them into one final signed document.",
               ]}
             />
@@ -113,15 +113,15 @@ export function BlogMergeCompressPdfArticle({ post }: BlogMergeCompressPdfArticl
           <ArticleSection title="Why You'd Need to Compress a PDF">
             <p>
               Compression solves a different problem: file size. This usually happens when
-              a PDF contains scanned pages or embedded photos — each scanned page can be
+              a PDF contains scanned pages or embedded photos. Each scanned page can be
               several megabytes on its own, and a 20-page scanned document can easily
               balloon past what most email providers allow as an attachment (commonly
               capped around 25MB). Upload forms for job applications, government portals,
               or client intake systems often have even tighter limits.
             </p>
             <p>
-              Compressing reduces the file size while keeping the document fully readable
-              — you&apos;re not deleting pages or content, just reducing how much space the
+              Compressing reduces the file size while keeping the document fully readable.
+              You&apos;re not deleting pages or content, just reducing how much space the
               file takes up.
             </p>
           </ArticleSection>
@@ -152,7 +152,7 @@ export function BlogMergeCompressPdfArticle({ post }: BlogMergeCompressPdfArticl
               ]}
             />
             <p className="landing-muted mt-6 text-sm leading-7 md:text-base">
-              Everything happens in your browser — there&apos;s nothing to install, and you
+              Everything happens in your browser. There&apos;s nothing to install, and you
               can upload, arrange, and preview for free. An account is only needed at the
               export step.
             </p>
@@ -180,7 +180,7 @@ export function BlogMergeCompressPdfArticle({ post }: BlogMergeCompressPdfArticl
               ]}
             />
             <p className="landing-muted mt-6 text-sm leading-7 md:text-base">
-              The result is the same content in a smaller package — ready to email,
+              The result is the same content in a smaller package, ready to email,
               upload, or attach without hitting a size wall.
             </p>
           </ArticleSection>
@@ -189,8 +189,8 @@ export function BlogMergeCompressPdfArticle({ post }: BlogMergeCompressPdfArticl
             <p>
               Yes, and it&apos;s a common combination. If you&apos;re merging several scanned
               pages into one document and the combined file ends up too large to email,
-              run it through Compress afterward. Merge first, then compress the result —
-              that way you get one clean file that&apos;s also small enough to send anywhere.
+              run it through Compress afterward. Merge first, then compress the result,
+              so you get one clean file that&apos;s also small enough to send anywhere.
             </p>
           </ArticleSection>
 
@@ -198,7 +198,7 @@ export function BlogMergeCompressPdfArticle({ post }: BlogMergeCompressPdfArticl
             <p>
               Uploading, arranging, and previewing both tools is free with no account
               required. You&apos;ll need a free account only at the point of exporting your
-              final file — the same model used across every tool on PutWatermark, whether
+              final file, the same model used across every tool on PutWatermark, whether
               you&apos;re watermarking a photo or{" "}
               <BlogInlineLink href={SIGN_PDF_BLOG_HREF}>signing a PDF</BlogInlineLink>.
             </p>
@@ -209,7 +209,7 @@ export function BlogMergeCompressPdfArticle({ post }: BlogMergeCompressPdfArticl
               Both tools run entirely in your browser using the same underlying document
               engine as the rest of PutWatermark&apos;s PDF tools (Sign & Fill,
               watermarking). There&apos;s nothing to download, nothing to install, and no
-              recurring subscription — just upload, merge or compress, and export.
+              recurring subscription. Just upload, merge or compress, and export.
             </p>
           </ArticleSection>
 

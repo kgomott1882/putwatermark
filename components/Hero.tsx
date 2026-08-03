@@ -8,7 +8,7 @@ import { pageContainerClass } from "./pageContainer";
 
 const features = [
   "Text & logo marks",
-  "Batch export (photos + multi-page PDF)",
+  "Batch export (photos + multi page PDF)",
   "Video editor (trim, blur, merge, captions)",
   "Sign & fill PDFs",
   "Merge & compress PDF",
@@ -66,7 +66,7 @@ export function Hero() {
               variants={itemVariants}
             >
               Upload, add your watermark, and download.{" "}
-              <LandingHighlight>No software, no subscription — free account to export.</LandingHighlight>
+              <LandingHighlight>No software, no subscription. Create a free account to export.</LandingHighlight>
             </motion.p>
 
             <motion.div

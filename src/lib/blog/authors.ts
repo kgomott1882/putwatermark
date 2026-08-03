@@ -9,8 +9,8 @@ export type BlogAuthor = {
 export const blogAuthors: BlogAuthor[] = [
   {
     avatarImage: "/Kim.png",
-    bio: "Jordan writes practical guides on watermarking, PDF signing, and protecting creative work in the browser — without desktop software or subscriptions.",
-    credentials: "Document workflows & browser-based editing",
+    bio: "Jordan writes practical guides on watermarking, PDF signing, and protecting creative work in the browser, without desktop software or subscriptions.",
+    credentials: "Document workflows & browser based editing",
     name: "Jordan Kim",
     slug: "jordan-kim",
   },

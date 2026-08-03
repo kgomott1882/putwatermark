@@ -47,7 +47,7 @@ export function VideoServerProcessingPanel({
       <p className="mt-3 text-sm leading-6 text-ed-fg-muted">
         If you&apos;d like to reduce this cost, compress your video before
         uploading using a tool like HandBrake (free) or your phone or
-        computer&apos;s built-in video export settings, then re-upload.
+        computer&apos;s built in video export settings, then re-upload.
       </p>
     </EditorCard>
   );

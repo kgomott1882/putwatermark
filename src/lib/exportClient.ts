@@ -34,16 +34,16 @@ export type ExportBillingResult = {
 };
 
 const AUTHORIZE_FAIL_SAFE_NOTICE =
-  "Couldn't verify credits — exported with watermark.";
+  "Couldn't verify credits. Exported with watermark.";
 
 export const PDF_UPLOAD_FAIL_SAFE_NOTICE =
-  "Couldn't upload PDF for credit check — exported with watermark.";
+  "Couldn't upload PDF for credit check. Exported with watermark.";
 
 export const FILL_EXPORT_CREDIT_CHECK_FAILED_MESSAGE =
-  "Could not verify credits for fill-text export. Please try again.";
+  "Could not verify credits for fill text export. Please try again.";
 
 const CONSUME_FAIL_NOTICE =
-  "Export completed, but credits couldn't be deducted — please contact support if this persists.";
+  "Export completed, but credits couldn't be deducted. Please contact support if this persists.";
 
 export function createExportId() {
   return crypto.randomUUID();
@@ -176,7 +176,7 @@ export async function resolveExportAuthorizationStrict({
 
   if (!isCleanExportTier(parsed.tier)) {
     throw new ExportCreditCheckError(
-      "Fill-text export requires sufficient credits. Add credits or remove fill-text fields, then try again.",
+      "Fill text export requires sufficient credits. Add credits or remove fill text fields, then try again.",
     );
   }
 

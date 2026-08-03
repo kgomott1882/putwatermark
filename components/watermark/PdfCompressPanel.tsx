@@ -23,7 +23,7 @@ type PdfCompressPanelProps = {
 
 function formatFileSize(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) {
-    return "—";
+    return "N/A";
   }
 
   if (bytes < 1024 * 1024) {
@@ -98,7 +98,7 @@ export function PdfCompressPanel({
                     </p>
                   ) : (
                     <p className="mt-1">
-                      This PDF was already optimized — no further reduction.
+                      This PDF was already optimized, with no further reduction.
                     </p>
                   )}
                 </div>

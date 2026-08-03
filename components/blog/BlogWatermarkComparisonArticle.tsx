@@ -65,15 +65,15 @@ const comparisonRows = [
   {
     feature: "Account needed to try it",
     putWatermark: "No",
-    watermarkWs: "Not confirmed — check their site",
-    visualWatermark: "Not confirmed — check their site",
+    watermarkWs: "Not confirmed. Check their site",
+    visualWatermark: "Not confirmed. Check their site",
     watermarkly: "No (free tier available)",
   },
   {
     feature: "Pricing model",
-    putWatermark: "Pay-as-you-go credits (don't expire for 60 days)",
+    putWatermark: "Pay as you go credits (don't expire for 60 days)",
     watermarkWs: "Subscription",
-    visualWatermark: "One-time or trial-based license",
+    visualWatermark: "One time or trial based license",
     watermarkly: "Free tier with paid upgrade; check current terms",
   },
   {
@@ -98,7 +98,7 @@ const comparisonRows = [
     watermarkly: "Yes",
   },
   {
-    feature: "Sign & fill (PDF)",
+    feature: "Sign & Fill (PDF)",
     putWatermark: "Yes",
     watermarkWs: "Not offered",
     visualWatermark: "Not offered",
@@ -107,8 +107,8 @@ const comparisonRows = [
   {
     feature: "Free tier watermark",
     putWatermark: "Tiled overlay, removable via credits",
-    watermarkWs: "Not confirmed — check current terms",
-    visualWatermark: "Not confirmed — check current terms",
+    watermarkWs: "Not confirmed. Check current terms",
+    visualWatermark: "Not confirmed. Check current terms",
     watermarkly: "Adds their own branding to free exports",
   },
 ] as const;
@@ -184,14 +184,14 @@ export function BlogWatermarkComparisonArticle({
             </div>
             <p className="landing-muted mt-6 text-sm leading-7 md:text-base">
               Comparison compiled from each provider&apos;s own site and publicly available
-              information at the time of writing. Pricing, plans, and features change —
-              confirm current details directly with each provider before deciding.
+              information at the time of writing. Pricing, plans, and features change.
+              Confirm current details directly with each provider before deciding.
             </p>
           </ArticleSection>
 
           <ArticleSection title="What Each Tool Is Actually Best At">
             <p>
-              <strong className="text-beige">Watermark.ws</strong> is a fully browser-based
+              <strong className="text-beige">Watermark.ws</strong> is a fully browser based
               tool covering photos, video, PDFs, and animated GIFs, with batch processing and
               saved templates. It&apos;s built around a subscription, so it suits people
               who&apos;ll use it regularly enough that a recurring plan makes sense.
@@ -200,24 +200,24 @@ export function BlogWatermarkComparisonArticle({
               <strong className="text-beige">Visual Watermark</strong> is genuinely different
               from the other three in one respect: it&apos;s desktop software you download
               and run locally, rather than a browser tool. For anyone who specifically wants
-              processing to happen entirely on their own machine — no browser dependency at
-              all — this is the most direct fit among the options here.
+              processing to happen entirely on their own machine, with no browser dependency at
+              all. This is the most direct fit among the options here.
             </p>
             <p>
               <strong className="text-beige">Watermarkly</strong> is the most flexible on
               platform, available as a web app, desktop app, and mobile app, which matters if
               you want the same tool across different devices. Its free tier works similarly
-              to a preview model — exports are watermarked with Watermarkly&apos;s own
+              to a preview model. Exports are watermarked with Watermarkly&apos;s own
               branding until you upgrade.
             </p>
             <p>
-              <strong className="text-beige">PutWatermark</strong> is browser-only by design
-              — no desktop app, no mobile app, nothing to install anywhere. Trying it
+              <strong className="text-beige">PutWatermark</strong> is browser only by design.
+              No desktop app, no mobile app, nothing to install anywhere. Trying it
               doesn&apos;t require an account at all; one is only needed once you&apos;re
               ready to move beyond the free tier&apos;s tiled watermark. Pricing is
-              credit-based rather than a subscription, and credits don&apos;t expire for 60
-              days once purchased.               It&apos;s also currently the only one of the four with built-in Sign & Fill for
-              PDFs — signatures, initials, and fill-in text fields — alongside the
+              credit based rather than a subscription, and credits don&apos;t expire for 60
+              days once purchased.               It&apos;s also currently the only one of the four with built in Sign & Fill for
+              PDFs (signatures, initials, and fill in text fields) alongside the
               watermarking features the others share.
             </p>
           </ArticleSection>
@@ -227,26 +227,26 @@ export function BlogWatermarkComparisonArticle({
               items={[
                 <>
                   You want zero installation, ever, on any device, and prefer not to commit to
-                  a subscription — PutWatermark&apos;s browser-only, pay-as-you-go model
+                  a subscription. PutWatermark&apos;s browser only, pay as you go model
                   fits this directly.
                 </>,
                 <>
                   You&apos;ll use a watermarking tool often enough that a subscription makes
-                  sense, and want an established browser-based option — Watermark.ws is a
+                  sense, and want an established browser based option. Watermark.ws is a
                   reasonable fit.
                 </>,
                 <>
                   You specifically want local, offline processing with no browser involved at
-                  all — Visual Watermark is the one built around that.
+                  all. Visual Watermark is the one built around that.
                 </>,
                 <>
                   You want the same tool across desktop, mobile, and browser
-                  interchangeably — Watermarkly&apos;s multi-platform approach covers that
+                  interchangeably. Watermarkly&apos;s multi platform approach covers that
                   need most directly.
                 </>,
                 <>
                   You need to sign or fill a PDF as well as watermark photos, without
-                  switching tools — this is currently unique to PutWatermark among the four.
+                  switching tools. This is currently unique to PutWatermark among the four.
                 </>,
               ]}
             />
@@ -268,7 +268,7 @@ export function BlogWatermarkComparisonArticle({
           </ArticleSection>
 
           <p className="mt-16 text-base leading-8 text-beige md:text-lg">
-            Want to try the browser-only, pay-as-you-go option?{" "}
+            Want to try the browser only, pay as you go option?{" "}
             <BlogInlineLink href="/watermark">Open the editor</BlogInlineLink>
           </p>
         </BlogArticleLayout>

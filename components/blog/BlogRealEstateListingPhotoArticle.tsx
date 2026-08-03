@@ -103,7 +103,7 @@ export function BlogRealEstateListingPhotoArticle({
               hired (often through the brokerage), shoots the property, and delivers the
               images. The agent uses them to market the listing. Everyone assumes
               that&apos;s the end of it. But unless the agreement with the photographer
-              explicitly transfers ownership, what actually happened is narrower — a
+              explicitly transfers ownership, what actually happened is narrower: a
               license, usually limited to marketing that specific listing while it&apos;s
               active.
             </p>
@@ -116,14 +116,14 @@ export function BlogRealEstateListingPhotoArticle({
               ]}
             />
             <p>
-              None of these are usually done with bad intent — they happen because most
+              None of these are usually done with bad intent. They happen because most
               people assume paying for a photo shoot means owning the results, the same way
               buying a print or a product would. Copyright doesn&apos;t work that way; a
-              license is a specific, often time-limited grant of permission, not a
+              license is a specific, often time limited grant of permission, not a
               transfer of ownership.
             </p>
             <p>
-              Copyright infringement carries real statutory penalties in the U.S. — under
+              Copyright infringement carries real statutory penalties in the U.S. Under
               federal law, damages can range from several hundred to well over $100,000 per
               infringed work, even without having to prove specific financial loss. With a
               typical listing containing dozens of photos, the numbers can add up fast if a
@@ -148,7 +148,7 @@ export function BlogRealEstateListingPhotoArticle({
             <p>
               So before watermarking anything destined for MLS submission, check your
               specific MLS&apos;s photo rules. Watermarking makes the most sense in the
-              situations below — not as something to slap onto every listing photo
+              situations below, not as something to slap onto every listing photo
               indiscriminately.
             </p>
           </ArticleSection>
@@ -160,14 +160,14 @@ export function BlogRealEstateListingPhotoArticle({
                   <strong className="text-beige">Photographers protecting their own portfolio.</strong>{" "}
                   Before photos are delivered or licensed to an agent, a photographer
                   showing sample work on their own website or in proofs sent to a client has
-                  every reason to watermark it — this is their own copyrighted work, and it
+                  every reason to watermark it. This is their own copyrighted work, and it
                   hasn&apos;t yet reached the stage where MLS restrictions would even apply.
                 </>,
                 <>
                   <strong className="text-beige">Marketing materials outside the MLS.</strong>{" "}
                   An agent&apos;s own website, social media posts, printed brochures, or
                   email campaigns aren&apos;t governed by MLS photo rules the way the MLS
-                  feed itself is — watermarking here (with the agent or brokerage&apos;s own
+                  feed itself is. Watermarking here (with the agent or brokerage&apos;s own
                   branding, on photos they&apos;re licensed to use this way) is usually fine,
                   but still worth confirming against the specific licensing terms agreed with
                   the photographer.
@@ -179,7 +179,7 @@ export function BlogRealEstateListingPhotoArticle({
                   If a property doesn&apos;t sell and the listing expires, a
                   photographer&apos;s watermark on their working copies makes it easy to
                   tell, at a glance, whether a photo reappearing on a new listing was
-                  properly re-licensed or just reused.
+                  properly re licensed or just reused.
                 </>,
               ]}
             />
@@ -190,7 +190,7 @@ export function BlogRealEstateListingPhotoArticle({
               items={[
                 <>
                   <strong className="text-beige">Upload the full set of photos at once.</strong>{" "}
-                  A single property shoot easily produces 20–40+ images — batch upload lets
+                  A single property shoot easily produces 20 to 40+ images. Batch upload lets
                   you apply one watermark setup across all of them instead of repeating the
                   process per photo.
                 </>,
@@ -224,11 +224,11 @@ export function BlogRealEstateListingPhotoArticle({
 
           <ArticleSection title="Signing Documents Alongside the Photos">
             <p>
-              Real estate work involves as much paperwork as photography — disclosures,
+              Real estate work involves as much paperwork as photography: disclosures,
               listing agreements, offers, and licensing agreements with photographers all
               typically need a signature. The same tool used to watermark listing photos also
-              supports Sign & Fill on PDFs — draw or type a signature, add initials, or place
-              fill-in text fields — which is useful for the document side of a transaction
+              supports Sign & Fill on PDFs. Draw or type a signature, add initials, or place
+              fill in text fields, which is useful for the document side of a transaction
               without needing separate software.
             </p>
           </ArticleSection>
@@ -244,7 +244,7 @@ export function BlogRealEstateListingPhotoArticle({
                     {item.question ===
                     "Can I batch watermark all the photos from a property shoot at once?" ? (
                       <>
-                        Yes — upload the full set and apply one watermark setup across all
+                        Yes. Upload the full set and apply one watermark setup across all
                         of them, then export as a ZIP. See the{" "}
                         <BlogInlineLink href={BATCH_WATERMARK_BLOG_HREF}>
                           batch watermarking guide

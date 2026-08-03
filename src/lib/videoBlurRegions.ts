@@ -70,7 +70,7 @@ export function getVideoBlurRegionTimingLabel(
 ) {
   const end = region.visibleUntilSeconds ?? durationSeconds;
 
-  return `${formatTimelineClock(region.visibleFromSeconds)} – ${formatTimelineClock(end)}`;
+  return `${formatTimelineClock(region.visibleFromSeconds)} to ${formatTimelineClock(end)}`;
 }
 
 export function updateVideoBlurRegionTiming(

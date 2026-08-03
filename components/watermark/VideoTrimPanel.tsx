@@ -85,7 +85,7 @@ export function VideoTrimPanel({
                 Range
               </p>
               <p className="truncate text-[10px] font-medium tabular-nums text-ed-fg md:mt-1 md:text-sm">
-                {formatTimelineClock(trimStartSeconds)}–{formatTimelineClock(trimEndSeconds)}
+                {formatTimelineClock(trimStartSeconds)} to {formatTimelineClock(trimEndSeconds)}
               </p>
               <p className="hidden text-[9px] text-ed-fg-muted md:mt-1 md:block md:text-[10px]">
                 Source {formatTimelineClock(durationSeconds)}

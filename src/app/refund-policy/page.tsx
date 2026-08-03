@@ -5,7 +5,7 @@ import { Footer } from "../../../components/Footer";
 export const metadata: Metadata = {
   title: "Refund Policy | PutWatermark",
   description:
-    "PutWatermark refund policy — unused credit refunds within 14 days, non-refundable spent credits, and credit charges only after successful exports.",
+    "PutWatermark refund policy: unused credit refunds within 14 days, non refundable spent credits, and credit charges only after successful exports.",
   alternates: {
     canonical: "/refund-policy",
   },

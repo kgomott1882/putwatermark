@@ -87,7 +87,7 @@ export function PricingPayPalCheckout({
     }
 
     setMessage(
-      "Payment processing — your credits will appear shortly. Refresh your account page if they have not updated within a minute.",
+      "Payment processing. Your credits will appear shortly. Refresh your account page if they have not updated within a minute.",
     );
   }
 

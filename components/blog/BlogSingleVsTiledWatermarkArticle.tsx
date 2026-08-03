@@ -80,7 +80,7 @@ export function BlogSingleVsTiledWatermarkArticle({
             <p>
               A single watermark reads as a signature, not an obstruction. Placed in a
               corner at moderate opacity, it identifies the image&apos;s owner without
-              getting in the way of the photo itself — this is the standard choice for
+              getting in the way of the photo itself. This is the standard choice for
               finished, delivered work: a portfolio piece, a marketing photo, a product
               listing image.
             </p>
@@ -98,8 +98,8 @@ export function BlogSingleVsTiledWatermarkArticle({
             <p>
               This is the part that matters most, and it&apos;s a real weakness worth being
               honest about: a single watermark, however carefully placed, occupies one
-              region of the photo. Anyone willing to crop the image — trivial with any
-              basic photo editor — can often remove it entirely, especially if it sits in a
+              region of the photo. Anyone willing to crop the image can often remove it
+              entirely with any basic photo editor, especially if it sits in a
               corner rather than overlapping the main subject.
             </p>
             <p>
@@ -126,21 +126,21 @@ export function BlogSingleVsTiledWatermarkArticle({
             <BulletList
               items={[
                 <>
-                  <strong className="text-beige">Finished, delivered work</strong> — a
+                  <strong className="text-beige">Finished, delivered work:</strong> a
                   final photo you&apos;re sharing publicly or handing over as the end
                   product, where looking professional matters more than maximizing theft
                   resistance.
                 </>,
                 <>
-                  <strong className="text-beige">Branding-forward use cases</strong> —
+                  <strong className="text-beige">Branding forward use cases:</strong>{" "}
                   product photography, portfolio pieces, marketing materials, where the
                   watermark is meant to build recognition, not lock the image down.
                 </>,
                 <>
                   <strong className="text-beige">
                     Situations where the recipient is already trusted
-                  </strong>{" "}
-                  — a client who&apos;s paid for the work, or an internal use case where
+                  </strong>
+                  : a client who&apos;s paid for the work, or an internal use case where
                   unauthorized redistribution isn&apos;t a serious concern.
                 </>,
               ]}
@@ -153,23 +153,23 @@ export function BlogSingleVsTiledWatermarkArticle({
                 <>
                   <strong className="text-beige">
                     Proofs and previews shared before payment or final agreement
-                  </strong>{" "}
-                  — client photo proofs, draft work, or anything shared before a
+                  </strong>
+                  : client photo proofs, draft work, or anything shared before a
                   transaction is complete, where the risk of someone taking the
                   &ldquo;free&rdquo; version and never paying is real.
                 </>,
                 <>
                   <strong className="text-beige">
-                    High-value or high-theft-risk content
-                  </strong>{" "}
-                  — images that are especially likely to be screenshotted, reposted, or
+                    High value or high theft risk content
+                  </strong>
+                  : images that are especially likely to be screenshotted, reposted, or
                   reused without credit.
                 </>,
                 <>
                   <strong className="text-beige">
                     Anywhere you&apos;re prioritizing protection over how the image looks
-                  </strong>{" "}
-                  — the whole point of a tiled mark is that it&apos;s supposed to be
+                  </strong>
+                  : the whole point of a tiled mark is that it&apos;s supposed to be
                   somewhat intrusive; if it isn&apos;t noticeable enough to discourage
                   reuse, it isn&apos;t doing its job.
                 </>,
@@ -179,10 +179,10 @@ export function BlogSingleVsTiledWatermarkArticle({
 
           <ArticleSection title="A Common Middle Ground: Two Versions of the Same Image">
             <p>
-              A pattern many photographers and creators use: a tiled, heavily-marked
+              A pattern many photographers and creators use: a tiled, heavily marked
               version for previews, proofs, or anything shared before payment, and a clean,
-              single-watermark (or unwatermarked) version delivered only once the work is
-              actually paid for or finalized. This gets the benefit of both — a genuinely
+              single watermark (or unwatermarked) version delivered only once the work is
+              actually paid for or finalized. This gets the benefit of both: a genuinely
               protected preview, and a polished final product that doesn&apos;t carry a
               distracting mark.
             </p>
@@ -197,19 +197,19 @@ export function BlogSingleVsTiledWatermarkArticle({
             <BulletList
               items={[
                 <>
-                  <strong className="text-beige">Density</strong> — how many repetitions
+                  <strong className="text-beige">Density:</strong> how many repetitions
                   appear across the image. Sparse spacing is less visually loud while still
                   covering enough of the frame to resist cropping; dense spacing maximizes
                   protection at the cost of a busier look.
                 </>,
                 <>
-                  <strong className="text-beige">Angle</strong> — a diagonal pattern
+                  <strong className="text-beige">Angle:</strong> a diagonal pattern
                   (commonly 45°) tends to interact less predictably with a photo&apos;s
                   natural lines than a straight horizontal or vertical repeat, making it
                   marginally harder to visually &ldquo;tune out&rdquo; or edit around.
                 </>,
                 <>
-                  <strong className="text-beige">Opacity</strong> — lower opacity keeps
+                  <strong className="text-beige">Opacity:</strong> lower opacity keeps
                   the underlying photo more visible for someone genuinely evaluating it,
                   while still leaving enough of a mark that a screenshot or crop carries
                   the pattern along with it.

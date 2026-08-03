@@ -24,28 +24,28 @@ const features: Feature[] = [
   {
     title: "A real video editor, not just a stamp",
     description:
-      "Trim clips, blur sensitive footage with a mosaic brush, merge multiple videos into one, add captions, and control exactly when your watermark appears — all in your browser. Long videos up to 60 minutes are supported too.",
+      "Trim clips, blur sensitive footage with a mosaic brush, merge multiple videos into one, add captions, and control exactly when your watermark appears, all in your browser. Long videos up to 60 minutes are supported too.",
     href: "/watermark",
     image: "/Video%20Editor.png",
   },
   {
     title: "Sign & fill documents",
     description:
-      "Draw or type a signature, add fill-in text on PDFs, and save placements for reuse — perfect for signing contracts and filling in forms.",
+      "Draw or type a signature, add fill in text on PDFs, and save placements for reuse. Perfect for signing contracts and filling in forms.",
     href: "/watermark",
     image: "/Tablet_signing.jpeg",
   },
   {
     title: "Batch export & PDF",
     description:
-      "Upload a folder of photos or a multi-page PDF. Apply the same watermark to every image in one pass, preview every page, and export in your browser.",
+      "Upload a folder of photos or a multi page PDF. Apply the same watermark to every image in one pass, preview every page, and export in your browser.",
     href: "/watermark",
     image: "/Batch%20Pics.jpeg",
   },
   {
     title: "Merge & compress PDFs",
     description:
-      "Combine multiple PDFs into one file or shrink oversized documents down to size — no separate app needed.",
+      "Combine multiple PDFs into one file or shrink oversized documents down to size. No separate app needed.",
     href: "/watermark",
     image: "/PDF%20Merge.png",
   },
@@ -124,28 +124,28 @@ function FeatureCard({
           ) : feature.title === "Batch export & PDF" ? (
             <>
               Upload a folder of photos or a{" "}
-              <LandingHighlight>multi-page PDF</LandingHighlight>. Apply the same
+              <LandingHighlight>multi page PDF</LandingHighlight>. Apply the same
               watermark to every image in one pass, preview every page, and export in
               your browser.
             </>
           ) : feature.title === "Sign & fill documents" ? (
             <>
-              Draw or type a signature, add fill-in text on PDFs, and save
-              placements for reuse — perfect for signing contracts and filling in
+              Draw or type a signature, add fill in text on PDFs, and save
+              placements for reuse. Perfect for signing contracts and filling in
               forms.
             </>
           ) : feature.title === "A real video editor, not just a stamp" ? (
             <>
               Trim clips, blur sensitive footage, merge multiple videos, add
               captions, and control when your{" "}
-              <LandingHighlight>watermark appears</LandingHighlight> — all in your
+              <LandingHighlight>watermark appears</LandingHighlight>, all in your
               browser. Long videos up to 60 minutes are supported too.
             </>
           ) : feature.title === "Merge & compress PDFs" ? (
             <>
               Combine multiple PDFs into one file or{" "}
               <LandingHighlight>shrink oversized documents</LandingHighlight> down
-              to size — no separate app needed.
+              to size. No separate app needed.
             </>
           ) : feature.title === "More than a watermark" ? (
             <>

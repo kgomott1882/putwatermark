@@ -111,11 +111,11 @@ const creditUsageGuide = [
   },
   {
     label: "1 PDF page",
-    value: "50 credits (e.g. a 20-page document = 1,000 credits)",
+    value: "50 credits (e.g. a 20 page document = 1,000 credits)",
   },
   {
-    label: "Video up to 60 seconds (in-browser)",
-    value: "Included — no credits used",
+    label: "Video up to 60 seconds (in browser)",
+    value: "Included, no credits used",
   },
   {
     label: "Longer videos (server processing)",
@@ -259,7 +259,7 @@ export function PricingSelector({ isLoggedIn, paypalClientId }: PricingSelectorP
               and keep watermarking in the browser.
             </>
           }
-          title="Simple pay-as-you-go pricing"
+          title="Simple pay as you go pricing"
         />
 
         <LandingSubSeparator className="mt-10" />
@@ -304,7 +304,7 @@ export function PricingSelector({ isLoggedIn, paypalClientId }: PricingSelectorP
                     {formatPrice(tier.price)}
                   </p>
                   <p className="mt-0.5 text-[13px] text-beige-dim">
-                    one-time · {formatCredits(tier.credits)} credits
+                    one time · {formatCredits(tier.credits)} credits
                   </p>
                 </div>
 
@@ -365,7 +365,7 @@ export function PricingSelector({ isLoggedIn, paypalClientId }: PricingSelectorP
                   Custom pack
                 </p>
                 <p className="mt-2 max-w-xl text-sm leading-7 text-beige-dim">
-                  High-volume option above Premium —{" "}
+                  High volume option above Premium:{" "}
                   {formatPrice(PRICE_PER_THOUSAND_CREDITS)} per 1,000 credits, from{" "}
                   {formatCredits(STANDALONE_CREDITS_MIN)} to{" "}
                   {formatCredits(STANDALONE_CREDITS_MAX)} credits.
@@ -493,7 +493,7 @@ export function PricingSelector({ isLoggedIn, paypalClientId }: PricingSelectorP
           <div className="bg-night-card px-6 py-5 sm:px-8">
             <p className="text-sm font-semibold text-beige">One workflow, every format</p>
             <p className="landing-muted mt-2 text-sm leading-7">
-              JPG, PNG, WebP, PDF, MP4, MOV, and WEBM — same editor, same watermark
+              JPG, PNG, WebP, PDF, MP4, MOV, and WEBM. Same editor, same watermark
               settings, credits when you export at scale.
             </p>
           </div>

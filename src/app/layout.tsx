@@ -16,13 +16,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PutWatermark — Watermark photos, PDFs & video in your browser",
+  title: "PutWatermark: Watermark photos, PDFs & video in your browser",
   description:
-    "Watermark photos, PDFs, and videos in your browser. Batch export, sign & fill PDFs, trim and blur video, merge and compress PDFs — no subscription, pay as you go.",
+    "Watermark photos, PDFs, and videos in your browser. Batch export, sign & fill PDFs, trim and blur video, merge and compress PDFs. No subscription, pay as you go.",
   openGraph: {
-    title: "PutWatermark — Watermark photos, PDFs & video in your browser",
+    title: "PutWatermark: Watermark photos, PDFs & video in your browser",
     description:
-      "Watermark photos, PDFs, and videos in your browser. Batch export, sign & fill PDFs, trim and blur video, merge and compress PDFs — no subscription, pay as you go.",
+      "Watermark photos, PDFs, and videos in your browser. Batch export, sign & fill PDFs, trim and blur video, merge and compress PDFs. No subscription, pay as you go.",
   },
 };
 

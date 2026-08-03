@@ -107,7 +107,7 @@ export function BlogWatermarkVisibilityTimingArticle({
                   <strong className="text-beige">
                     Branding an intro without covering the whole video.
                   </strong>{" "}
-                  Show your logo or name during the first 10–15 seconds as a branded
+                  Show your logo or name during the first 10 to 15 seconds as a branded
                   opener, then let the rest of the video play clean.
                 </>,
                 <>
@@ -138,7 +138,7 @@ export function BlogWatermarkVisibilityTimingArticle({
           <ArticleSection title="How It Works">
             <p>
               Instead of a single on/off toggle, the watermark timing tool gives you a
-              visual timeline underneath your video — with filmstrip thumbnails showing
+              visual timeline underneath your video, with filmstrip thumbnails showing
               the actual content at each point, so you can see exactly what&apos;s
               happening in the video while you set your range.
             </p>
@@ -187,9 +187,9 @@ export function BlogWatermarkVisibilityTimingArticle({
           <ArticleSection title="Does This Work on Longer Videos?">
             <p>
               Watermark timing is currently supported for videos processed directly in
-              your browser (client-side, generally under a minute at 1080p or lower).
-              Longer, server-processed videos don&apos;t support timed watermarks yet.
-              For broader video editing options — trim, blur, merge, and captions — see
+              your browser (client side, generally under a minute at 1080p or lower).
+              Longer, server processed videos don&apos;t support timed watermarks yet.
+              For broader video editing options like trim, blur, merge, and captions, see
               our{" "}
               <BlogInlineLink href={VIDEO_EDITING_BLOG_HREF}>
                 video editing overview
@@ -204,12 +204,12 @@ export function BlogWatermarkVisibilityTimingArticle({
 
           <ArticleSection title="Why Most Watermarking Tools Don't Offer This">
             <p>
-              Static, always-on watermarks are simpler to build, which is why most tools
-              stop there. A timeline-based visibility control means tracking exactly when
-              a watermark should render frame-by-frame, rather than just overlaying it
+              Static, always on watermarks are simpler to build, which is why most tools
+              stop there. A timeline based visibility control means tracking exactly when
+              a watermark should render frame by frame, rather than just overlaying it
               uniformly across the whole export. It&apos;s a small feature to describe,
               but it&apos;s the kind of detail that usually only shows up in dedicated
-              video editing software — not in a typical browser-based watermarking tool.
+              video editing software, not in a typical browser based watermarking tool.
             </p>
           </ArticleSection>
 
@@ -231,7 +231,7 @@ export function BlogWatermarkVisibilityTimingArticle({
           <p className="mt-16 text-base leading-8 text-beige md:text-lg">
             If you&apos;re watermarking a video and want more control than &ldquo;on the
             whole time&rdquo; or &ldquo;not at all,&rdquo; this is built into the same
-            editor you&apos;re already using — no separate tool, no extra steps beyond
+            editor you&apos;re already using. No separate tool, no extra steps beyond
             dragging a couple of handles on a timeline.{" "}
             <BlogInlineLink href="/watermark">Try it in the video editor</BlogInlineLink>
             .

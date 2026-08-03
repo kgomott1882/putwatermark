@@ -356,7 +356,7 @@ export function VideoVisibilityTimeline({
               <p className="hidden truncate text-[11px] text-white/60 md:block">
                 {focusOnTrimSelection
                   ? `Applied shorten · ${formatTimelineClock(timelineDurationSeconds)} total`
-                  : `${formatTimelineClock(trimStartSeconds ?? 0)} – ${formatTimelineClock(trimEndSeconds ?? durationSeconds)} of ${formatTimelineClock(durationSeconds)}`}
+                  : `${formatTimelineClock(trimStartSeconds ?? 0)} to ${formatTimelineClock(trimEndSeconds ?? durationSeconds)} of ${formatTimelineClock(durationSeconds)}`}
               </p>
             ) : null}
           </div>

@@ -112,7 +112,7 @@ export function BlogBatchWatermarkArticle({ post }: BlogBatchWatermarkArticlePro
 
           <p className="landing-muted mt-6 max-w-3xl text-base leading-8 md:text-[1.05rem]">
             This guide covers when batch watermarking actually saves time, how to do it,
-            and what it doesn&apos;t do — since a batch export isn&apos;t the same as
+            and what it doesn&apos;t do, since a batch export isn&apos;t the same as
             individually customizing every photo.
           </p>
 
@@ -124,23 +124,23 @@ export function BlogBatchWatermarkArticle({ post }: BlogBatchWatermarkArticlePro
             <BulletList
               items={[
                 <>
-                  <strong className="text-beige">Photographers delivering a shoot</strong>{" "}
-                  — a wedding, event, or portrait session can easily produce 50–300+ final
+                  <strong className="text-beige">Photographers delivering a shoot:</strong>{" "}
+                  a wedding, event, or portrait session can easily produce 50 to 300+ final
                   images. Watermarking each one individually before sending proofs to a
                   client would take longer than the shoot itself.
                 </>,
                 <>
-                  <strong className="text-beige">E-commerce sellers</strong> listing dozens
+                  <strong className="text-beige">E commerce sellers</strong> listing dozens
                   of product photos need consistent branding across every image, without
                   manually repeating the same steps for each one.
                 </>,
                 <>
                   <strong className="text-beige">Real estate agents and property managers</strong>{" "}
-                  photographing a listing often have 20–40 photos per property that all need
+                  photographing a listing often have 20 to 40 photos per property that all need
                   the same agency watermark before going on a listing site.
                 </>,
                 <>
-                  <strong className="text-beige">Anyone building a portfolio</strong> — a set
+                  <strong className="text-beige">Anyone building a portfolio:</strong> a set
                   of images uploaded to a gallery or personal site benefits from one consistent
                   watermark style across the whole set, not a patchwork of slightly different
                   placements.
@@ -159,7 +159,7 @@ export function BlogBatchWatermarkArticle({ post }: BlogBatchWatermarkArticlePro
               items={[
                 {
                   title: "Upload multiple photos at once.",
-                  body: "Select or drag several images into the tool together — the interface switches into batch mode automatically once more than one photo is present.",
+                  body: "Select or drag several images into the tool together. The interface switches into batch mode automatically once more than one photo is present.",
                 },
                 {
                   title: "Review the batch.",
@@ -167,7 +167,7 @@ export function BlogBatchWatermarkArticle({ post }: BlogBatchWatermarkArticlePro
                 },
                 {
                   title: "Set up your watermark once.",
-                  body: "Choose text or a logo, position it, adjust opacity and size, and set up tiling if you want stronger protection — exactly as you would for a single photo. Whatever you configure applies to every image in the batch.",
+                  body: "Choose text or a logo, position it, adjust opacity and size, and set up tiling if you want stronger protection, exactly as you would for a single photo. Whatever you configure applies to every image in the batch.",
                 },
                 {
                   title: "Check a few different photos in the set.",
@@ -187,9 +187,9 @@ export function BlogBatchWatermarkArticle({ post }: BlogBatchWatermarkArticlePro
             </p>
             <BulletList
               items={[
-                "All photos in a batch share the same watermark settings. You can't set a different position, opacity, or text for individual photos within the same batch — it's one configuration applied consistently across the whole set. If you need meaningfully different watermarks on different photos, that requires separate batches or separate exports.",
-                "Batch watermarking currently covers photos, not video or PDF. Videos and PDFs are watermarked individually — each on its own, not as part of a multi-file batch.",
-                "It's not a per-image editing tool. Cropping, resizing, or rotating a specific photo differently from the rest of its batch isn't part of the batch flow — those edits are made one photo at a time, before or outside of batch export.",
+                "All photos in a batch share the same watermark settings. You can't set a different position, opacity, or text for individual photos within the same batch. It's one configuration applied consistently across the whole set. If you need meaningfully different watermarks on different photos, that requires separate batches or separate exports.",
+                "Batch watermarking currently covers photos, not video or PDF. Videos and PDFs are watermarked individually, each on its own, not as part of a multi file batch.",
+                "It's not a per image editing tool. Cropping, resizing, or rotating a specific photo differently from the rest of its batch isn't part of the batch flow. Those edits are made one photo at a time, before or outside of batch export.",
               ]}
             />
           </ArticleSection>
@@ -198,16 +198,16 @@ export function BlogBatchWatermarkArticle({ post }: BlogBatchWatermarkArticlePro
             <p>
               A common issue with cheaper or simpler watermarking tools: a watermark
               positioned by fixed pixel coordinates looks right on the photo it was designed
-              against, then looks wrong — too close to an edge, oddly placed, or cropped off
-              entirely — on a different photo with a different aspect ratio.
+              against, then looks wrong (too close to an edge, oddly placed, or cropped off
+              entirely) on a different photo with a different aspect ratio.
             </p>
             <p>
               Positioning based on relative percentage placement (rather than a fixed pixel
-              location) avoids this. A watermark set to &ldquo;bottom-right&rdquo; stays
-              sensibly in the bottom-right corner whether the photo is a wide landscape shot
+              location) avoids this. A watermark set to &ldquo;bottom right&rdquo; stays
+              sensibly in the bottom right corner whether the photo is a wide landscape shot
               or a tall portrait crop, because the position scales with the image rather than
               being locked to an absolute coordinate. This is worth checking for in any batch
-              tool — inconsistent placement across a set of otherwise-uniform photos looks
+              tool. Inconsistent placement across a set of otherwise uniform photos looks
               unpolished, and defeats some of the point of batching them together in the first
               place.
             </p>
@@ -226,8 +226,8 @@ export function BlogBatchWatermarkArticle({ post }: BlogBatchWatermarkArticlePro
               going forward, it&apos;s worth also checking whether older, unwatermarked photos
               are already circulating without permission. Reverse image search tools like{" "}
               <BlogExternalLink href={TINEYE_URL}>TinEye</BlogExternalLink> are built
-              specifically to find exact and edited copies of an image across the web —
-              including versions with watermarks removed or cropped out — which makes them a
+              specifically to find exact and edited copies of an image across the web,
+              including versions with watermarks removed or cropped out, which makes them a
               useful complementary step alongside watermarking new work.
             </p>
           </ArticleSection>
@@ -243,7 +243,7 @@ export function BlogBatchWatermarkArticle({ post }: BlogBatchWatermarkArticlePro
                     {item.question ===
                     "Does batch watermarking cost more than watermarking one photo?" ? (
                       <>
-                        No — the cost is calculated per photo the same way whether
+                        No. The cost is calculated per photo the same way whether
                         it&apos;s exported alone or as part of a batch. See{" "}
                         <BlogInlineLink href="/pricing">pricing</BlogInlineLink> for the
                         current credit rates.

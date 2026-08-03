@@ -5,7 +5,7 @@ import { Footer } from "../../../components/Footer";
 export const metadata: Metadata = {
   title: "Privacy Policy | PutWatermark",
   description:
-    "How PutWatermark collects, uses, and protects your information — including browser-only processing, account data, and temporary server-side video handling.",
+    "How PutWatermark collects, uses, and protects your information, including browser only processing, account data, and temporary server side video handling.",
   alternates: {
     canonical: "/privacy",
   },
