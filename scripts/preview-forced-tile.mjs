@@ -1,107 +1,78 @@
-import { createCanvas, loadImage } from "@napi-rs/canvas";
-import { writeFileSync } from "node:fs";
+/**
+ * Preview forced export watermark stack:
+ * - Text-only tile: Montserrat, sparse (UI 0%), 20% opacity, scale 20, 45°, gap 130
+ * - Center stamp: icon-only wave/swoosh at 44% opacity, scale 200 (no site text)
+ *
+ * Run: node scripts/preview-forced-tile.mjs
+ */
+import { createCanvas, GlobalFonts, loadImage } from "@napi-rs/canvas";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const FORCED_TILE_SITE_TEXT = "putwatermark.com";
-const FORCED_TILE_TEXT_COLOR = "#5c5c5c";
-const FORCED_TILE_TEXT_STROKE = "rgba(255, 255, 255, 0.45)";
-const FORCED_TILE_ICON_LIGHT_HALO = "rgba(255, 255, 255, 0.85)";
-const FORCED_TILE_ICON_DARK_EDGE = "rgba(0, 0, 0, 0.35)";
+const previewsDir = join(root, "public", "previews");
 
-const TILE_SETTINGS = {
+const FORCED_TILE_SITE_TEXT = "PutWatermark.com";
+const FORCED_TILE_FONT_FAMILY = "Montserrat";
+const FORCED_TILE_TEXT_COLOR = "#ffffff";
+const FORCED_TILE_TEXT_STROKE = "rgba(0, 0, 0, 0.5)";
+
+/** Mirrors src/lib/forcedTileExport.ts FORCED_TILE_PATTERN_SETTINGS */
+const TILE_PATTERN_SETTINGS = {
   angle: 45,
   densityRepetitionsAcross: 4.5,
-  fontSizeScale: 100,
+  fontFamily: FORCED_TILE_FONT_FAMILY,
+  fontSizeScale: 20,
   gap: 130,
+  opacity: 0.2,
+};
+
+/** Existing center stamp — unchanged */
+const CENTER_STAMP_SETTINGS = {
+  fontSizeScale: 200,
   opacity: 0.44,
 };
 
-function drawForcedTileIconWithOutline(context, logoImage, x, y, width, height) {
-  const strokeWidth = Math.max(1, Math.round(width * 0.04));
-
-  context.save();
-  context.shadowColor = FORCED_TILE_ICON_LIGHT_HALO;
-  context.shadowBlur = strokeWidth * 1.5;
-  context.drawImage(logoImage, x, y, width, height);
-  context.restore();
-
-  context.save();
-  context.shadowColor = FORCED_TILE_ICON_DARK_EDGE;
-  context.shadowBlur = strokeWidth;
-  context.drawImage(logoImage, x, y, width, height);
-  context.restore();
-
-  context.drawImage(logoImage, x, y, width, height);
+function getTextTileFontSize(watermarkReferenceWidth, fontSizeScale) {
+  return Math.max(
+    8,
+    Math.min(watermarkReferenceWidth / 12, 72) * (fontSizeScale / 100),
+  );
 }
 
-function drawForcedTileSiteText(context, x, y, fontSize) {
-  context.font = `600 ${fontSize}px sans-serif`;
-  context.textAlign = "center";
-  context.textBaseline = "top";
-  context.lineJoin = "round";
-  context.lineWidth = Math.max(1.5, fontSize / 10);
-  context.strokeStyle = FORCED_TILE_TEXT_STROKE;
-  context.fillStyle = FORCED_TILE_TEXT_COLOR;
-  context.strokeText(FORCED_TILE_SITE_TEXT, x, y);
-  context.fillText(FORCED_TILE_SITE_TEXT, x, y);
-}
-
-async function createCompositeUnit(logoImage) {
-  const iconBaseWidth = Math.round(56 * (TILE_SETTINGS.fontSizeScale / 25));
-  const iconAspect =
-    logoImage.width > 0 ? logoImage.height / logoImage.width : 1;
-  const iconHeight = iconBaseWidth * iconAspect;
-  const fontSize = Math.max(7, Math.round(iconBaseWidth * 0.2));
-  const textGap = Math.max(3, Math.round(iconBaseWidth * 0.1));
-  const padding = 4;
-
-  const measureCanvas = createCanvas(1, 1);
-  const measureContext = measureCanvas.getContext("2d");
-  measureContext.font = `600 ${fontSize}px sans-serif`;
-  const textMetrics = measureContext.measureText(FORCED_TILE_SITE_TEXT);
-  const textWidth = textMetrics.width;
-  const textHeight = fontSize * 1.15;
-  const unitWidth = Math.ceil(Math.max(iconBaseWidth, textWidth) + padding * 2);
-  const unitHeight = Math.ceil(
-    iconHeight + textGap + textHeight + padding * 1.5,
-  );
-
-  const canvas = createCanvas(unitWidth * 2, unitHeight * 2);
-  const context = canvas.getContext("2d");
-  context.scale(2, 2);
-  context.imageSmoothingEnabled = true;
-
-  const iconX = (unitWidth - iconBaseWidth) / 2;
-  const iconY = padding / 2;
+function measureTextTileDrawable(context, fontSize, text) {
   context.save();
-  context.translate(iconX + iconBaseWidth / 2, iconY + iconHeight / 2);
-  context.rotate((TILE_SETTINGS.angle * Math.PI) / 180);
-  drawForcedTileIconWithOutline(
-    context,
-    logoImage,
-    -iconBaseWidth / 2,
-    -iconHeight / 2,
-    iconBaseWidth,
-    iconHeight,
-  );
+  context.font = `400 ${fontSize}px ${FORCED_TILE_FONT_FAMILY}, sans-serif`;
+  const metrics = context.measureText(text);
   context.restore();
-  drawForcedTileSiteText(
-    context,
-    unitWidth / 2,
-    iconY + iconHeight + textGap,
-    fontSize,
-  );
 
   return {
-    canvas,
-    height: unitHeight,
-    width: unitWidth,
+    fontSize,
+    height:
+      metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent ||
+      fontSize,
+    text,
+    width: metrics.width,
   };
 }
 
-function drawTiledWatermark({
+function drawTextTileUnit(context, drawable, x, y, alpha) {
+  context.save();
+  context.globalAlpha = alpha;
+  context.font = `400 ${drawable.fontSize}px ${FORCED_TILE_FONT_FAMILY}, sans-serif`;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.lineJoin = "round";
+  context.lineWidth = Math.max(1.5, drawable.fontSize / 10);
+  context.strokeStyle = FORCED_TILE_TEXT_STROKE;
+  context.fillStyle = FORCED_TILE_TEXT_COLOR;
+  context.strokeText(drawable.text, x, y);
+  context.fillText(drawable.text, x, y);
+  context.restore();
+}
+
+function drawTiledTextWatermark({
   alpha,
   angle,
   context,
@@ -109,8 +80,10 @@ function drawTiledWatermark({
   gap,
   imageHeight,
   imageWidth,
+  watermarkReferenceWidth,
 }) {
-  const densitySpacing = imageWidth / TILE_SETTINGS.densityRepetitionsAcross;
+  const densitySpacing =
+    watermarkReferenceWidth / TILE_PATTERN_SETTINGS.densityRepetitionsAcross;
   const diagonal = Math.hypot(imageWidth, imageHeight);
 
   context.save();
@@ -127,19 +100,47 @@ function drawTiledWatermark({
 
   for (let y = -patternExtent; y <= patternExtent; y += ySpacing) {
     for (let x = -patternExtent; x <= patternExtent; x += xSpacing) {
-      context.save();
-      context.globalAlpha = alpha;
-      context.drawImage(
-        drawable.canvas,
-        x - drawable.width / 2,
-        y - drawable.height / 2,
-        drawable.width,
-        drawable.height,
-      );
-      context.restore();
+      drawTextTileUnit(context, drawable, x, y, alpha);
     }
   }
 
+  context.restore();
+}
+
+function getCenterStampDrawableWidth(contentWidth) {
+  return Math.min(
+    contentWidth * 0.6,
+    Math.max(
+      24,
+      contentWidth *
+        0.18 *
+        (CENTER_STAMP_SETTINGS.fontSizeScale / 100),
+    ),
+  );
+}
+
+function paintCenterStamp(context, stampImage, contentWidth, contentHeight) {
+  if (stampImage.width <= 0 || stampImage.height <= 0) {
+    return;
+  }
+
+  const drawableWidth = getCenterStampDrawableWidth(contentWidth);
+  const drawableHeight =
+    drawableWidth * (stampImage.height / stampImage.width);
+  const centerX = contentWidth / 2;
+  const centerY = contentHeight / 2;
+
+  context.save();
+  context.globalAlpha = CENTER_STAMP_SETTINGS.opacity;
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(
+    stampImage,
+    centerX - drawableWidth / 2,
+    centerY - drawableHeight / 2,
+    drawableWidth,
+    drawableHeight,
+  );
   context.restore();
 }
 
@@ -156,7 +157,7 @@ function createLightDocumentBackground(width = 1200, height = 1600) {
 
   context.fillStyle = "#4b5563";
   context.font = "24px serif";
-  context.fillText("Prepared for review — page 1 of 3", 96, 170);
+  context.fillText("Prepared for review, page 1 of 3", 96, 170);
 
   context.strokeStyle = "rgba(17, 24, 39, 0.08)";
   context.lineWidth = 2;
@@ -168,7 +169,7 @@ function createLightDocumentBackground(width = 1200, height = 1600) {
   context.fillStyle = "#374151";
   context.font = "22px serif";
   const paragraph =
-    "This document demonstrates how the forced export tile reads on bright paper backgrounds. Body text remains selectable in real PDF exports; only the watermark overlay is added at export time.";
+    "This preview shows how the forced export tile reads on bright paper backgrounds. Body text remains readable; only the watermark overlay is added at export time.";
 
   let y = 260;
   const maxWidth = width - 192;
@@ -202,64 +203,83 @@ function createLightDocumentBackground(width = 1200, height = 1600) {
   return canvas;
 }
 
-async function renderPreview({ background, outputPath }) {
-  const logo = await loadImage(
-    join(root, "public", "Put Watermark - Icon.png"),
-  );
-  const composite = await createCompositeUnit(logo);
+async function renderPreview({ background, outputPath, stampImage }) {
+  const imageWidth = background.width ?? background.canvas?.width;
+  const imageHeight = background.height ?? background.canvas?.height;
 
-  const drawableWidth = Math.max(
-    24,
-    background.width * 0.18 * (TILE_SETTINGS.fontSizeScale / 100),
+  const measureCanvas = createCanvas(1, 1);
+  const measureContext = measureCanvas.getContext("2d");
+  const fontSize = getTextTileFontSize(
+    imageWidth,
+    TILE_PATTERN_SETTINGS.fontSizeScale,
   );
-  const drawableHeight = composite.height * (drawableWidth / composite.width);
+  const drawable = measureTextTileDrawable(
+    measureContext,
+    fontSize,
+    FORCED_TILE_SITE_TEXT,
+  );
 
-  const canvas = createCanvas(background.width, background.height);
+  const canvas = createCanvas(imageWidth, imageHeight);
   const context = canvas.getContext("2d");
 
   if (background.canvas) {
     context.drawImage(background.canvas, 0, 0);
   } else {
-    context.drawImage(background, 0, 0, background.width, background.height);
+    context.drawImage(background, 0, 0, imageWidth, imageHeight);
   }
 
-  drawTiledWatermark({
-    alpha: TILE_SETTINGS.opacity,
-    angle: TILE_SETTINGS.angle,
+  drawTiledTextWatermark({
+    alpha: TILE_PATTERN_SETTINGS.opacity,
+    angle: TILE_PATTERN_SETTINGS.angle,
     context,
-    drawable: {
-      canvas: composite.canvas,
-      height: drawableHeight,
-      width: drawableWidth,
-    },
-    gap: TILE_SETTINGS.gap,
-    imageHeight: background.height,
-    imageWidth: background.width,
+    drawable,
+    gap: TILE_PATTERN_SETTINGS.gap,
+    imageHeight,
+    imageWidth,
+    watermarkReferenceWidth: imageWidth,
   });
+
+  paintCenterStamp(context, stampImage, imageWidth, imageHeight);
 
   writeFileSync(outputPath, canvas.toBuffer("image/jpeg", { quality: 92 }));
   console.log(`Wrote ${outputPath}`);
 }
 
+mkdirSync(previewsDir, { recursive: true });
+
+async function ensureMontserratRegistered() {
+  if (GlobalFonts.has(FORCED_TILE_FONT_FAMILY)) {
+    return;
+  }
+
+  const response = await fetch(
+    "https://cdn.jsdelivr.net/fontsource/fonts/montserrat@5.2.5/latin-400-normal.ttf",
+  );
+
+  if (!response.ok) {
+    throw new Error("Could not download Montserrat for preview rendering.");
+  }
+
+  GlobalFonts.register(Buffer.from(await response.arrayBuffer()), FORCED_TILE_FONT_FAMILY);
+}
+
+await ensureMontserratRegistered();
+
 const darkPhoto = await loadImage(join(root, "public", "Black_horse.jpeg"));
+const centerStamp = await loadImage(join(root, "public", "forced-export-stamp.png"));
 const lightDocument = createLightDocumentBackground();
 
 await renderPreview({
   background: darkPhoto,
-  outputPath: join(root, "public", "previews", "forced-tile-preview-dark.jpg"),
+  outputPath: join(previewsDir, "forced-tile-preview-a-dark.jpg"),
+  stampImage: centerStamp,
 });
 
 await renderPreview({
   background: lightDocument,
-  outputPath: join(
-    root,
-    "public",
-    "previews",
-    "forced-tile-preview-light.jpg",
-  ),
+  outputPath: join(previewsDir, "forced-tile-preview-a-light.jpg"),
+  stampImage: centerStamp,
 });
 
-await renderPreview({
-  background: darkPhoto,
-  outputPath: join(root, "public", "previews", "forced-tile-preview.jpg"),
-});
+console.log("\nForced tile preview settings:");
+console.log(JSON.stringify({ TILE_PATTERN_SETTINGS, CENTER_STAMP_SETTINGS }, null, 2));

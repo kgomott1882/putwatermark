@@ -61,7 +61,7 @@ export const blogPosts: BlogPost[] = [
     datePublished: "2026-08-02",
     excerpt:
       "Combine multiple PDFs into one file or shrink an oversized document down to size, both in your browser, free to try, no software to install.",
-    image: "/PDF Merge.png",
+    image: "/merge Pdfs.png",
     imageAlt: "PDF merge and compress tools in a browser editor",
     metaDescription:
       "Combine multiple PDFs into one file or shrink an oversized document down to size, both in your browser, free to try, no software to install.",

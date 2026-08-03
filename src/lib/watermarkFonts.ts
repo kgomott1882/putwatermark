@@ -11,6 +11,8 @@ export type FontFamilyGroup = {
 export const DEFAULT_WATERMARK_FONT_FAMILY =
   'Arial, Helvetica, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
+export const MONSERRAT_WATERMARK_FONT_FAMILY = '"Montserrat", sans-serif';
+
 export const GEOMETRIC_SANS_FONT_FAMILY = '"Trebuchet MS", Arial, sans-serif';
 
 const systemFonts: readonly FontFamilyOption[] = [
@@ -26,7 +28,7 @@ const googleSansFonts: readonly FontFamilyOption[] = [
   { label: "Roboto", value: '"Roboto", sans-serif' },
   { label: "Open Sans", value: '"Open Sans", sans-serif' },
   { label: "Lato", value: '"Lato", sans-serif' },
-  { label: "Montserrat", value: '"Montserrat", sans-serif' },
+  { label: "Montserrat", value: MONSERRAT_WATERMARK_FONT_FAMILY },
   { label: "Poppins", value: '"Poppins", sans-serif' },
   { label: "Inter", value: '"Inter", sans-serif' },
   { label: "Raleway", value: '"Raleway", sans-serif' },

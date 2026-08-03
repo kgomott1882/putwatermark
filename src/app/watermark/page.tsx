@@ -115,7 +115,10 @@ import { buildSignatureManifestFromSavedSignatures } from "../../lib/signatureMa
 import { normalizeSignatureKind } from "../../lib/signatureValidation";
 import {
   applyForcedTileWatermarkSettings,
+  ensureForcedTilePatternFontLoaded,
   FORCED_TILE_LAYER_ID,
+  FORCED_TILE_PATTERN_SETTINGS,
+  FORCED_TILE_SITE_TEXT,
   getExportFileType,
   hasForcedWatermarkOverlay,
   loadForcedTileLogoImage,
@@ -1267,7 +1270,7 @@ export default function WatermarkPage() {
   const [previewZoomPercent, setPreviewZoomPercent] = useState(PREVIEW_ZOOM_DEFAULT);
   const [isPreviewPanning, setIsPreviewPanning] = useState(false);
   const [activeWatermarkTool, setActiveWatermarkTool] =
-    useState<WatermarkToolId>("upload");
+    useState<WatermarkToolId>("text");
   const [activeVideoTool, setActiveVideoTool] = useState<VideoToolId>("overview");
   const [videoCaptionLayers, setVideoCaptionLayers] = useState<VideoCaptionLayer[]>(
     createInitialVideoCaptionLayers,
@@ -2579,7 +2582,8 @@ export default function WatermarkPage() {
       return input;
     }
 
-    return applyForcedTileWatermarkSettings(input);
+    await ensureForcedTilePatternFontLoaded();
+    return applyForcedTileWatermarkSettings(input, { iconOnlyCenterStamp: true });
   }
 
   async function resolvePdfExportAuthorization(exportId: string) {
@@ -6047,7 +6051,7 @@ export default function WatermarkPage() {
     if (kind === "image") {
       setActiveEditorPanel("photos");
       setActivePhotoTool("watermark");
-      setActiveWatermarkTool("upload");
+      setActiveWatermarkTool("text");
       return;
     }
 
@@ -6857,6 +6861,10 @@ export default function WatermarkPage() {
 
       const applyStaticFreeExportStamp =
         exportRoute === "client" && !isCleanExportTier(auth.tier);
+
+      if (applyStaticFreeExportStamp) {
+        await ensureForcedTilePatternFontLoaded();
+      }
 
       const watermarkSettings = getVideoWatermarkSettings();
 
@@ -8116,9 +8124,7 @@ export default function WatermarkPage() {
 
     if (tool === "text") {
       const shouldApplySingleDefaults =
-        watermarkType === "logo" ||
-        activeWatermarkTool === "logo" ||
-        activeWatermarkTool === "upload";
+        watermarkType === "logo" || activeWatermarkTool === "logo";
 
       handleWatermarkTypeChange("text");
 
@@ -9499,12 +9505,6 @@ export default function WatermarkPage() {
   ]);
 
   useEffect(() => {
-    if (hasMedia && activeWatermarkTool === "upload") {
-      setActiveWatermarkTool("text");
-    }
-  }, [activeWatermarkTool, hasMedia]);
-
-  useEffect(() => {
     if (mediaKind !== "video" || activeVideoTool !== "overview") {
       return;
     }
@@ -10063,6 +10063,7 @@ export default function WatermarkPage() {
                       <WatermarkToolRail
                         activeTool={activeWatermarkTool}
                         hasMedia={hasMedia}
+                        onChangeFile={openReplaceMediaPicker}
                         onSelectTool={handleWatermarkToolSelect}
                       />
                     ) : null}
@@ -10079,6 +10080,7 @@ export default function WatermarkPage() {
                       <WatermarkToolRail
                         activeTool={activeWatermarkTool}
                         hasMedia={hasMedia}
+                        onChangeFile={openReplaceMediaPicker}
                         onSelectTool={handleWatermarkToolSelect}
                       />
                     ) : null}
@@ -10099,6 +10101,7 @@ export default function WatermarkPage() {
                       <WatermarkToolRail
                         activeTool={activeWatermarkTool}
                         hasMedia={hasMedia}
+                        onChangeFile={openReplaceMediaPicker}
                         onSelectTool={handleWatermarkToolSelect}
                       />
                     ) : null}
@@ -10108,8 +10111,6 @@ export default function WatermarkPage() {
             >
           {isWatermarkPanelActive ? (
             <div className="space-y-2">
-              {activeWatermarkTool === "upload" ? (
-                <>
               {!hasMedia ? (
                 <EditorCard>
                   <p className="text-sm leading-6 text-ed-fg-muted">
@@ -10375,24 +10376,9 @@ export default function WatermarkPage() {
                   </div>
                 </div>
               ) : null}
-                </>
-              ) : null}
 
               {activeWatermarkTool === "text" ? (
-                !hasMedia ? (
-                  <EditorCard>
-                    <p className="text-sm leading-6 text-ed-fg-muted">
-                      Upload a file first, then add your text watermark here.
-                    </p>
-                    <button
-                      className="editor-secondary-button mt-3 w-full rounded-xl border-dashed px-4 py-2.5 text-sm font-semibold text-ed-fg hover:border-signal/50"
-                      onClick={() => setActiveWatermarkTool("upload")}
-                      type="button"
-                    >
-                      Go to upload
-                    </button>
-                  </EditorCard>
-                ) : (
+                hasMedia ? (
                 <>
                 <div className="hidden space-y-2 md:block">
                 {renderQuickTemplates(
@@ -10605,24 +10591,11 @@ export default function WatermarkPage() {
                   />
                 </div>
                 </>
-                )
+                ) : null
               ) : null}
 
               {activeWatermarkTool === "logo" ? (
-                !hasMedia ? (
-                  <EditorCard>
-                    <p className="text-sm leading-6 text-ed-fg-muted">
-                      Upload a file first, then add your logo watermark here.
-                    </p>
-                    <button
-                      className="editor-secondary-button mt-3 w-full rounded-xl border-dashed px-4 py-2.5 text-sm font-semibold text-ed-fg hover:border-signal/50"
-                      onClick={() => setActiveWatermarkTool("upload")}
-                      type="button"
-                    >
-                      Go to upload
-                    </button>
-                  </EditorCard>
-                ) : (
+                hasMedia ? (
                 <>
                 <div className="hidden space-y-2 md:block">
                 {renderQuickTemplates(
@@ -10777,7 +10750,7 @@ export default function WatermarkPage() {
                   />
                 </div>
                 </>
-                )
+                ) : null
               ) : null}
 
             </div>
@@ -12631,6 +12604,7 @@ type WatermarkLayerPaintInput = {
   watermarkReferenceWidth?: number;
   watermarkType: WatermarkType;
   displayScale?: number;
+  includeForcedTilePattern?: boolean;
 };
 
 const defaultWatermarkFontFamily =
@@ -12674,6 +12648,7 @@ function paintWatermarkLayers({
   watermarkMode,
   watermarkReferenceWidth,
   watermarkType,
+  includeForcedTilePattern = false,
 }: WatermarkLayerPaintInput): {
   activeBounds: TextBounds | null;
   boundsByLayer: Map<string, TextBounds>;
@@ -12923,6 +12898,7 @@ function paintWatermarkLayers({
       imageWidth,
       imageX,
       imageY,
+      includeForcedTilePattern,
       resolveCustomPosition,
       watermarkReferenceWidth: sizingWidth,
     });
@@ -12941,6 +12917,7 @@ function paintForcedExportStampLayer({
   imageWidth,
   imageX,
   imageY,
+  includeForcedTilePattern = false,
   resolveCustomPosition,
   watermarkReferenceWidth,
 }: {
@@ -12953,9 +12930,50 @@ function paintForcedExportStampLayer({
   imageWidth: number;
   imageX: number;
   imageY: number;
+  includeForcedTilePattern?: boolean;
   resolveCustomPosition?: WatermarkLayerPaintInput["resolveCustomPosition"];
   watermarkReferenceWidth: number;
 }) {
+  if (includeForcedTilePattern) {
+    const tileDrawable = getDrawableWatermark({
+      context,
+      displayScale,
+      fontFamily: FORCED_TILE_PATTERN_SETTINGS.fontFamily,
+      fontSizeScale: FORCED_TILE_PATTERN_SETTINGS.fontSizeScale,
+      fontWeight: DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
+      imageWidth,
+      logoImage: null,
+      textColor: DEFAULT_TEXT_WATERMARK_COLOR,
+      textShadowEnabled: DEFAULT_TEXT_SHADOW_ENABLED,
+      watermarkReferenceWidth,
+      watermarkText: FORCED_TILE_SITE_TEXT,
+      watermarkType: "text",
+    });
+
+    if (tileDrawable) {
+      drawTiledWatermark({
+        alpha: FORCED_TILE_PATTERN_SETTINGS.watermarkOpacity / 100,
+        angle: FORCED_TILE_PATTERN_SETTINGS.tileAngle,
+        context,
+        density: FORCED_TILE_PATTERN_SETTINGS.tileDensity,
+        displayScale,
+        drawable: tileDrawable,
+        gap: FORCED_TILE_PATTERN_SETTINGS.tileGap,
+        imageHeight,
+        imageWidth,
+        imageX,
+        imageY,
+        watermarkReferenceWidth,
+      });
+
+      logRealVideoExport("STEP 11x/15: forced tile pattern painted onto overlay canvas", {
+        drawableHeight: tileDrawable.height,
+        drawableWidth: tileDrawable.width,
+        forcedLayerId: forcedOverlayLayer.id,
+      });
+    }
+  }
+
   const logoImage = forcedOverlayLayer.logoImage;
 
   if (!logoImage || logoImage.naturalWidth <= 0 || logoImage.naturalHeight <= 0) {
@@ -13915,6 +13933,7 @@ function paintWatermarkOnExportCanvas({
   watermarkReferenceWidth,
   watermarkText,
   watermarkType,
+  includeForcedTilePattern = false,
 }: {
   activeLogoLayerId: string;
   activeTextLayerId: string;
@@ -13937,6 +13956,7 @@ function paintWatermarkOnExportCanvas({
   watermarkReferenceWidth: number;
   watermarkText: string;
   watermarkType: WatermarkType;
+  includeForcedTilePattern?: boolean;
 }) {
   applyHighQualityCanvasDefaults(context);
 
@@ -13954,6 +13974,7 @@ function paintWatermarkOnExportCanvas({
     imageWidth: canvasWidth,
     imageX: 0,
     imageY: 0,
+    includeForcedTilePattern,
     logoLayers,
     resolveCustomPosition,
     signatureCustomPosition: customPosition,
@@ -14109,6 +14130,7 @@ function renderExportCanvas({
     watermarkReferenceWidth: previewFrame.width,
     watermarkText,
     watermarkType,
+    includeForcedTilePattern: hasForcedWatermarkOverlay({ logoLayers }),
   };
   const watermarkScale = getImageWatermarkExportScale(logicalWidth, logicalHeight);
 
@@ -14271,6 +14293,7 @@ function renderWatermarkOverlayForPdfPage({
     watermarkReferenceWidth: previewFrame.width,
     watermarkType:
       signaturePlacementsForPaint?.length ? "signature" : watermarkType,
+    includeForcedTilePattern: false,
   });
 
   if (pageFillFields.length) {

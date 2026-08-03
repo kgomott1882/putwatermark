@@ -1,10 +1,21 @@
 import type { ExportFileMeta, ExportFileType } from "./exportCost";
+import { applyHighQualityCanvasDefaults } from "./imageWatermarkExport";
+import {
+  loadWatermarkFont,
+  MONSERRAT_WATERMARK_FONT_FAMILY,
+} from "./watermarkFonts";
 import {
   createDefaultLogoLayer,
   type LogoWatermarkLayer,
   type TextWatermarkLayer,
   type WatermarkPosition,
 } from "./watermarkLayers";
+import {
+  DEFAULT_TEXT_SHADOW_ENABLED,
+  DEFAULT_TEXT_WATERMARK_COLOR,
+  DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
+  resolveTextWatermarkPaint,
+} from "./watermarkTextStyle";
 
 /** Public asset — always available at export time, independent of user uploads. */
 export const FORCED_TILE_LOGO_PATH = "/Put%20Watermark%20-%20Icon.png";
@@ -24,6 +35,25 @@ export const FORCED_TILE_SETTINGS = {
   watermarkOpacity: 44,
   watermarkPosition: "center",
   watermarkType: "logo",
+} as const;
+
+/** Paid Tile mode match — background text tile for free/forced photo + video exports only. */
+export const FORCED_TILE_PATTERN_SETTINGS = {
+  fontFamily: MONSERRAT_WATERMARK_FONT_FAMILY,
+  fontSizeScale: 20,
+  tileAngle: 45,
+  tileDensity: "sparse",
+  tileGap: 130,
+  watermarkMode: "tile",
+  watermarkOpacity: 20,
+  watermarkText: FORCED_TILE_SITE_TEXT,
+  watermarkType: "text",
+} as const;
+
+const FORCED_TILE_PATTERN_DENSITY_REPETITIONS = {
+  dense: 9.5,
+  medium: 6.5,
+  sparse: 4.5,
 } as const;
 
 const FORCED_TILE_TEXT_COLOR = "#ffffff";
@@ -134,8 +164,10 @@ type ForcedTileSettings = {
 
 let forcedTileLogoImageCache: HTMLImageElement | null = null;
 let forcedTileLogoImagePromise: Promise<HTMLImageElement> | null = null;
-let forcedTileCompositeImageCache: HTMLImageElement | null = null;
-let forcedTileCompositeImagePromise: Promise<HTMLImageElement> | null = null;
+let forcedTileCompositeWithTextCache: HTMLImageElement | null = null;
+let forcedTileCompositeWithTextPromise: Promise<HTMLImageElement> | null = null;
+let forcedTileCompositeIconOnlyCache: HTMLImageElement | null = null;
+let forcedTileCompositeIconOnlyPromise: Promise<HTMLImageElement> | null = null;
 
 function canvasToImage(canvas: HTMLCanvasElement) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -149,13 +181,25 @@ function canvasToImage(canvas: HTMLCanvasElement) {
   });
 }
 
-export function createForcedTileCompositeImage(logoImage: HTMLImageElement) {
-  if (forcedTileCompositeImageCache) {
-    return Promise.resolve(forcedTileCompositeImageCache);
+export function createForcedTileCompositeImage(
+  logoImage: HTMLImageElement,
+  options?: { includeSiteText?: boolean },
+) {
+  const includeSiteText = options?.includeSiteText ?? true;
+  const cachedImage = includeSiteText
+    ? forcedTileCompositeWithTextCache
+    : forcedTileCompositeIconOnlyCache;
+
+  if (cachedImage) {
+    return Promise.resolve(cachedImage);
   }
 
-  if (!forcedTileCompositeImagePromise) {
-    forcedTileCompositeImagePromise = (async () => {
+  const pendingPromise = includeSiteText
+    ? forcedTileCompositeWithTextPromise
+    : forcedTileCompositeIconOnlyPromise;
+
+  if (!pendingPromise) {
+    const compositePromise = (async () => {
       const iconBaseWidth = FORCED_TILE_COMPOSITE_ICON_WIDTH;
       const iconAspect =
         logoImage.naturalWidth > 0
@@ -209,26 +253,46 @@ export function createForcedTileCompositeImage(logoImage: HTMLImageElement) {
         iconHeight,
       );
 
-      drawForcedTileSiteText(
-        context,
-        unitWidth / 2,
-        iconY + iconHeight + textGap,
-        fontSize,
-      );
+      if (includeSiteText) {
+        drawForcedTileSiteText(
+          context,
+          unitWidth / 2,
+          iconY + iconHeight + textGap,
+          fontSize,
+        );
+      }
 
       const compositeImage = await canvasToImage(canvas);
       if (typeof compositeImage.decode === "function") {
         await compositeImage.decode().catch(() => undefined);
       }
-      forcedTileCompositeImageCache = compositeImage;
+
+      if (includeSiteText) {
+        forcedTileCompositeWithTextCache = compositeImage;
+      } else {
+        forcedTileCompositeIconOnlyCache = compositeImage;
+      }
+
       return compositeImage;
     })().catch((error) => {
-      forcedTileCompositeImagePromise = null;
+      if (includeSiteText) {
+        forcedTileCompositeWithTextPromise = null;
+      } else {
+        forcedTileCompositeIconOnlyPromise = null;
+      }
       throw error;
     });
+
+    if (includeSiteText) {
+      forcedTileCompositeWithTextPromise = compositePromise;
+    } else {
+      forcedTileCompositeIconOnlyPromise = compositePromise;
+    }
+
+    return compositePromise;
   }
 
-  return forcedTileCompositeImagePromise;
+  return pendingPromise;
 }
 
 export function loadForcedTileLogoImage() {
@@ -263,10 +327,143 @@ export function hasForcedWatermarkOverlay(settings: {
   );
 }
 
+type ForcedExportTilePatternInput = {
+  context: CanvasRenderingContext2D;
+  displayScale?: number;
+  imageHeight: number;
+  imageWidth: number;
+  imageX: number;
+  imageY: number;
+  watermarkReferenceWidth: number;
+};
+
+function measureForcedTilePatternDrawable(
+  context: CanvasRenderingContext2D,
+  fontSize: number,
+  text: string,
+  fontFamily: string,
+) {
+  context.save();
+  context.font = `${DEFAULT_TEXT_WATERMARK_FONT_WEIGHT} ${fontSize}px ${fontFamily}`;
+  const metrics = context.measureText(text);
+  context.restore();
+
+  return {
+    fontFamily,
+    fontSize,
+    height:
+      metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent ||
+      fontSize,
+    text,
+    width: metrics.width,
+  };
+}
+
+function drawForcedTilePatternUnit(
+  context: CanvasRenderingContext2D,
+  drawable: ReturnType<typeof measureForcedTilePatternDrawable>,
+  x: number,
+  y: number,
+  alpha: number,
+) {
+  context.save();
+  context.font = `${DEFAULT_TEXT_WATERMARK_FONT_WEIGHT} ${drawable.fontSize}px ${drawable.fontFamily}`;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.lineWidth = Math.max(3, drawable.fontSize / 12);
+  const paint = resolveTextWatermarkPaint({
+    alpha,
+    textColor: DEFAULT_TEXT_WATERMARK_COLOR,
+    textShadowEnabled: DEFAULT_TEXT_SHADOW_ENABLED,
+  });
+  context.strokeStyle = paint.strokeStyle;
+  context.fillStyle = paint.fillStyle;
+  context.shadowColor = paint.shadowColor;
+  context.shadowBlur = paint.shadowBlur;
+  context.strokeText(drawable.text, x, y);
+  context.fillText(drawable.text, x, y);
+  context.restore();
+}
+
+/** Ensures Montserrat is loaded before painting the forced tile text layer. */
+export async function ensureForcedTilePatternFontLoaded() {
+  await loadWatermarkFont(
+    FORCED_TILE_PATTERN_SETTINGS.fontFamily,
+    DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
+  );
+}
+
+/** Full-frame text tile for client video free exports (matches photo drawTiledWatermark output). */
+export function paintForcedExportTilePattern({
+  context,
+  displayScale = 1,
+  imageHeight,
+  imageWidth,
+  imageX,
+  imageY,
+  watermarkReferenceWidth,
+}: ForcedExportTilePatternInput) {
+  const {
+    fontFamily,
+    tileAngle,
+    tileDensity,
+    tileGap,
+    fontSizeScale,
+    watermarkOpacity,
+    watermarkText,
+  } = FORCED_TILE_PATTERN_SETTINGS;
+  const baseFontSize =
+    Math.max(
+      8,
+      Math.min(watermarkReferenceWidth / 12, 72) * (fontSizeScale / 100),
+    ) * displayScale;
+  const drawable = measureForcedTilePatternDrawable(
+    context,
+    baseFontSize,
+    watermarkText,
+    fontFamily,
+  );
+  const alpha = watermarkOpacity / 100;
+  const repetitionsAcross =
+    FORCED_TILE_PATTERN_DENSITY_REPETITIONS[tileDensity] ??
+    FORCED_TILE_PATTERN_DENSITY_REPETITIONS.medium;
+  const densitySpacing =
+    (watermarkReferenceWidth / repetitionsAcross) * displayScale;
+  const diagonal = Math.hypot(imageWidth, imageHeight);
+
+  context.save();
+  context.beginPath();
+  context.rect(imageX, imageY, imageWidth, imageHeight);
+  context.clip();
+  context.translate(imageX + imageWidth / 2, imageY + imageHeight / 2);
+  context.rotate((-tileAngle * Math.PI) / 180);
+
+  const gapPixels = Math.max(drawable.height, drawable.width * (tileGap / 100));
+  const xSpacing = Math.max(densitySpacing, drawable.width + gapPixels);
+  const ySpacing = Math.max(drawable.height * 2.4, densitySpacing * 0.65);
+  const patternExtent = diagonal + Math.max(xSpacing, ySpacing) * 2;
+
+  applyHighQualityCanvasDefaults(context);
+
+  for (let y = -patternExtent; y <= patternExtent; y += ySpacing) {
+    for (let x = -patternExtent; x <= patternExtent; x += xSpacing) {
+      drawForcedTilePatternUnit(context, drawable, x, y, alpha);
+    }
+  }
+
+  context.restore();
+}
+
 export async function createForcedTileWatermarkSettings<
   T extends ForcedTileSettings,
->(settings: T, logoImage: HTMLImageElement): Promise<T> {
-  const compositeImage = await createForcedTileCompositeImage(logoImage);
+>(
+  settings: T,
+  logoImage: HTMLImageElement,
+  options?: { iconOnlyCenterStamp?: boolean },
+): Promise<T> {
+  const compositeImage = await createForcedTileCompositeImage(logoImage, {
+    includeSiteText: !options?.iconOnlyCenterStamp,
+  });
   const forcedLogoLayer: LogoWatermarkLayer = {
     ...createDefaultLogoLayer(),
     id: FORCED_TILE_LAYER_ID,
@@ -291,9 +488,9 @@ export async function createForcedTileWatermarkSettings<
 
 export async function applyForcedTileWatermarkSettings<
   T extends ForcedTileSettings,
->(settings: T): Promise<T> {
+>(settings: T, options?: { iconOnlyCenterStamp?: boolean }): Promise<T> {
   const logoImage = await loadForcedTileLogoImage();
-  return createForcedTileWatermarkSettings(settings, logoImage);
+  return createForcedTileWatermarkSettings(settings, logoImage, options);
 }
 
 export function getExportFileType({

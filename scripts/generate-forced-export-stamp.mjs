@@ -1,5 +1,6 @@
 /**
- * Generates public/forced-export-stamp.png — static PutWatermark mark + PutWatermark.com stamp.
+ * Generates public/forced-export-stamp.png — icon-only center stamp for client video
+ * free exports (site text lives in the tiled background layer).
  * Run once (or when stamp art changes): node scripts/generate-forced-export-stamp.mjs
  */
 import { createCanvas, loadImage } from "@napi-rs/canvas";
@@ -88,7 +89,6 @@ async function main() {
   const iconX = (unitWidth - iconBaseWidth) / 2;
   const iconY = padding / 2;
   drawStampIconWithOutline(context, logoImage, iconX, iconY, iconBaseWidth, iconHeight);
-  drawStampSiteText(context, unitWidth / 2, iconY + iconHeight + textGap, fontSize);
 
   writeFileSync(outputPath, canvas.toBuffer("image/png"));
   console.log(`Wrote ${outputPath} (${unitWidth * scale}x${unitHeight * scale}px)`);

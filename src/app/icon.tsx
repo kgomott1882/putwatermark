@@ -21,7 +21,7 @@ export default async function Icon() {
       <div
         style={{
           alignItems: "center",
-          background: "#D97757",
+          background: "#000000",
           display: "flex",
           height: "100%",
           justifyContent: "center",
@@ -34,7 +34,7 @@ export default async function Icon() {
           height={imageSize}
           src={iconSrc}
           style={{
-            objectFit: "contain",
+            objectFit: "cover",
           }}
           width={imageSize}
         />

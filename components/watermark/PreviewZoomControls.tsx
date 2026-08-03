@@ -27,10 +27,10 @@ type PreviewControlButtonProps = {
   children: ReactNode;
 };
 
-const previewControlButtonClassName =
+export const previewControlButtonClassName =
   "flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-b from-[#ef6b6b] to-[#c41e3a] text-white shadow-[0_2px_8px_rgba(196,30,58,0.3)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45";
 
-function PreviewControlButton({
+export function PreviewControlButton({
   ariaLabel,
   children,
   disabled = false,

@@ -1,4 +1,5 @@
 import { applyHighQualityCanvasDefaults } from "./imageWatermarkExport";
+import { paintForcedExportTilePattern } from "./forcedTileExport";
 
 /** Static pre-rendered stamp for free client-side video exports (see scripts/generate-forced-export-stamp.mjs). */
 export const CLIENT_VIDEO_FREE_EXPORT_STAMP_PATH = "/forced-export-stamp.png";
@@ -60,6 +61,15 @@ export async function paintClientVideoFreeExportStamp(
   if (image.naturalWidth <= 0 || image.naturalHeight <= 0) {
     throw new Error("Client video free export stamp image is not ready.");
   }
+
+  paintForcedExportTilePattern({
+    context,
+    imageHeight: contentHeight,
+    imageWidth: contentWidth,
+    imageX: 0,
+    imageY: 0,
+    watermarkReferenceWidth: contentWidth,
+  });
 
   const drawableWidth = getClientVideoFreeExportStampDrawableWidth(contentWidth);
   const drawableHeight = drawableWidth * (image.naturalHeight / image.naturalWidth);

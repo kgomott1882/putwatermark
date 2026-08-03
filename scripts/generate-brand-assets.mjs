@@ -40,24 +40,18 @@ function drawLayerStackMark(context, centerX, centerY, size, color) {
   context.restore();
 }
 
-function drawMarkInRoundedSquare(
-  context,
-  size,
-  backgroundColor,
-  markColor,
-  { insetRatio = 0.04 } = {},
-) {
-  const inset = size * insetRatio;
-  const side = size - inset * 2;
-  const radius = side * 0.24;
+function drawMarkInRoundedSquare(context, size, backgroundColor, markColor) {
+  const padding = size * 0.14;
+  const inner = size - padding * 2;
+  const radius = size * 0.22;
 
   context.clearRect(0, 0, size, size);
   context.fillStyle = backgroundColor;
   context.beginPath();
-  context.roundRect(inset, inset, side, side, radius);
+  context.roundRect(padding / 2, padding / 2, size - padding, size - padding, radius);
   context.fill();
 
-  drawLayerStackMark(context, size / 2, size / 2, side * 0.72, markColor);
+  drawLayerStackMark(context, size / 2, size / 2, inner, markColor);
 }
 
 function writePng(canvas, outputPath) {
