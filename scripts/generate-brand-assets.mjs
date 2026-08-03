@@ -57,7 +57,7 @@ function drawMarkInRoundedSquare(
   context.roundRect(inset, inset, side, side, radius);
   context.fill();
 
-  drawLayerStackMark(context, size / 2, size / 2, side * 0.58, markColor);
+  drawLayerStackMark(context, size / 2, size / 2, side * 0.72, markColor);
 }
 
 function writePng(canvas, outputPath) {
