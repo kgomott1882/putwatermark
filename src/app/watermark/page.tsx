@@ -224,7 +224,9 @@ import {
   PREVIEW_ZOOM_MAX,
   PREVIEW_ZOOM_MIN,
   PREVIEW_ZOOM_STEP,
-  PreviewZoomControls,
+  PreviewCanvasZoomControls,
+  PreviewCanvasMediaControls,
+  previewControlButtonClassName,
 } from "../../../components/watermark/PreviewZoomControls";
 import {
   ResizeControlsPanel,
@@ -1251,7 +1253,7 @@ export default function WatermarkPage() {
     string | null
   >(null);
   const [isSignatureDropTarget, setIsSignatureDropTarget] = useState(false);
-  const [canvasSize, setCanvasSize] = useState<PreviewCanvasSize>({
+  const [previewBaseSize, setPreviewBaseSize] = useState<PreviewCanvasSize>({
     height: 600,
     pixelRatio: 1,
     width: 900,
@@ -1268,6 +1270,12 @@ export default function WatermarkPage() {
   const [lastPdfCompressResult, setLastPdfCompressResult] =
     useState<PdfCompressStats | null>(null);
   const [previewZoomPercent, setPreviewZoomPercent] = useState(PREVIEW_ZOOM_DEFAULT);
+  const previewZoomScale = previewZoomPercent / 100;
+  const canvasSize: PreviewCanvasSize = {
+    height: Math.max(240, Math.floor(previewBaseSize.height * previewZoomScale)),
+    pixelRatio: previewBaseSize.pixelRatio,
+    width: Math.max(240, Math.floor(previewBaseSize.width * previewZoomScale)),
+  };
   const [isPreviewPanning, setIsPreviewPanning] = useState(false);
   const [activeWatermarkTool, setActiveWatermarkTool] =
     useState<WatermarkToolId>("text");
@@ -2875,7 +2883,6 @@ export default function WatermarkPage() {
       }
 
       const pixelRatio = Math.min(window.devicePixelRatio || 1, 2.5);
-      const zoomScale = previewZoomPercent / 100;
       const styles = window.getComputedStyle(sizeNode);
       const paddingX =
         parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
@@ -2890,11 +2897,11 @@ export default function WatermarkPage() {
         Math.floor(sizeNode.clientHeight - paddingY),
       );
 
-      setCanvasSize((current) => {
+      setPreviewBaseSize((current) => {
         const next = {
-          height: Math.max(240, Math.floor(baseHeight * zoomScale)),
+          height: baseHeight,
           pixelRatio,
-          width: Math.max(240, Math.floor(baseWidth * zoomScale)),
+          width: baseWidth,
         };
 
         if (
@@ -2917,7 +2924,7 @@ export default function WatermarkPage() {
     return () => {
       resizeObserver.disconnect();
     };
-  }, [previewZoomPercent]);
+  }, []);
 
   useEffect(() => {
     const preview = videoPreviewRef.current;
@@ -3257,10 +3264,13 @@ export default function WatermarkPage() {
       previewImageHeight,
       rotationAngle,
     );
-    const imageScale = Math.min(
-      logicalWidth / Math.max(referenceSize.width, rotatedPreviewBounds.width),
-      logicalHeight / Math.max(referenceSize.height, rotatedPreviewBounds.height),
+    const baseFitScale = Math.min(
+      previewBaseSize.width /
+        Math.max(referenceSize.width, rotatedPreviewBounds.width),
+      previewBaseSize.height /
+        Math.max(referenceSize.height, rotatedPreviewBounds.height),
     );
+    const imageScale = baseFitScale * previewZoomScale;
     const sourceImageWidth = previewImageWidth * imageScale;
     const sourceImageHeight = previewImageHeight * imageScale;
     const imageWidth = rotatedPreviewBounds.width * imageScale;
@@ -5225,7 +5235,7 @@ export default function WatermarkPage() {
       imageEffectSettings: getImageEffectSettings(),
       logoImage,
       logoLayers,
-      previewCanvasSize: canvasSize,
+      previewCanvasSize: previewBaseSize,
       referenceImageSize: entryReferenceImageSize ??
         uploadedImageSize ?? {
           height: imageElement.naturalHeight,
@@ -6675,12 +6685,12 @@ export default function WatermarkPage() {
               pageWidth,
               pageHeight,
               watermarkInput,
-              canvasSize,
+              previewBaseSize,
             );
           }
 
           const overlayCanvas = renderWatermarkOverlayForPdfPage({
-            canvasSize,
+            canvasSize: previewBaseSize,
             pageFillFields,
             pageHeight,
             pageWidth,
@@ -9222,10 +9232,32 @@ export default function WatermarkPage() {
   }
 
   useEffect(() => {
+    const container = previewCheckerboardRef.current;
+
+    if (!container) {
+      return;
+    }
+
     if (previewZoomPercent === PREVIEW_ZOOM_DEFAULT) {
       resetPreviewPanPosition();
+      return;
     }
-  }, [previewZoomPercent]);
+
+    const frameId = window.requestAnimationFrame(() => {
+      container.scrollLeft = Math.max(
+        0,
+        (container.scrollWidth - container.clientWidth) / 2,
+      );
+      container.scrollTop = Math.max(
+        0,
+        (container.scrollHeight - container.clientHeight) / 2,
+      );
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [canvasSize.height, canvasSize.width, previewZoomPercent]);
 
   useEffect(() => {
     const node = previewCheckerboardRef.current;
@@ -10063,7 +10095,6 @@ export default function WatermarkPage() {
                       <WatermarkToolRail
                         activeTool={activeWatermarkTool}
                         hasMedia={hasMedia}
-                        onChangeFile={openReplaceMediaPicker}
                         onSelectTool={handleWatermarkToolSelect}
                       />
                     ) : null}
@@ -10080,7 +10111,6 @@ export default function WatermarkPage() {
                       <WatermarkToolRail
                         activeTool={activeWatermarkTool}
                         hasMedia={hasMedia}
-                        onChangeFile={openReplaceMediaPicker}
                         onSelectTool={handleWatermarkToolSelect}
                       />
                     ) : null}
@@ -10101,7 +10131,6 @@ export default function WatermarkPage() {
                       <WatermarkToolRail
                         activeTool={activeWatermarkTool}
                         hasMedia={hasMedia}
-                        onChangeFile={openReplaceMediaPicker}
                         onSelectTool={handleWatermarkToolSelect}
                       />
                     ) : null}
@@ -11355,9 +11384,10 @@ export default function WatermarkPage() {
                   ) : null}
                 </div>
               ) : null}
+              <div className="relative min-h-0 flex-1">
               <div
                 ref={previewCheckerboardRef}
-                className={`editor-checkerboard group relative flex min-h-0 flex-1 items-center justify-center ${
+                className={`editor-checkerboard group absolute inset-0 ${
                   showVideoTimelineDock
                     ? previewZoomPercent > PREVIEW_ZOOM_DEFAULT && hasPreviewContent
                       ? "overflow-auto p-3 md:p-6"
@@ -11368,18 +11398,26 @@ export default function WatermarkPage() {
                 }`}
               >
             {isPdfLoading ? (
-              <div className="text-center">
+              <div className="flex min-h-full min-w-full items-center justify-center text-center">
+                <div>
                 <p className="text-lg font-semibold text-ed-fg">Loading PDF...</p>
                 <p className="mt-2 text-sm text-ed-fg-muted">
                   Rendering pages in your browser.
                 </p>
+                </div>
               </div>
             ) : hasPreviewContent ? (
-              <>
-                <div className="flex max-h-full max-w-full min-w-0 items-center justify-center">
+              <div className="flex min-h-full min-w-full items-center justify-center">
+                <div
+                  className="relative shrink-0"
+                  style={{
+                    height: canvasSize.height,
+                    width: canvasSize.width,
+                  }}
+                >
             {(mediaKind === "image" || mediaKind === "pdf") && image ? (
               <canvas
-                className={`max-h-full max-w-full touch-none shadow-lg ${
+                className={`block h-full w-full touch-none shadow-lg ${
                   isSignatureDropTarget ? "ring-2 ring-signal ring-offset-2" : ""
                 }`}
                 onDragLeave={handleSignatureDragLeave}
@@ -11396,7 +11434,7 @@ export default function WatermarkPage() {
             ) : mediaKind === "video" && videoUrl ? (
               showVideoOverviewPreview ? (
                 <div
-                  className="flex max-h-full max-w-full touch-none"
+                  className="flex touch-none"
                   onPointerCancel={handlePreviewSurfacePointerCancel}
                   onPointerDown={handlePreviewSurfacePointerDown}
                   onPointerMove={handlePreviewSurfacePointerMove}
@@ -11483,29 +11521,39 @@ export default function WatermarkPage() {
               )
             ) : null}
                 </div>
-                <PreviewZoomControls
-                  className="absolute bottom-4 right-4 z-20"
-                  mediaKind={mediaKind}
-                  onAddMoreVideos={openAddMoreVideosPicker}
-                  onRemove={handlePreviewMediaRemove}
-                  onReplace={openReplaceMediaPicker}
-                  onReset={handlePreviewZoomReset}
-                  onZoomIn={handlePreviewZoomIn}
-                  onZoomOut={handlePreviewZoomOut}
-                  resetDisabled={previewZoomResetDisabled}
-                  zoomInDisabled={previewZoomInDisabled}
-                  zoomOutDisabled={previewZoomOutDisabled}
-                />
-              </>
+              </div>
             ) : (
-              <div className="flex w-full max-w-sm items-center justify-center px-2 md:max-w-xl">
+              <div className="flex min-h-full min-w-full items-center justify-center px-2">
+              <div className="w-full max-w-sm md:max-w-xl">
                 <UploadZone
                   onClick={openFilePicker}
                   onDragOver={handleDragOver}
                   onDrop={handleDrop}
                 />
               </div>
+              </div>
             )}
+              </div>
+              {hasPreviewContent && !isPdfLoading ? (
+                <div className="pointer-events-none absolute inset-0 z-30 p-3 md:p-6">
+                  <PreviewCanvasZoomControls
+                    className="pointer-events-auto absolute top-3 right-3 md:top-6 md:right-6"
+                    onReset={handlePreviewZoomReset}
+                    onZoomIn={handlePreviewZoomIn}
+                    onZoomOut={handlePreviewZoomOut}
+                    resetDisabled={previewZoomResetDisabled}
+                    zoomInDisabled={previewZoomInDisabled}
+                    zoomOutDisabled={previewZoomOutDisabled}
+                  />
+                  <PreviewCanvasMediaControls
+                    className="pointer-events-auto absolute bottom-3 left-3 md:bottom-6 md:left-6"
+                    mediaKind={mediaKind}
+                    onAddMoreVideos={openAddMoreVideosPicker}
+                    onRemove={handlePreviewMediaRemove}
+                    onReplace={openReplaceMediaPicker}
+                  />
+                </div>
+              ) : null}
               </div>
 
               <div
@@ -12096,32 +12144,32 @@ function EditorMediaActionButtons({
         <>
           <button
             aria-label="Replace loaded media"
-            className="editor-secondary-button flex h-6 w-6 items-center justify-center rounded text-ed-fg-muted hover:text-ed-fg"
+            className={previewControlButtonClassName}
             onClick={onReplace}
             type="button"
           >
-            <RefreshCw className="h-3 w-3" strokeWidth={2} />
+            <RefreshCw className="h-3 w-3" strokeWidth={2.35} />
           </button>
 
           {mediaKind === "image" ? (
             <button
               aria-label="Add more images"
-              className="editor-secondary-button flex h-6 w-6 items-center justify-center rounded text-ed-fg-muted hover:text-ed-fg"
+              className={previewControlButtonClassName}
               onClick={onAddMoreImages}
               type="button"
             >
-              <Images className="h-3 w-3" strokeWidth={2} />
+              <Images className="h-3 w-3" strokeWidth={2.35} />
             </button>
           ) : null}
 
           {mediaKind === "video" && onAddMoreVideos ? (
             <button
               aria-label="Add more videos"
-              className="editor-secondary-button flex h-6 w-6 items-center justify-center rounded text-ed-fg-muted hover:text-ed-fg"
+              className={previewControlButtonClassName}
               onClick={onAddMoreVideos}
               type="button"
             >
-              <Video className="h-3 w-3" strokeWidth={2} />
+              <Video className="h-3 w-3" strokeWidth={2.35} />
             </button>
           ) : null}
         </>
@@ -12129,11 +12177,11 @@ function EditorMediaActionButtons({
 
       <button
         aria-label="Remove loaded media"
-        className="editor-secondary-button flex h-6 w-6 items-center justify-center rounded text-ed-fg-muted hover:border-signal/50 hover:text-signal"
+        className={previewControlButtonClassName}
         onClick={onRemove}
         type="button"
       >
-        <Trash2 className="h-3 w-3" strokeWidth={2} />
+        <Trash2 className="h-3 w-3" strokeWidth={2.35} />
       </button>
     </div>
   );

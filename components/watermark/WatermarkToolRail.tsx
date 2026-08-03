@@ -1,15 +1,13 @@
 "use client";
 
-import { ImageIcon, RefreshCw, Type } from "lucide-react";
+import { ImageIcon, Type } from "lucide-react";
 import type { ReactNode } from "react";
-import { PreviewControlButton } from "./PreviewZoomControls";
 
 export type WatermarkToolId = "text" | "logo";
 
 type WatermarkToolRailProps = {
   activeTool: WatermarkToolId;
   hasMedia: boolean;
-  onChangeFile: () => void;
   onSelectTool: (tool: WatermarkToolId) => void;
 };
 
@@ -41,7 +39,6 @@ function RailTool({ active, className = "", icon, label, onClick }: RailToolProp
 export function WatermarkToolRail({
   activeTool,
   hasMedia,
-  onChangeFile,
   onSelectTool,
 }: WatermarkToolRailProps) {
   return (
@@ -50,15 +47,6 @@ export function WatermarkToolRail({
       className="flex w-full shrink-0 flex-row gap-0.5 overflow-x-auto overscroll-x-contain border-t border-ed-border bg-ed-panel px-1 py-1 [-ms-overflow-style:none] [scrollbar-width:none] md:w-[4.5rem] md:flex-col md:gap-1 md:overflow-x-visible md:overflow-y-auto md:border-t-0 md:border-r md:px-1.5 md:py-2 [&::-webkit-scrollbar]:hidden"
     >
       <div className="flex flex-row gap-0.5 md:flex-col">
-        <div className="hidden md:flex md:w-full md:justify-center md:pb-1 md:pt-0.5">
-          <PreviewControlButton
-            ariaLabel="Change file"
-            label="Change File"
-            onClick={onChangeFile}
-          >
-            <RefreshCw className="h-3 w-3" strokeWidth={2.35} />
-          </PreviewControlButton>
-        </div>
         <RailTool
           active={activeTool === "text"}
           icon={<Type className="h-4 w-4 md:h-5 md:w-5" strokeWidth={1.75} />}
