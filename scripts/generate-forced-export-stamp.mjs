@@ -1,5 +1,5 @@
 /**
- * Generates public/forced-export-stamp.png — static bee + PutWatermark.com stamp.
+ * Generates public/forced-export-stamp.png — static PutWatermark mark + PutWatermark.com stamp.
  * Run once (or when stamp art changes): node scripts/generate-forced-export-stamp.mjs
  */
 import { createCanvas, loadImage } from "@napi-rs/canvas";
