@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getAbsoluteUrl } from "@/lib/siteUrl";
 import { BlogMergeCompressPdfArticle } from "../../../../components/blog/BlogMergeCompressPdfArticle";
 import { JsonLd } from "../../../../components/blog/JsonLd";
 import {
@@ -12,7 +13,7 @@ import {
 const slug = "merge-compress-pdf-online-free";
 const post = getBlogPost(slug)!;
 
-const canonicalUrl = `https://putwatermark.com/blog/${slug}`;
+const canonicalUrl = getAbsoluteUrl(`/blog/${slug}`);
 
 export const metadata: Metadata = {
   title: post.metaTitle,

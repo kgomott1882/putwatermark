@@ -1,3 +1,5 @@
+import { getAbsoluteUrl } from "../siteUrl";
+
 export type BlogAuthor = {
   avatarImage: string;
   bio: string;
@@ -34,6 +36,6 @@ export function buildAuthorJsonLd(author: BlogAuthor) {
     "@type": "Person",
     jobTitle: author.credentials,
     name: author.name,
-    url: `https://putwatermark.com/blog/author/${author.slug}`,
+    url: getAbsoluteUrl(`/blog/author/${author.slug}`),
   };
 }

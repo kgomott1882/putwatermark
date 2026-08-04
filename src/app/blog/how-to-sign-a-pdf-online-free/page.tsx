@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getAbsoluteUrl } from "@/lib/siteUrl";
 import { BlogSignPdfArticle } from "../../../../components/blog/BlogSignPdfArticle";
 import { JsonLd } from "../../../../components/blog/JsonLd";
 import {
@@ -11,7 +12,7 @@ import {
 const slug = "how-to-sign-a-pdf-online-free";
 const post = getBlogPost(slug)!;
 
-const canonicalUrl = `https://putwatermark.com/blog/${slug}`;
+const canonicalUrl = getAbsoluteUrl(`/blog/${slug}`);
 
 export const metadata: Metadata = {
   title: post.metaTitle,

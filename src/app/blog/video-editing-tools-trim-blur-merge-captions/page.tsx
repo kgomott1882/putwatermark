@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getAbsoluteUrl } from "@/lib/siteUrl";
 import { BlogVideoEditingToolsArticle } from "../../../../components/blog/BlogVideoEditingToolsArticle";
 import { JsonLd } from "../../../../components/blog/JsonLd";
 import {
@@ -10,7 +11,7 @@ import {
 const slug = "video-editing-tools-trim-blur-merge-captions";
 const post = getBlogPost(slug)!;
 
-const canonicalUrl = `https://putwatermark.com/blog/${slug}`;
+const canonicalUrl = getAbsoluteUrl(`/blog/${slug}`);
 
 export const metadata: Metadata = {
   title: post.metaTitle,

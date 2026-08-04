@@ -1,4 +1,9 @@
 import { getBlogAuthor } from "./authors";
+import {
+  getAbsoluteUrl,
+  getSiteLogoUrl,
+  getSiteUrl,
+} from "../siteUrl";
 
 export type BlogPost = {
   authorSlug: string;
@@ -288,7 +293,7 @@ export function getBlogTagCounts() {
 
 export function buildBlogPostJsonLd(post: BlogPost) {
   const author = getBlogAuthor(post.authorSlug);
-  const canonicalUrl = `https://putwatermark.com/blog/${post.slug}`;
+  const canonicalUrl = getAbsoluteUrl(`/blog/${post.slug}`);
 
   return {
     "@context": "https://schema.org",
@@ -298,18 +303,18 @@ export function buildBlogPostJsonLd(post: BlogPost) {
           "@type": "Person",
           jobTitle: author.credentials,
           name: author.name,
-          url: `https://putwatermark.com/blog/author/${author.slug}`,
+          url: getAbsoluteUrl(`/blog/author/${author.slug}`),
         }
       : {
           "@type": "Organization",
           name: "PutWatermark",
-          url: "https://putwatermark.com",
+          url: getSiteUrl(),
         },
     dateModified: post.dateModified,
     datePublished: post.datePublished,
     description: post.metaDescription,
     headline: post.title,
-    image: `https://putwatermark.com${post.image}`,
+    image: getAbsoluteUrl(post.image),
     keywords: post.tags.join(", "),
     mainEntityOfPage: {
       "@id": canonicalUrl,
@@ -319,10 +324,10 @@ export function buildBlogPostJsonLd(post: BlogPost) {
       "@type": "Organization",
       logo: {
         "@type": "ImageObject",
-        url: "https://putwatermark.com/Icon.png",
+        url: getSiteLogoUrl(),
       },
       name: "PutWatermark",
-      url: "https://putwatermark.com",
+      url: getSiteUrl(),
     },
     url: canonicalUrl,
   };

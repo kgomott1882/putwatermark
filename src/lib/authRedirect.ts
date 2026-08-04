@@ -1,11 +1,9 @@
+import { getSiteUrl } from "./siteUrl";
+
 const DEFAULT_AUTH_CALLBACK_PATH = "/auth/callback";
 
 export function getAuthCallbackUrl(origin?: string) {
-  const baseOrigin =
-    origin ??
-    (typeof window !== "undefined"
-      ? window.location.origin
-      : process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000");
+  const baseOrigin = origin ?? (typeof window !== "undefined" ? window.location.origin : getSiteUrl());
 
   return new URL(DEFAULT_AUTH_CALLBACK_PATH, baseOrigin).toString();
 }

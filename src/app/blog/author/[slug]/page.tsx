@@ -4,6 +4,7 @@ import { BlogAuthorPageContent } from "../../../../../components/blog/BlogAuthor
 import { JsonLd } from "../../../../../components/blog/JsonLd";
 import { blogAuthors, getBlogAuthor } from "@/lib/blog/authors";
 import { getPostsByAuthor } from "@/lib/blog/posts";
+import { getAbsoluteUrl } from "@/lib/siteUrl";
 
 type AuthorPageProps = {
   params: Promise<{ slug: string }>;
@@ -33,7 +34,7 @@ export async function generateMetadata({ params }: AuthorPageProps): Promise<Met
       description,
       title,
       type: "profile",
-      url: `https://putwatermark.com/blog/author/${author.slug}`,
+      url: getAbsoluteUrl(`/blog/author/${author.slug}`),
     },
     title,
   };
@@ -57,9 +58,9 @@ export default async function BlogAuthorPage({ params }: AuthorPageProps) {
       description: author.bio,
       jobTitle: author.credentials,
       name: author.name,
-      url: `https://putwatermark.com/blog/author/${author.slug}`,
+      url: getAbsoluteUrl(`/blog/author/${author.slug}`),
     },
-    url: `https://putwatermark.com/blog/author/${author.slug}`,
+    url: getAbsoluteUrl(`/blog/author/${author.slug}`),
   };
   const itemListJsonLd = {
     "@context": "https://schema.org",
@@ -69,7 +70,7 @@ export default async function BlogAuthorPage({ params }: AuthorPageProps) {
       item: {
         "@type": "BlogPosting",
         headline: post.title,
-        url: `https://putwatermark.com/blog/${post.slug}`,
+        url: getAbsoluteUrl(`/blog/${post.slug}`),
       },
       position: index + 1,
     })),
