@@ -3,9 +3,9 @@
 import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
+import { EmailOtpVerification } from "../auth/EmailOtpVerification";
 import { Button } from "../Button";
 import { LoadingIndicator } from "../LoadingIndicator";
-import { getAuthCallbackUrl } from "../../src/lib/authRedirect";
 import { createClient } from "../../utils/supabase/client";
 
 export type ExportLoginGatePhase = "auth" | "saving" | "verify-email";
@@ -17,6 +17,7 @@ type ExportLoginGateModalProps = {
   onAuthenticated: () => void;
   open: boolean;
   phase: ExportLoginGatePhase;
+  verificationEmail?: string;
 };
 
 type AuthMode = "login" | "signup";
@@ -45,6 +46,7 @@ export function ExportLoginGateModal({
   onAuthenticated,
   open,
   phase,
+  verificationEmail = "",
 }: ExportLoginGateModalProps) {
   const titleId = useId();
   const descriptionId = useId();
@@ -94,14 +96,23 @@ export function ExportLoginGateModal({
     setIsSubmitting(true);
 
     try {
+      const email = values.email.trim();
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: values.email.trim(),
+        email,
         password: values.password,
       });
 
       if (error) {
+        const normalizedMessage = error.message.toLowerCase();
+
+        if (normalizedMessage.includes("email not confirmed")) {
+          setPendingVerificationEmail(email);
+          setFormError("");
+          return;
+        }
+
         setFormError(
-          error.message.toLowerCase().includes("invalid login credentials")
+          normalizedMessage.includes("invalid login credentials")
             ? "Invalid login credentials. Check your email and password, then try again."
             : error.message,
         );
@@ -109,7 +120,7 @@ export function ExportLoginGateModal({
       }
 
       if (!data.user?.email_confirmed_at) {
-        setPendingVerificationEmail(values.email.trim());
+        setPendingVerificationEmail(email);
         setFormError("");
         return;
       }
@@ -146,10 +157,10 @@ export function ExportLoginGateModal({
         password: values.password,
         options: {
           data: {
-            first_name: name,
-            last_name: surname,
+            name,
+            surname,
+            marketing_consent: false,
           },
-          emailRedirectTo: `${getAuthCallbackUrl()}?next=${encodeURIComponent("/watermark")}`,
         },
       });
 
@@ -170,8 +181,8 @@ export function ExportLoginGateModal({
     }
   }
 
-  const showVerifyEmail =
-    phase === "verify-email" || Boolean(pendingVerificationEmail);
+  const otpEmail = pendingVerificationEmail || verificationEmail;
+  const showVerifyEmail = phase === "verify-email" || Boolean(otpEmail);
 
   return (
     <div
@@ -193,11 +204,12 @@ export function ExportLoginGateModal({
                 Export
               </p>
               <h2 className="mt-1 text-lg font-semibold leading-snug text-ed-fg" id={titleId}>
-                Sign in to export your file
+                {showVerifyEmail ? "Verify your email" : "Sign in to export your file"}
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-ed-fg-muted" id={descriptionId}>
-                Create a free account or log in to download your watermarked export. Your current
-                edits are saved for 48 hours.
+                {showVerifyEmail
+                  ? "Enter the code we sent to your email to finish verifying your account. Your current edits stay saved for 48 hours."
+                  : "Create a free account or log in to download your watermarked export. Your current edits are saved for 48 hours."}
               </p>
             </div>
 
@@ -231,22 +243,15 @@ export function ExportLoginGateModal({
             </p>
           ) : null}
 
-          {showVerifyEmail ? (
-            <div className="space-y-4">
-              <p className="text-sm leading-relaxed text-ed-fg">
-                Confirm your email
-                {pendingVerificationEmail ? ` (${pendingVerificationEmail})` : ""}, then click
-                Export again. Your draft stays saved for 48 hours.
-              </p>
-              <Button
-                as="button"
-                className="w-full border border-ed-border bg-transparent text-ed-fg hover:scale-100 hover:bg-ed-fg/10 hover:brightness-100"
-                onClick={onClose}
-                type="button"
-              >
-                Back to editor
-              </Button>
-            </div>
+          {showVerifyEmail && otpEmail ? (
+            <EmailOtpVerification
+              key={otpEmail}
+              dismissLabel="Back to editor"
+              email={otpEmail}
+              onDismiss={onClose}
+              onVerified={onAuthenticated}
+              variant="editor"
+            />
           ) : phase === "auth" ? (
             <>
               <div className="mb-4 flex editor-segment-track rounded-full p-1">

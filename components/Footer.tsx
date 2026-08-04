@@ -5,12 +5,19 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import type { IconType } from "react-icons";
 import { SiTiktok, SiX, SiYoutube } from "react-icons/si";
+import { ContactSupportModal } from "./ContactSupportModal";
 import { LandingHighlight } from "./landing/LandingPrimitives";
 import { pageContainerClass } from "./pageContainer";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const navigationLinks = [
+type FooterLink = {
+  href: string;
+  label: string;
+  opensContactModal?: boolean;
+};
+
+const navigationLinks: readonly FooterLink[] = [
   { label: "Home", href: "/" },
   { label: "Features", href: "/features" },
   { label: "About", href: "/about" },
@@ -18,8 +25,8 @@ const navigationLinks = [
   { label: "Blog", href: "/blog" },
   { label: "Pricing", href: "/pricing" },
   { label: "Account", href: "/account" },
-  { label: "Contact", href: "mailto:hello@putwatermark.com" },
-] as const;
+  { label: "Contact", href: "#", opensContactModal: true },
+];
 
 const legalLinks = [
   { label: "Privacy Policy", href: "/privacy" },
@@ -52,9 +59,11 @@ const socialLinks: readonly {
 
 function FooterLinkColumn({
   links,
+  onContactClick,
   title,
 }: {
-  links: readonly { label: string; href: string }[];
+  links: readonly FooterLink[];
+  onContactClick?: () => void;
   title: string;
 }) {
   return (
@@ -63,12 +72,22 @@ function FooterLinkColumn({
         {title}
       </p>
       <ul className="mt-5 space-y-3">
-        {links.map(({ label, href }) => (
+        {links.map(({ label, href, opensContactModal }) => (
           <li key={label}>
-            {href.startsWith("mailto:") || href.startsWith("http") || href === "#" ? (
+            {opensContactModal ? (
+              <button
+                className="landing-muted text-left text-sm transition hover:text-beige"
+                onClick={onContactClick}
+                type="button"
+              >
+                {label}
+              </button>
+            ) : href.startsWith("http") ? (
               <a
                 className="landing-muted text-sm transition hover:text-beige"
                 href={href}
+                rel="noopener noreferrer"
+                target="_blank"
               >
                 {label}
               </a>
@@ -119,6 +138,7 @@ export function Footer() {
   const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
 
   async function handleSubscribe(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -284,7 +304,11 @@ export function Footer() {
             </form>
           </div>
 
-          <FooterLinkColumn links={navigationLinks} title="Navigation" />
+          <FooterLinkColumn
+            links={navigationLinks}
+            onContactClick={() => setIsContactModalOpen(true)}
+            title="Navigation"
+          />
           <FooterLinkColumn links={legalLinks} title="Legal" />
           <FooterSocialColumn />
         </div>
@@ -297,12 +321,13 @@ export function Footer() {
           </p>
 
           <div className="text-sm leading-7">
-            <a
+            <button
               className="text-beige transition hover:text-signal"
-              href="mailto:hello@putwatermark.com"
+              onClick={() => setIsContactModalOpen(true)}
+              type="button"
             >
-              hello@putwatermark.com
-            </a>
+              Contact support
+            </button>
             <p className="mt-1 text-lg font-semibold tracking-[-0.02em] text-beige">
               No install required
             </p>
@@ -334,6 +359,11 @@ export function Footer() {
         </p>
       </div>
     </footer>
+
+      <ContactSupportModal
+        onClose={() => setIsContactModalOpen(false)}
+        open={isContactModalOpen}
+      />
     </>
   );
 }

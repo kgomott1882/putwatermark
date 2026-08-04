@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useMemo, useState } from "react";
 import { AuthPageCard, AuthPageShell } from "../../../components/auth/AuthPageCard";
+import { EmailOtpVerification } from "../../../components/auth/EmailOtpVerification";
 import { Button } from "../../../components/Button";
-import { getAuthCallbackUrl } from "../../lib/authRedirect";
 import { createClient } from "../../../utils/supabase/client";
 
 type FormValues = {
@@ -31,9 +31,6 @@ const initialValues: FormValues = {
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const minimumPasswordLength = 8;
 
-const verificationPendingMessage =
-  "Check your email to verify your PutWatermark account. If nothing arrives in a few minutes, check spam or resend below.";
-
 export default function SignupPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -43,8 +40,6 @@ export default function SignupPage() {
   const [accountExists, setAccountExists] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isResending, setIsResending] = useState(false);
-  const [resendMessage, setResendMessage] = useState("");
 
   async function fetchEmailStatus(email: string) {
     const response = await fetch("/api/auth/email-exists", {
@@ -103,7 +98,6 @@ export default function SignupPage() {
       [key]: undefined,
     }));
     setFormError("");
-    setResendMessage("");
     setAccountExists(false);
   }
 
@@ -138,34 +132,9 @@ export default function SignupPage() {
     return Object.keys(nextErrors).length === 0;
   }
 
-  async function handleResendConfirmation(email: string) {
-    setIsResending(true);
-    setResendMessage("");
-
-    const { error } = await supabase.auth.resend({
-      type: "signup",
-      email,
-      options: {
-        emailRedirectTo: getAuthCallbackUrl(),
-      },
-    });
-
-    setIsResending(false);
-
-    if (error) {
-      setResendMessage(
-        "Could not resend the confirmation email. Wait a minute and try again.",
-      );
-      return;
-    }
-
-    setResendMessage("Confirmation email sent. Check your inbox and spam folder.");
-  }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError("");
-    setResendMessage("");
     setAccountExists(false);
     setPendingEmail("");
 
@@ -185,7 +154,6 @@ export default function SignupPage() {
         email,
         password: values.password,
         options: {
-          emailRedirectTo: getAuthCallbackUrl(),
           data: {
             name: values.name.trim(),
             surname: values.surname.trim(),
@@ -199,9 +167,7 @@ export default function SignupPage() {
         return;
       }
 
-      setPendingEmail(email);
-
-      if (data.session) {
+      if (data.session?.user?.email_confirmed_at) {
         router.push("/account");
         return;
       }
@@ -209,8 +175,6 @@ export default function SignupPage() {
       const identities = data.user?.identities ?? [];
 
       if (data.user && identities.length === 0) {
-        setPendingEmail("");
-
         if (await resolveExistingEmail(email)) {
           return;
         }
@@ -219,12 +183,20 @@ export default function SignupPage() {
         return;
       }
 
-      setValues(initialValues);
+      showVerificationPending(email);
     } catch {
       setFormError("Could not create your account. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function handleOtpVerified() {
+    router.push("/account");
+  }
+
+  function handleDismissOtpVerification() {
+    setPendingEmail("");
   }
 
   const isVerificationPending = Boolean(pendingEmail) && !accountExists;
@@ -236,10 +208,10 @@ export default function SignupPage() {
         kicker={isVerificationPending ? "Almost there" : "Start free"}
         lead={
           isVerificationPending
-            ? `We sent a confirmation link to ${pendingEmail}.`
+            ? "We sent a verification code to your email."
             : "Verify your email before logging in."
         }
-        title={isVerificationPending ? "Check your email" : "Create your account"}
+        title={isVerificationPending ? "Verify your email" : "Create your account"}
       >
         {accountExists ? (
           <div className="auth-alert mt-8 px-4 py-4">
@@ -257,21 +229,16 @@ export default function SignupPage() {
         ) : null}
 
         {isVerificationPending ? (
-          <div className="auth-notice mt-8 px-5 py-5 leading-6">
-            <p>{verificationPendingMessage}</p>
-            {resendMessage ? (
-              <p className="auth-notice mt-4 px-4 py-3">{resendMessage}</p>
-            ) : null}
-            <button
-              className="mt-5 text-sm font-medium text-ink underline decoration-ink/10 underline-offset-4 transition hover:text-signal hover:decoration-signal disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isResending}
-              onClick={() => handleResendConfirmation(pendingEmail)}
-              type="button"
-            >
-              {isResending ? "Sending..." : "Resend confirmation email"}
-            </button>
+          <div className="mt-8">
+            <EmailOtpVerification
+              key={pendingEmail}
+              dismissLabel="Back to signup"
+              email={pendingEmail}
+              onDismiss={handleDismissOtpVerification}
+              onVerified={handleOtpVerified}
+            />
             <p className="mt-6 text-center text-sm text-battleship">
-              Already confirmed?{" "}
+              Already verified?{" "}
               <Link className="auth-link" href="/login">
                 Log in
               </Link>

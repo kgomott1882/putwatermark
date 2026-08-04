@@ -2392,9 +2392,10 @@ export default function WatermarkPage() {
     }
 
     if (isAuthenticated && !isEmailConfirmed) {
-      setExportNotice(
-        "Confirm your email, then click Export again. Your draft stays saved for 48 hours.",
-      );
+      setExportNotice("");
+      setLoginGateError("");
+      setLoginGatePhase("verify-email");
+      setShowExportLoginGate(true);
       return;
     }
 
@@ -11796,6 +11797,7 @@ export default function WatermarkPage() {
         onClose={handleDismissExportLoginGate}
         open={showExportLoginGate}
         phase={loginGatePhase}
+        verificationEmail={userEmail ?? ""}
       />
 
       <SignFillCreditsRequiredModal
