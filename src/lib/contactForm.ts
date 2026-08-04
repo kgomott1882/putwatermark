@@ -1,4 +1,8 @@
 import { Resend } from "resend";
+import {
+  buildContactFormNotificationEmail,
+  buildContactFormNotificationSubject,
+} from "./contactFormEmailTemplate";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const maxNameLength = 120;
@@ -46,15 +50,6 @@ function normalizeTopic(topic: string): ContactTopic {
   }
 
   throw new ContactFormError("Choose a valid topic.");
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
 }
 
 export function validateContactFormInput(input: ContactFormInput) {
@@ -116,26 +111,23 @@ export async function sendContactFormEmail(
   const from = process.env.CONTACT_FROM_EMAIL!.trim();
   const to = process.env.CONTACT_TO_EMAIL!.trim();
   const topicLabel = getTopicLabel(input.topic);
+  const notification = buildContactFormNotificationEmail({
+    email: input.email,
+    message: input.message,
+    name: input.name,
+    topicLabel,
+  });
 
   const { error } = await resend.emails.send({
     from,
     to,
     replyTo: input.email,
-    subject: `[PutWatermark ${topicLabel}] Message from ${input.name}`,
-    text: [
-      `Topic: ${topicLabel}`,
-      `Name: ${input.name}`,
-      `Email: ${input.email}`,
-      "",
-      input.message,
-    ].join("\n"),
-    html: `
-      <p><strong>Topic:</strong> ${escapeHtml(topicLabel)}</p>
-      <p><strong>Name:</strong> ${escapeHtml(input.name)}</p>
-      <p><strong>Email:</strong> ${escapeHtml(input.email)}</p>
-      <hr />
-      <p>${escapeHtml(input.message).replaceAll("\n", "<br />")}</p>
-    `,
+    subject: buildContactFormNotificationSubject({
+      name: input.name,
+      topicLabel,
+    }),
+    text: notification.text,
+    html: notification.html,
   });
 
   if (error) {
