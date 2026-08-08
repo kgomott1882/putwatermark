@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useMemo, useState } from "react";
+import { AuthMethodChoice } from "../../../components/auth/AuthMethodChoice";
 import { AuthPageCard, AuthPageShell } from "../../../components/auth/AuthPageCard";
 import { EmailOtpVerification } from "../../../components/auth/EmailOtpVerification";
 import { Button } from "../../../components/Button";
+import { signInWithGoogle } from "../../lib/authOAuth";
 import { createClient } from "../../../utils/supabase/client";
 
 type FormValues = {
@@ -40,6 +42,9 @@ export default function SignupPage() {
   const [accountExists, setAccountExists] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [authMethod, setAuthMethod] = useState<"choice" | "email">("choice");
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState("");
 
   async function fetchEmailStatus(email: string) {
     const response = await fetch("/api/auth/email-exists", {
@@ -199,8 +204,28 @@ export default function SignupPage() {
     setPendingEmail("");
   }
 
+  async function handleContinueWithGoogle() {
+    setGoogleError("");
+    setIsGoogleLoading(true);
+
+    try {
+      const { error } = await signInWithGoogle(supabase, "/account");
+
+      if (error) {
+        setGoogleError(error.message);
+      }
+    } catch {
+      setGoogleError("Could not start Google sign-in. Please try again.");
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  }
+
   const isVerificationPending = Boolean(pendingEmail) && !accountExists;
-  const showSignupForm = !isVerificationPending && !accountExists;
+  const showMethodChoice =
+    !isVerificationPending && !accountExists && authMethod === "choice";
+  const showSignupForm =
+    !isVerificationPending && !accountExists && authMethod === "email";
 
   return (
     <AuthPageShell>
@@ -209,7 +234,9 @@ export default function SignupPage() {
         lead={
           isVerificationPending
             ? "We sent a verification code to your email."
-            : "Verify your email before logging in."
+            : showMethodChoice
+              ? "Choose how you want to create your account."
+              : "Verify your email before logging in."
         }
         title={isVerificationPending ? "Verify your email" : "Create your account"}
       >
@@ -244,11 +271,37 @@ export default function SignupPage() {
               </Link>
             </p>
           </div>
+        ) : showMethodChoice ? (
+          <AuthMethodChoice
+            footer={
+              <>
+                Already have an account?{" "}
+                <Link className="auth-link" href="/login">
+                  Log in
+                </Link>
+              </>
+            }
+            googleError={googleError}
+            isGoogleLoading={isGoogleLoading}
+            onContinueWithEmail={() => {
+              setGoogleError("");
+              setAuthMethod("email");
+            }}
+            onContinueWithGoogle={handleContinueWithGoogle}
+          />
         ) : showSignupForm ? (
           <>
             {formError ? <div className="auth-alert mt-8">{formError}</div> : null}
 
-            <form className="mt-8 space-y-5" onSubmit={handleSubmit} noValidate>
+            <button
+              className="auth-link mt-8 text-sm"
+              onClick={() => setAuthMethod("choice")}
+              type="button"
+            >
+              ← Other sign-up options
+            </button>
+
+            <form className="mt-4 space-y-5" onSubmit={handleSubmit} noValidate>
               <Field
                 error={errors.name}
                 label="Name"

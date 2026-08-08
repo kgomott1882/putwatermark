@@ -2,9 +2,11 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, type FormEvent, useMemo, useState } from "react";
+import { AuthMethodChoice } from "../../../components/auth/AuthMethodChoice";
 import { AuthPageCard, AuthPageShell } from "../../../components/auth/AuthPageCard";
 import { EmailOtpVerification } from "../../../components/auth/EmailOtpVerification";
 import { Button } from "../../../components/Button";
+import { signInWithGoogle } from "../../lib/authOAuth";
 import { createClient } from "../../../utils/supabase/client";
 
 type FormValues = {
@@ -52,6 +54,12 @@ function LoginPageContent() {
   const hasConfirmationError = searchParams.get("error") === "confirmation_failed";
   const hasExpiredLinkError = searchParams.get("error") === "link_expired";
   const nextPath = getSafeRedirectPath(searchParams.get("next"));
+  const skipMethodChoice = hasConfirmationError || hasExpiredLinkError;
+  const [authMethod, setAuthMethod] = useState<"choice" | "email">(
+    skipMethodChoice ? "email" : "choice",
+  );
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState("");
 
   function updateValue(key: keyof FormValues, value: string) {
     setValues((currentValues) => ({
@@ -113,7 +121,26 @@ function LoginPageContent() {
     setPendingVerificationEmail("");
   }
 
+  async function handleContinueWithGoogle() {
+    setGoogleError("");
+    setIsGoogleLoading(true);
+
+    try {
+      const { error } = await signInWithGoogle(supabase, nextPath);
+
+      if (error) {
+        setGoogleError(error.message);
+      }
+    } catch {
+      setGoogleError("Could not start Google sign-in. Please try again.");
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  }
+
   const showOtpVerification = Boolean(pendingVerificationEmail);
+  const showMethodChoice = !showOtpVerification && authMethod === "choice";
+  const showLoginForm = !showOtpVerification && authMethod === "email";
 
   return (
     <AuthPageShell>
@@ -122,7 +149,9 @@ function LoginPageContent() {
         lead={
           showOtpVerification
             ? "Enter the verification code we sent to your email."
-            : undefined
+            : showMethodChoice
+              ? "Choose how you want to log in."
+              : undefined
         }
         title={showOtpVerification ? "Verify your email" : "Log in"}
       >
@@ -150,11 +179,42 @@ function LoginPageContent() {
               onVerified={handleOtpVerified}
             />
           </div>
-        ) : (
+        ) : showMethodChoice ? (
+          <AuthMethodChoice
+            footer={
+              <>
+                Don&apos;t have an account?{" "}
+                <a className="auth-link" href="/signup">
+                  Sign up
+                </a>
+              </>
+            }
+            googleError={googleError}
+            isGoogleLoading={isGoogleLoading}
+            onContinueWithEmail={() => {
+              setGoogleError("");
+              setAuthMethod("email");
+            }}
+            onContinueWithGoogle={handleContinueWithGoogle}
+          />
+        ) : showLoginForm ? (
           <>
             {formError ? <div className="auth-alert mt-8">{formError}</div> : null}
 
-            <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
+            {!skipMethodChoice ? (
+              <button
+                className="auth-link mt-8 text-sm"
+                onClick={() => setAuthMethod("choice")}
+                type="button"
+              >
+                ← Other log-in options
+              </button>
+            ) : null}
+
+            <form
+              className={skipMethodChoice ? "mt-8 space-y-5" : "mt-4 space-y-5"}
+              onSubmit={handleSubmit}
+            >
               <div>
                 <label className="auth-label" htmlFor="email">
                   Email
@@ -211,7 +271,7 @@ function LoginPageContent() {
               </p>
             </form>
           </>
-        )}
+        ) : null}
       </AuthPageCard>
     </AuthPageShell>
   );
