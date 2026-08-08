@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { DEFAULT_POST_AUTH_PATH } from "../../../lib/authRedirect";
 import { createClient } from "../../../../utils/supabase/server";
 
 export async function GET(request: Request) {
@@ -32,5 +33,5 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL(next, requestUrl));
   }
 
-  return NextResponse.redirect(new URL("/login?confirmed=true", requestUrl));
+  return NextResponse.redirect(new URL(DEFAULT_POST_AUTH_PATH, requestUrl));
 }

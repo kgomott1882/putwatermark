@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getAuthCallbackUrl } from "./authRedirect";
+import { DEFAULT_POST_AUTH_PATH, getAuthCallbackUrl } from "./authRedirect";
 
 function getOAuthRedirectUrl(nextPath: string) {
   const callbackUrl = new URL(getAuthCallbackUrl());
@@ -9,7 +9,7 @@ function getOAuthRedirectUrl(nextPath: string) {
 
 export async function signInWithGoogle(
   supabase: SupabaseClient,
-  nextPath = "/account",
+  nextPath = DEFAULT_POST_AUTH_PATH,
 ) {
   return supabase.auth.signInWithOAuth({
     provider: "google",

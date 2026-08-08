@@ -7,6 +7,7 @@ import { AuthPageCard, AuthPageShell } from "../../../components/auth/AuthPageCa
 import { EmailOtpVerification } from "../../../components/auth/EmailOtpVerification";
 import { Button } from "../../../components/Button";
 import { signInWithGoogle } from "../../lib/authOAuth";
+import { getSafeRedirectPath } from "../../lib/authRedirect";
 import { createClient } from "../../../utils/supabase/client";
 
 type FormValues = {
@@ -18,14 +19,6 @@ const initialValues: FormValues = {
   email: "",
   password: "",
 };
-
-function getSafeRedirectPath(path: string | null) {
-  if (!path || !path.startsWith("/") || path.startsWith("//")) {
-    return "/account";
-  }
-
-  return path;
-}
 
 export default function LoginPage() {
   return (

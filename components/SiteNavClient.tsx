@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { fetchUserCreditBalance, formatCreditBalance } from "../src/lib/creditBalance";
+import { formatCreditBalance } from "../src/lib/creditBalance";
+import { fetchNavAccountData } from "../src/lib/profileDisplayName";
 import { createClient } from "../utils/supabase/client";
 import { pageContainerClass } from "./pageContainer";
 import { SiteNavAccountMenu } from "./SiteNavAccountMenu";
 
 type NavAccount = {
   creditBalance: number | null;
-  userEmail: string | null;
+  userDisplayName: string | null;
 };
 
 type SiteNavClientProps = {
@@ -51,7 +52,7 @@ export function SiteNavClient({
     : clientAccount ??
       initialAccount ?? {
         creditBalance: null,
-        userEmail: null,
+        userDisplayName: null,
       };
   const showAccountMenu = Boolean(
     isLoggedIn && (showInEditor ? editorAccount : true),
@@ -87,19 +88,23 @@ export function SiteNavClient({
       }
 
       try {
-        const balance = await fetchUserCreditBalance(supabase, user.id);
+        const navAccount = await fetchNavAccountData(
+          supabase,
+          user.id,
+          user.email,
+        );
 
         if (!cancelled) {
           setClientAccount({
-            creditBalance: balance,
-            userEmail: user.email ?? null,
+            creditBalance: navAccount.creditBalance,
+            userDisplayName: navAccount.userDisplayName || null,
           });
         }
       } catch {
         if (!cancelled) {
           setClientAccount({
             creditBalance: null,
-            userEmail: user.email ?? null,
+            userDisplayName: user.email ?? null,
           });
         }
       }
@@ -130,19 +135,23 @@ export function SiteNavClient({
 
       void (async () => {
         try {
-          const balance = await fetchUserCreditBalance(supabase, user.id);
+          const navAccount = await fetchNavAccountData(
+            supabase,
+            user.id,
+            user.email,
+          );
 
           if (!cancelled) {
             setClientAccount({
-              creditBalance: balance,
-              userEmail: user.email ?? null,
+              creditBalance: navAccount.creditBalance,
+              userDisplayName: navAccount.userDisplayName || null,
             });
           }
         } catch {
           if (!cancelled) {
             setClientAccount({
               creditBalance: null,
-              userEmail: user.email ?? null,
+              userDisplayName: user.email ?? null,
             });
           }
         }
@@ -315,7 +324,7 @@ export function SiteNavClient({
                 creditBalance={resolvedAccountData?.creditBalance ?? null}
                 editorLightTheme={showInEditor}
                 showBackToEditor={!showInEditor}
-                userEmail={resolvedAccountData?.userEmail ?? null}
+                userDisplayName={resolvedAccountData?.userDisplayName ?? null}
               />
             </>
           ) : (

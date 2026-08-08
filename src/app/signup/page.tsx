@@ -8,6 +8,7 @@ import { AuthPageCard, AuthPageShell } from "../../../components/auth/AuthPageCa
 import { EmailOtpVerification } from "../../../components/auth/EmailOtpVerification";
 import { Button } from "../../../components/Button";
 import { signInWithGoogle } from "../../lib/authOAuth";
+import { DEFAULT_POST_AUTH_PATH } from "../../lib/authRedirect";
 import { createClient } from "../../../utils/supabase/client";
 
 type FormValues = {
@@ -173,7 +174,7 @@ export default function SignupPage() {
       }
 
       if (data.session?.user?.email_confirmed_at) {
-        router.push("/account");
+        router.push(DEFAULT_POST_AUTH_PATH);
         return;
       }
 
@@ -197,7 +198,7 @@ export default function SignupPage() {
   }
 
   function handleOtpVerified() {
-    router.push("/account");
+    router.push(DEFAULT_POST_AUTH_PATH);
   }
 
   function handleDismissOtpVerification() {
@@ -209,7 +210,7 @@ export default function SignupPage() {
     setIsGoogleLoading(true);
 
     try {
-      const { error } = await signInWithGoogle(supabase, "/account");
+      const { error } = await signInWithGoogle(supabase, DEFAULT_POST_AUTH_PATH);
 
       if (error) {
         setGoogleError(error.message);

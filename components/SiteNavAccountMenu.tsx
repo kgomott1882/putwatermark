@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { formatCreditBalance } from "../src/lib/creditBalance";
+import { getDisplayNameInitial } from "../src/lib/profileDisplayName";
 import { createClient } from "../utils/supabase/client";
 
 type SiteNavAccountMenuProps = {
@@ -11,19 +12,15 @@ type SiteNavAccountMenuProps = {
   editorLightTheme?: boolean;
   onNavigate?: () => void;
   showBackToEditor?: boolean;
-  userEmail: string | null;
+  userDisplayName: string | null;
 };
-
-function getEmailInitial(email: string) {
-  return email.trim().charAt(0).toUpperCase() || "?";
-}
 
 export function SiteNavAccountMenu({
   creditBalance,
   editorLightTheme = false,
   onNavigate,
   showBackToEditor = false,
-  userEmail,
+  userDisplayName,
 }: SiteNavAccountMenuProps) {
   const router = useRouter();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -81,7 +78,7 @@ export function SiteNavAccountMenu({
   const menuHeaderClass = editorLightTheme
     ? "border-b border-ed-border px-4 py-2.5"
     : "border-b border-beige/10 px-4 py-2.5";
-  const menuEmailClass = editorLightTheme
+  const menuNameClass = editorLightTheme
     ? "truncate text-xs text-ed-fg"
     : "truncate text-xs text-beige";
   const menuCreditsClass = editorLightTheme
@@ -104,7 +101,7 @@ export function SiteNavAccountMenu({
         onClick={() => setIsOpen((open) => !open)}
         type="button"
       >
-        {userEmail ? getEmailInitial(userEmail) : "?"}
+        {userDisplayName ? getDisplayNameInitial(userDisplayName) : "?"}
       </button>
 
       {isOpen ? (
@@ -113,7 +110,7 @@ export function SiteNavAccountMenu({
           role="menu"
         >
           <div className={menuHeaderClass}>
-            <p className={menuEmailClass}>{userEmail}</p>
+            <p className={menuNameClass}>{userDisplayName}</p>
             {creditBalance !== null ? (
               <p className={menuCreditsClass}>
                 Credits: {formatCreditBalance(creditBalance)}

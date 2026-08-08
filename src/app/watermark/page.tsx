@@ -141,6 +141,7 @@ import {
   fetchUserCreditBalance,
   formatCreditBalance,
 } from "../../lib/creditBalance";
+import { fetchUserProfileDisplayName } from "../../lib/profileDisplayName";
 import {
   downloadBlob,
   downloadImageBlob,
@@ -1164,6 +1165,7 @@ export default function WatermarkPage() {
   const [isEmailConfirmed, setIsEmailConfirmed] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userDisplayName, setUserDisplayName] = useState<string | null>(null);
   const [showWatermarkedExportUpsell, setShowWatermarkedExportUpsell] =
     useState(false);
   const [showExportLoginGate, setShowExportLoginGate] = useState(false);
@@ -2432,6 +2434,9 @@ export default function WatermarkPage() {
     setIsAuthenticated(true);
     setIsEmailConfirmed(true);
     setUserEmail(user.email ?? null);
+    setUserDisplayName(
+      (await fetchUserProfileDisplayName(supabase, user.id, user.email)) || null,
+    );
     setShowExportLoginGate(false);
 
     const balance = await fetchUserCreditBalance(supabase, user.id);
@@ -2774,6 +2779,7 @@ export default function WatermarkPage() {
       setUserEmail(user?.email ?? null);
 
       if (!user) {
+        setUserDisplayName(null);
         setAuthChecked(true);
 
         if (!hasBootstrappedEditorRef.current) {
@@ -2784,13 +2790,17 @@ export default function WatermarkPage() {
         return;
       }
 
-      const balance = await fetchUserCreditBalance(supabase, user.id);
+      const [balance, displayName] = await Promise.all([
+        fetchUserCreditBalance(supabase, user.id),
+        fetchUserProfileDisplayName(supabase, user.id, user.email),
+      ]);
 
       if (cancelled) {
         return;
       }
 
       setCreditBalance(balance);
+      setUserDisplayName(displayName || null);
       setAuthChecked(true);
 
       if (!hasBootstrappedEditorRef.current) {
@@ -2835,9 +2845,15 @@ export default function WatermarkPage() {
       setUserEmail(user?.email ?? null);
 
       if (user) {
-        void fetchUserCreditBalance(supabase, user.id).then(setCreditBalance);
+        void Promise.all([
+          fetchUserCreditBalance(supabase, user.id).then(setCreditBalance),
+          fetchUserProfileDisplayName(supabase, user.id, user.email).then((name) =>
+            setUserDisplayName(name || null),
+          ),
+        ]);
       } else {
         setCreditBalance(null);
+        setUserDisplayName(null);
       }
     });
 
@@ -9920,7 +9936,7 @@ export default function WatermarkPage() {
           <SiteNavClient
             editorAccount={{
               creditBalance,
-              userEmail,
+              userDisplayName,
             }}
             isLoggedIn
             showInEditor

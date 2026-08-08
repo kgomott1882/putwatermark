@@ -2,6 +2,16 @@ import { getSiteUrl } from "./siteUrl";
 
 const DEFAULT_AUTH_CALLBACK_PATH = "/auth/callback";
 
+export const DEFAULT_POST_AUTH_PATH = "/watermark";
+
+export function getSafeRedirectPath(path: string | null) {
+  if (!path || !path.startsWith("/") || path.startsWith("//")) {
+    return DEFAULT_POST_AUTH_PATH;
+  }
+
+  return path;
+}
+
 export function getAuthCallbackUrl(origin?: string) {
   const baseOrigin = origin ?? (typeof window !== "undefined" ? window.location.origin : getSiteUrl());
 

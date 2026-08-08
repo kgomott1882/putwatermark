@@ -1,4 +1,4 @@
-import { fetchUserCreditBalance } from "../src/lib/creditBalance";
+import { fetchNavAccountData } from "../src/lib/profileDisplayName";
 import { createClient } from "../utils/supabase/server";
 import { SiteNavClient } from "./SiteNavClient";
 
@@ -11,21 +11,25 @@ export async function SiteNav() {
   let account:
     | {
         creditBalance: number | null;
-        userEmail: string | null;
+        userDisplayName: string | null;
       }
     | undefined;
 
   if (user) {
     try {
-      const balance = await fetchUserCreditBalance(supabase, user.id);
+      const navAccount = await fetchNavAccountData(
+        supabase,
+        user.id,
+        user.email,
+      );
       account = {
-        creditBalance: balance,
-        userEmail: user.email ?? null,
+        creditBalance: navAccount.creditBalance,
+        userDisplayName: navAccount.userDisplayName || null,
       };
     } catch {
       account = {
         creditBalance: null,
-        userEmail: user.email ?? null,
+        userDisplayName: user.email ?? null,
       };
     }
   }
