@@ -80,6 +80,30 @@ body.landing-cursor-none * {
     @apply font-medium text-ink transition hover:text-signal;
   }
 
+  @keyframes account-avatar-guide-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+      transform: scale(1);
+      box-shadow: 0 0 0 0 rgb(217 119 87 / 0%);
+    }
+
+    50% {
+      opacity: 1;
+      transform: scale(1.06);
+      box-shadow: 0 0 14px 3px rgb(217 119 87 / 55%);
+    }
+  }
+
+  .account-avatar-guide-ring {
+    animation: account-avatar-guide-pulse 1s ease-in-out infinite;
+    border: 3px solid #d97757;
+    border-radius: 9999px;
+    inset: -5px;
+    pointer-events: none;
+    position: absolute;
+  }
+
   .landing-section {
     @apply w-full border-t border-beige/10 py-24;
   }

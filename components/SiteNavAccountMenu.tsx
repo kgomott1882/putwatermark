@@ -10,16 +10,20 @@ import { createClient } from "../utils/supabase/client";
 type SiteNavAccountMenuProps = {
   creditBalance: number | null;
   editorLightTheme?: boolean;
+  onDismissPostAuthHighlight?: () => void;
   onNavigate?: () => void;
   showBackToEditor?: boolean;
+  showPostAuthHighlight?: boolean;
   userDisplayName: string | null;
 };
 
 export function SiteNavAccountMenu({
   creditBalance,
   editorLightTheme = false,
+  onDismissPostAuthHighlight,
   onNavigate,
   showBackToEditor = false,
+  showPostAuthHighlight = false,
   userDisplayName,
 }: SiteNavAccountMenuProps) {
   const router = useRouter();
@@ -54,6 +58,20 @@ export function SiteNavAccountMenu({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen]);
+
+  function dismissPostAuthHighlight() {
+    onDismissPostAuthHighlight?.();
+  }
+
+  function toggleMenu() {
+    setIsOpen((open) => {
+      if (!open) {
+        dismissPostAuthHighlight();
+      }
+
+      return !open;
+    });
+  }
 
   function closeMenu() {
     setIsOpen(false);
@@ -93,16 +111,25 @@ export function SiteNavAccountMenu({
 
   return (
     <div className="relative" ref={menuRef}>
-      <button
-        aria-expanded={isOpen}
-        aria-haspopup="menu"
-        aria-label="Account menu"
-        className={avatarButtonClass}
-        onClick={() => setIsOpen((open) => !open)}
-        type="button"
-      >
-        {userDisplayName ? getDisplayNameInitial(userDisplayName) : "?"}
-      </button>
+      <div className="relative inline-flex">
+        {showPostAuthHighlight ? (
+          <span aria-hidden className="account-avatar-guide-ring" />
+        ) : null}
+        <button
+          aria-expanded={isOpen}
+          aria-haspopup="menu"
+          aria-label={
+            showPostAuthHighlight
+              ? "Account menu — open here to go to the editor"
+              : "Account menu"
+          }
+          className={`${avatarButtonClass} relative z-10`}
+          onClick={toggleMenu}
+          type="button"
+        >
+          {userDisplayName ? getDisplayNameInitial(userDisplayName) : "?"}
+        </button>
+      </div>
 
       {isOpen ? (
         <div
@@ -121,10 +148,13 @@ export function SiteNavAccountMenu({
             <Link
               className={menuItemClass}
               href="/watermark"
-              onClick={closeMenu}
+              onClick={() => {
+                dismissPostAuthHighlight();
+                closeMenu();
+              }}
               role="menuitem"
             >
-              Back to Editor
+              {showPostAuthHighlight ? "Open Editor" : "Back to Editor"}
             </Link>
           ) : null}
           <Link

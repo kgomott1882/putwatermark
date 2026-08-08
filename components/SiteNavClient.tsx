@@ -5,6 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { formatCreditBalance } from "../src/lib/creditBalance";
 import { fetchNavAccountData } from "../src/lib/profileDisplayName";
+import {
+  clearPostAuthNavHighlight,
+  markPostAuthNavHighlight,
+  shouldShowPostAuthNavHighlight,
+} from "../src/lib/postAuthNavHighlight";
 import { createClient } from "../utils/supabase/client";
 import { pageContainerClass } from "./pageContainer";
 import { SiteNavAccountMenu } from "./SiteNavAccountMenu";
@@ -42,6 +47,7 @@ export function SiteNavClient({
     pathname === "/watermark" || pathname.startsWith("/watermark/");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [sessionLoggedIn, setSessionLoggedIn] = useState<boolean | null>(null);
+  const [showPostAuthHighlight, setShowPostAuthHighlight] = useState(false);
   const [clientAccount, setClientAccount] = useState<NavAccount | null>(
     initialAccount ?? null,
   );
@@ -61,6 +67,23 @@ export function SiteNavClient({
   useEffect(() => {
     setIsMenuOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (pathname === "/watermark" || pathname.startsWith("/watermark/")) {
+      clearPostAuthNavHighlight();
+      setShowPostAuthHighlight(false);
+      return;
+    }
+
+    setShowPostAuthHighlight(
+      !showInEditor && shouldShowPostAuthNavHighlight(pathname),
+    );
+  }, [pathname, showInEditor]);
+
+  function handleDismissPostAuthHighlight() {
+    clearPostAuthNavHighlight();
+    setShowPostAuthHighlight(false);
+  }
 
   useEffect(() => {
     const supabase = createClient();
@@ -114,12 +137,17 @@ export function SiteNavClient({
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       const loggedIn = Boolean(session?.user);
       setSessionLoggedIn(loggedIn);
 
+      if (event === "SIGNED_IN") {
+        markPostAuthNavHighlight();
+      }
+
       if (!loggedIn) {
         setClientAccount(null);
+        setShowPostAuthHighlight(false);
         return;
       }
 
@@ -323,7 +351,9 @@ export function SiteNavClient({
               <SiteNavAccountMenu
                 creditBalance={resolvedAccountData?.creditBalance ?? null}
                 editorLightTheme={showInEditor}
+                onDismissPostAuthHighlight={handleDismissPostAuthHighlight}
                 showBackToEditor={!showInEditor}
+                showPostAuthHighlight={showPostAuthHighlight}
                 userDisplayName={resolvedAccountData?.userDisplayName ?? null}
               />
             </>

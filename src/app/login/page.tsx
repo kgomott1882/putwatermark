@@ -8,6 +8,7 @@ import { EmailOtpVerification } from "../../../components/auth/EmailOtpVerificat
 import { Button } from "../../../components/Button";
 import { signInWithGoogle } from "../../lib/authOAuth";
 import { getSafeRedirectPath } from "../../lib/authRedirect";
+import { markPostAuthNavHighlight } from "../../lib/postAuthNavHighlight";
 import { createClient } from "../../../utils/supabase/client";
 
 type FormValues = {
@@ -103,10 +104,12 @@ function LoginPageContent() {
       return;
     }
 
+    markPostAuthNavHighlight();
     router.push(nextPath);
   }
 
   function handleOtpVerified() {
+    markPostAuthNavHighlight();
     router.push(nextPath);
   }
 

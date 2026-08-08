@@ -9,6 +9,7 @@ import { EmailOtpVerification } from "../../../components/auth/EmailOtpVerificat
 import { Button } from "../../../components/Button";
 import { signInWithGoogle } from "../../lib/authOAuth";
 import { DEFAULT_POST_AUTH_PATH } from "../../lib/authRedirect";
+import { markPostAuthNavHighlight } from "../../lib/postAuthNavHighlight";
 import { createClient } from "../../../utils/supabase/client";
 
 type FormValues = {
@@ -174,6 +175,7 @@ export default function SignupPage() {
       }
 
       if (data.session?.user?.email_confirmed_at) {
+        markPostAuthNavHighlight();
         router.push(DEFAULT_POST_AUTH_PATH);
         return;
       }
@@ -198,6 +200,7 @@ export default function SignupPage() {
   }
 
   function handleOtpVerified() {
+    markPostAuthNavHighlight();
     router.push(DEFAULT_POST_AUTH_PATH);
   }
 
