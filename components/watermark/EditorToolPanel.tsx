@@ -82,12 +82,17 @@ export function EditorToolPanel({
             </span>
           </button>
         ) : null}
+        {toolRail && !mobileControlsCollapsed ? (
+          <div className="editor-mobile-expanded-tool-rail shrink-0 border-b border-ed-border bg-ed-panel md:hidden">
+            {toolRail}
+          </div>
+        ) : null}
         {toolRail ? (
           <div
             className={`z-10 flex shrink-0 flex-col border-b border-ed-border bg-ed-panel md:overflow-y-auto md:border-b-0 ${
               mobileControlsCollapsed
                 ? "max-md:min-h-[2.75rem] max-md:flex-row max-md:items-stretch max-md:border-b-0"
-                : "max-md:hidden"
+                : "max-md:hidden md:flex md:flex-col"
             }`}
           >
             <div className="min-w-0 flex-1 max-md:[&_nav]:border-t-0">{toolRail}</div>

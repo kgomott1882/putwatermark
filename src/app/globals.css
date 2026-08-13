@@ -217,6 +217,10 @@ body.landing-cursor-none * {
     @apply border-emerald-200 bg-emerald-500 ring-2 ring-emerald-200/40;
   }
 
+  .editor-mobile-expanded-tool-rail nav {
+    @apply border-0 bg-transparent px-1.5 py-0.5;
+  }
+
   .editor-range {
     @apply h-1.5 w-full cursor-pointer appearance-none rounded-full bg-ed-border accent-signal;
   }

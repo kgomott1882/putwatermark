@@ -321,7 +321,7 @@ export function VideoVisibilityTimeline({
   }
 
   const trackShellClass = isDocked
-    ? "relative h-10 touch-none select-none overflow-hidden rounded-md border border-white/15 bg-black/40 max-md:h-10 md:h-[4.5rem]"
+    ? "relative h-10 touch-none select-none overflow-hidden rounded-md border border-white/15 bg-black/40 max-md:h-7 md:h-[4.5rem]"
     : "relative h-16 touch-none select-none overflow-hidden rounded-lg border border-ed-border bg-ed-bg-card shadow-sm";
 
   const rootClass = isSide
@@ -339,15 +339,21 @@ export function VideoVisibilityTimeline({
     <div className={rootClass}>
       {isDocked ? (
         <div
-          className={`flex shrink-0 items-center justify-between gap-2 border-white/10 px-3 py-1.5 max-md:py-1.5 md:gap-3 md:px-4 md:py-2.5 ${
+          className={`flex shrink-0 items-center justify-between gap-1.5 border-white/10 px-2 py-1 md:gap-3 md:px-4 md:py-2.5 ${
             isSide ? "border-b" : "border-b"
           }`}
         >
           <div className="min-w-0">
-            <p className="truncate text-[9px] font-bold uppercase tracking-[0.12em] text-white/70 md:text-[11px] md:tracking-[0.14em]">
+            <p className="truncate text-[8px] font-bold uppercase tracking-[0.1em] text-white/70 md:text-[11px] md:tracking-[0.14em]">
               {isTrim ? "Trim video" : "Visibility"}
+              {!isTrim ? (
+                <span className="font-semibold normal-case tracking-normal text-white/90 md:hidden">
+                  {" "}
+                  · {layerLabel}
+                </span>
+              ) : null}
             </p>
-            <p className="truncate text-xs font-semibold text-white md:text-sm">
+            <p className="hidden truncate text-xs font-semibold text-white md:block md:text-sm">
               {isTrim
                 ? `${formatTimelineClock(exportDurationSeconds ?? 0)} export`
                 : layerLabel}
@@ -372,17 +378,17 @@ export function VideoVisibilityTimeline({
             ) : null}
             <button
               aria-label={isPlaying ? "Pause video" : "Play video"}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20 md:h-9 md:w-9"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20 md:h-9 md:w-9"
               onClick={onTogglePlay}
               type="button"
             >
               {isPlaying ? (
-                <Pause className="h-3.5 w-3.5 md:h-4 md:w-4" fill="currentColor" />
+                <Pause className="h-3 w-3 md:h-4 md:w-4" fill="currentColor" />
               ) : (
-                <Play className="h-3.5 w-3.5 md:h-4 md:w-4" fill="currentColor" />
+                <Play className="h-3 w-3 md:h-4 md:w-4" fill="currentColor" />
               )}
             </button>
-            <span className="text-[11px] font-semibold tabular-nums text-white md:text-sm">
+            <span className="text-[10px] font-semibold tabular-nums text-white md:text-sm">
               {formatTimelineClock(displayCurrentTimeSeconds)}{" "}
               <span className="text-white/50">/</span>{" "}
               {formatTimelineClock(
@@ -400,7 +406,7 @@ export function VideoVisibilityTimeline({
           isSide
             ? "relative flex min-h-0 flex-1 flex-col justify-end px-4 py-3"
             : isDock
-              ? "relative min-h-0 flex-1 px-3 py-1.5 max-md:overflow-hidden md:px-4 md:py-3"
+              ? "relative min-h-0 flex-1 px-2 py-0.5 max-md:overflow-hidden md:px-4 md:py-3"
               : undefined
         }
         onPointerCancel={endDrag}
@@ -409,10 +415,10 @@ export function VideoVisibilityTimeline({
         ref={interactionRef}
       >
         {isDocked ? (
-          <div className="relative mb-1 h-4 md:mb-2 md:h-6">
+          <div className="relative mb-0.5 h-3 md:mb-2 md:h-6">
             {rulerMarks.map((mark) => (
               <span
-                className="absolute top-0 -translate-x-1/2 text-[8px] font-medium tabular-nums text-white/55 md:text-[10px]"
+                className="absolute top-0 -translate-x-1/2 text-[7px] font-medium tabular-nums text-white/55 md:text-[10px]"
                 key={mark}
                 style={{ left: `${timelinePercent(mark, timelineDurationSeconds)}%` }}
               >
@@ -490,7 +496,7 @@ export function VideoVisibilityTimeline({
                   />
                 ) : null}
                 {!hasRange ? (
-                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center max-md:hidden">
                     <span className="rounded-full bg-black/55 px-3 py-1 text-[11px] font-medium text-white/80">
                       {isTrim
                         ? "Drag the handles to set what to keep"
@@ -670,7 +676,7 @@ export function VideoVisibilityTimeline({
         {isDocked ? (
           <button
             aria-label={`Playhead at ${formatVideoTimeInput(currentTimeSeconds)}`}
-            className="absolute bottom-1.5 top-1.5 z-30 w-4 -translate-x-1/2 cursor-ew-resize md:bottom-3 md:top-3"
+            className="absolute bottom-1 top-1 z-30 w-3 -translate-x-1/2 cursor-ew-resize md:bottom-3 md:top-3 md:w-4"
             data-timeline-handle="playhead"
             onPointerDown={(event) =>
               beginDrag(event, "playhead", currentTimeSeconds)

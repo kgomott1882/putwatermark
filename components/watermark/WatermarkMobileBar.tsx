@@ -83,6 +83,11 @@ function LayerTabs({
       <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {layerIds.map((id, index) => (
           <button
+            aria-label={
+              type === "text"
+                ? `Text watermark ${index + 1}`
+                : `Logo watermark ${index + 1}`
+            }
             className={`shrink-0 rounded px-1 py-px text-[8px] font-semibold uppercase tracking-[0.04em] transition ${
               id === activeLayerId
                 ? "editor-selected-pill"
@@ -92,7 +97,7 @@ function LayerTabs({
             onClick={() => onLayerSelect(id)}
             type="button"
           >
-            {type === "text" ? `Text ${index + 1}` : `Logo ${index + 1}`}
+            {index + 1}
           </button>
         ))}
       </div>
