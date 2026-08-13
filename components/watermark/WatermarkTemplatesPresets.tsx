@@ -42,36 +42,70 @@ type QuickTemplatesProps = {
 };
 
 function TemplateIcon({
+  compact = false,
+  iconOnly = false,
   isSelected,
   variant,
 }: {
+  compact?: boolean;
+  iconOnly?: boolean;
   isSelected: boolean;
   variant: QuickTemplateIcon;
 }) {
-  const markColor = isSelected ? "bg-signal" : "bg-ed-fg-muted";
-  const lineColor = isSelected ? "bg-signal" : "bg-ed-fg-muted/70";
+  const markColor = iconOnly
+    ? isSelected
+      ? "bg-emerald-700"
+      : "bg-signal"
+    : isSelected
+      ? "bg-signal"
+      : "bg-ed-fg-muted";
+  const lineColor = iconOnly
+    ? isSelected
+      ? "bg-emerald-600"
+      : "bg-signal/85"
+    : isSelected
+      ? "bg-signal"
+      : "bg-ed-fg-muted/70";
+
+  const frameClassName = iconOnly
+    ? `relative block w-full rounded border bg-ed-bg-card ${
+        compact ? "h-4 border-ed-border/70" : "h-5 border-ed-border"
+      }`
+    : `relative block w-full rounded-md border border-ed-border bg-ed-bg-card ${
+        compact ? "h-5" : "h-6"
+      }`;
+
+  const cornerMarkClass = iconOnly && compact ? "h-1 w-2" : "h-1.5 w-3";
+  const centerMarkClass = iconOnly && compact ? "h-1.5 w-3.5" : "h-2 w-5";
+  const lineMarkClass = iconOnly && compact ? "h-0.5 w-2" : "h-1 w-3";
+  const sparseLineClass = iconOnly && compact ? "h-0.5 w-2.5" : "h-1 w-4";
+  const signatureMarkClass = iconOnly && compact ? "h-1 w-4" : "h-1.5 w-6";
 
   return (
-    <span className="relative block h-6 rounded-md border border-ed-border bg-ed-bg-card">
+    <span className={frameClassName}>
       {variant === "corner" ? (
         <span
-          className={`absolute bottom-1 right-1 h-1.5 w-3 rounded-full ${markColor}`}
+          className={`absolute bottom-0.5 right-0.5 rounded-full ${cornerMarkClass} ${markColor}`}
         />
       ) : null}
       {variant === "center" ? (
         <span
-          className={`absolute left-1/2 top-1/2 h-2 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full ${markColor}`}
+          className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full ${centerMarkClass} ${markColor}`}
         />
       ) : null}
       {variant === "dense" ? (
         <>
           {[0, 1, 2, 3, 4, 5].map((index) => (
             <span
-              className={`absolute h-1 w-3 rotate-[-35deg] rounded-full ${lineColor}`}
+              className={`absolute rotate-[-35deg] rounded-full ${lineMarkClass} ${lineColor}`}
               key={index}
               style={{
-                left: `${4 + (index % 3) * 11}px`,
-                top: `${5 + Math.floor(index / 3) * 9}px`,
+                left: iconOnly && compact
+                  ? `${2 + (index % 3) * 7}px`
+                  : `${4 + (index % 3) * 11}px`,
+                top: iconOnly && compact
+                  ? `${3 + Math.floor(index / 3) * 6}px`
+                  : `${5 + Math.floor(index / 3) * 9}px`,
               }}
             />
           ))}
@@ -81,11 +115,15 @@ function TemplateIcon({
         <>
           {[0, 1, 2].map((index) => (
             <span
-              className={`absolute h-1 w-4 rotate-[-35deg] rounded-full ${lineColor}`}
+              className={`absolute rotate-[-35deg] rounded-full ${sparseLineClass} ${lineColor}`}
               key={index}
               style={{
-                left: `${4 + index * 11}px`,
-                top: `${5 + index * 4}px`,
+                left: iconOnly && compact
+                  ? `${2 + index * 7}px`
+                  : `${4 + index * 11}px`,
+                top: iconOnly && compact
+                  ? `${3 + index * 3}px`
+                  : `${5 + index * 4}px`,
               }}
             />
           ))}
@@ -93,7 +131,7 @@ function TemplateIcon({
       ) : null}
       {variant === "signature" ? (
         <span
-          className={`absolute bottom-1 left-1/2 h-1.5 w-6 -translate-x-1/2 rounded-full ${markColor}`}
+          className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 rounded-full ${signatureMarkClass} ${markColor}`}
         />
       ) : null}
     </span>
@@ -107,25 +145,65 @@ export function WatermarkQuickTemplates({
   onApplyTemplate,
   quickTemplates,
 }: QuickTemplatesProps & { compact?: boolean }) {
-  return (
-    <EditorPanelSection title="Quick templates">
-      <div className={`grid grid-cols-3 ${compact ? "gap-1" : "gap-2"}`}>
+  if (compact) {
+    return (
+      <div className="flex items-center gap-1">
         {quickTemplates.map((template) => {
           const isSelected = activeTemplate === template.id;
 
           return (
             <motion.button
+              aria-label={template.label}
               aria-pressed={isSelected}
-              className={`relative rounded-lg border text-left transition-colors ${
-                compact ? "px-1 py-1" : "rounded-xl px-1.5 py-2"
-              } ${
+              className={`relative flex h-7 w-10 shrink-0 items-center justify-center rounded-md border px-1 py-0.5 shadow-sm transition ${
                 isSelected
-                  ? "border-signal text-ed-fg"
+                  ? "border-emerald-200 bg-emerald-100"
+                  : "border-signal/50 bg-signal/5 hover:border-signal/70"
+              }`}
+              key={template.id}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => onApplyTemplate(template.id)}
+              title={template.label}
+              type="button"
+              whileTap={{ scale: 0.96 }}
+              transition={{
+                type: "spring",
+                stiffness: 420,
+                damping: 28,
+              }}
+            >
+              <TemplateIcon
+                compact
+                iconOnly
+                isSelected={isSelected}
+                variant={template.icon}
+              />
+            </motion.button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <EditorPanelSection title="Quick templates">
+      <div className="grid grid-cols-3 gap-2">
+        {quickTemplates.map((template) => {
+          const isSelected = activeTemplate === template.id;
+
+          return (
+            <motion.button
+              aria-label={template.label}
+              aria-pressed={isSelected}
+              className={`relative rounded-lg border text-left px-1.5 py-2 transition-colors ${
+                isSelected
+                  ? "editor-selected-strong"
                   : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:border-signal/50 hover:text-ed-fg"
               }`}
               key={template.id}
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => onApplyTemplate(template.id)}
+              title={template.label}
               type="button"
               whileTap={{ scale: 0.96 }}
               transition={{
@@ -145,13 +223,9 @@ export function WatermarkQuickTemplates({
                   }}
                 />
               ) : null}
-              <span className="relative z-10">
+              <span className="relative z-10 block">
                 <TemplateIcon isSelected={isSelected} variant={template.icon} />
-                <span
-                  className={`mt-0.5 block truncate font-semibold leading-tight ${
-                    compact ? "text-[8px]" : "mt-1 text-[10px]"
-                  }`}
-                >
+                <span className="mt-1 block truncate text-[10px] font-semibold leading-tight">
                   {template.label}
                 </span>
               </span>
@@ -198,7 +272,7 @@ export function WatermarkPresetControls({
           aria-label="Save watermark preset"
           className={`flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] transition shadow-sm ${
             isSavingPreset
-              ? "border-2 border-signal bg-signal/15 text-ed-fg ring-2 ring-signal/30"
+              ? "editor-selected-strong"
               : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:border-signal/50 hover:text-ed-fg"
           }`}
           onClick={() => setIsSavingPreset((value) => !value)}

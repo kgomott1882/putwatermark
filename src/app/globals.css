@@ -190,7 +190,31 @@ body.landing-cursor-none * {
   }
 
   .editor-active-surface {
-    @apply border-2 border-signal bg-ed-bg shadow-[0_2px_8px_rgba(43,43,43,0.14),0_0_0_1px_rgba(217,119,87,0.45)];
+    @apply border-2 border-emerald-200 bg-emerald-100 shadow-sm;
+  }
+
+  .editor-selected {
+    @apply border border-emerald-200 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200/80;
+  }
+
+  .editor-selected-strong {
+    @apply border-2 border-emerald-200 bg-emerald-100 font-semibold text-emerald-900 shadow-sm ring-1 ring-emerald-200/60;
+  }
+
+  .editor-selected-pill {
+    @apply border border-emerald-200 bg-emerald-100 font-bold text-emerald-900 shadow-sm;
+  }
+
+  .editor-selected-ring {
+    @apply border-emerald-200 ring-2 ring-emerald-200/70;
+  }
+
+  .editor-selectable-idle {
+    @apply border border-signal/50 bg-signal/5 text-ed-fg-muted shadow-sm;
+  }
+
+  .editor-toggle-on {
+    @apply border-emerald-200 bg-emerald-500 ring-2 ring-emerald-200/40;
   }
 
   .editor-range {

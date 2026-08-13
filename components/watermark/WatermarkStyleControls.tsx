@@ -157,7 +157,7 @@ export function WatermarkStyleControls({
                 aria-pressed={fontWeight === 700}
                 className={`editor-secondary-button flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
                   fontWeight === 700
-                    ? "border-2 border-signal bg-signal/15 text-ed-fg ring-2 ring-signal/30"
+                    ? "editor-selected-strong"
                     : "text-ed-fg-muted hover:border-signal/50"
                 }`}
                 onClick={() =>
@@ -181,7 +181,7 @@ export function WatermarkStyleControls({
                     aria-pressed={isActive}
                     className={`relative h-6 w-6 rounded-full border transition ${
                       isActive
-                        ? "border-2 border-signal ring-2 ring-signal/35"
+                        ? "editor-selected-ring"
                         : "border-ed-border hover:border-signal/50"
                     }`}
                     key={value}

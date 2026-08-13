@@ -698,7 +698,7 @@ export function VideoVisibilityTimeline({
 
         {status === "error" ? (
           <p
-            className={`mt-2 text-[11px] leading-4 ${
+            className={`mt-2 hidden text-[11px] leading-4 md:block ${
               isDocked ? "text-white/60" : "text-ed-fg-muted"
             }`}
           >

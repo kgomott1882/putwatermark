@@ -306,7 +306,7 @@ export function ExportLoginGateModal({
                 <button
                   className={`flex-1 rounded-full px-3 py-2 text-sm font-medium transition ${
                     mode === "login"
-                      ? "border-2 border-signal bg-ed-bg font-semibold text-ed-fg shadow-sm ring-2 ring-signal/25"
+                      ? "editor-selected-pill"
                       : "text-ed-fg-muted hover:text-ed-fg"
                   }`}
                   onClick={() => setMode("login")}
@@ -317,7 +317,7 @@ export function ExportLoginGateModal({
                 <button
                   className={`flex-1 rounded-full px-3 py-2 text-sm font-medium transition ${
                     mode === "signup"
-                      ? "border-2 border-signal bg-ed-bg font-semibold text-ed-fg shadow-sm ring-2 ring-signal/25"
+                      ? "editor-selected-pill"
                       : "text-ed-fg-muted hover:text-ed-fg"
                   }`}
                   onClick={() => setMode("signup")}

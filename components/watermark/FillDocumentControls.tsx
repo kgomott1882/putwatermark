@@ -54,7 +54,7 @@ export function FillDocumentControls({
               <div
                 className={`flex items-center gap-1 rounded-xl border px-1 py-1 transition shadow-sm ${
                   isActive
-                    ? "border-2 border-signal bg-signal/10 ring-2 ring-signal/25"
+                    ? "editor-selected-strong"
                     : "editor-secondary-button border-ed-border bg-ed-bg hover:border-signal/40"
                 }`}
                 key={field.id}

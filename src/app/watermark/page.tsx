@@ -375,6 +375,7 @@ import {
   trimVideoBlob,
 } from "../../lib/clientVideoEdit";
 import {
+  attachVideoPreviewFramePrime,
   type BatchVideoEntry,
   createBatchVideoEntryFromFile,
   createVideoBatchId,
@@ -3157,6 +3158,20 @@ export default function WatermarkPage() {
       video.removeEventListener("loadedmetadata", syncVideoSizeFromElement);
       video.removeEventListener("loadeddata", syncVideoSizeFromElement);
     };
+  }, [mediaKind, videoUrl]);
+
+  useEffect(() => {
+    if (mediaKind !== "video" || !videoUrl) {
+      return;
+    }
+
+    const video = videoElementRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    return attachVideoPreviewFramePrime(video);
   }, [mediaKind, videoUrl]);
 
   useEffect(() => {
@@ -10426,7 +10441,7 @@ export default function WatermarkPage() {
               !isBatchImageMode &&
               mediaKind === "pdf" &&
               (isPdfLoading || pdfPages.length === 0) ? (
-                <div className="flex justify-end rounded-lg border border-ed-border bg-ed-bg-card px-2 py-1.5">
+                <div className="hidden justify-end rounded-lg border border-ed-border bg-ed-bg-card px-2 py-1.5 md:flex">
                   <EditorMediaActionButtons
                     isPdfLoading={isPdfLoading}
                     mediaKind={mediaKind}
@@ -10442,7 +10457,7 @@ export default function WatermarkPage() {
               !isBatchVideoMode &&
               mediaKind !== "pdf" &&
               !isPdfLoading ? (
-                <div className="flex justify-end rounded-lg border border-ed-border bg-ed-bg-card px-2 py-1.5">
+                <div className="hidden justify-end rounded-lg border border-ed-border bg-ed-bg-card px-2 py-1.5 md:flex">
                   <EditorMediaActionButtons
                     isPdfLoading={false}
                     mediaKind={mediaKind}
@@ -10460,14 +10475,16 @@ export default function WatermarkPage() {
                   entries={imageBatch}
                   headerActions={
                     hasMedia ? (
-                      <EditorMediaActionButtons
-                        isPdfLoading={false}
-                        mediaKind={mediaKind}
-                        onAddMoreImages={openAddMoreImagesPicker}
-                        onAddMoreVideos={openAddMoreVideosPicker}
-                        onRemove={removeLoadedMedia}
-                        onReplace={openReplaceMediaPicker}
-                      />
+                      <div className="max-md:hidden">
+                        <EditorMediaActionButtons
+                          isPdfLoading={false}
+                          mediaKind={mediaKind}
+                          onAddMoreImages={openAddMoreImagesPicker}
+                          onAddMoreVideos={openAddMoreVideosPicker}
+                          onRemove={removeLoadedMedia}
+                          onReplace={openReplaceMediaPicker}
+                        />
+                      </div>
                     ) : null
                   }
                   onRemove={removeBatchImage}
@@ -10481,14 +10498,16 @@ export default function WatermarkPage() {
                   entries={videoBatch}
                   headerActions={
                     hasMedia ? (
-                      <EditorMediaActionButtons
-                        isPdfLoading={false}
-                        mediaKind={mediaKind}
-                        onAddMoreImages={openAddMoreImagesPicker}
-                        onAddMoreVideos={openAddMoreVideosPicker}
-                        onRemove={removeLoadedMedia}
-                        onReplace={openReplaceMediaPicker}
-                      />
+                      <div className="max-md:hidden">
+                        <EditorMediaActionButtons
+                          isPdfLoading={false}
+                          mediaKind={mediaKind}
+                          onAddMoreImages={openAddMoreImagesPicker}
+                          onAddMoreVideos={openAddMoreVideosPicker}
+                          onRemove={removeLoadedMedia}
+                          onReplace={openReplaceMediaPicker}
+                        />
+                      </div>
                     ) : null
                   }
                   onRemove={removeBatchVideo}
@@ -10501,13 +10520,15 @@ export default function WatermarkPage() {
                   activeId={activePdfPageId}
                   headerActions={
                     hasMedia && !isPdfLoading ? (
-                      <EditorMediaActionButtons
-                        isPdfLoading={isPdfLoading}
-                        mediaKind={mediaKind}
-                        onAddMoreImages={openAddMoreImagesPicker}
-                        onRemove={removeLoadedMedia}
-                        onReplace={openReplaceMediaPicker}
-                      />
+                      <div className="max-md:hidden">
+                        <EditorMediaActionButtons
+                          isPdfLoading={isPdfLoading}
+                          mediaKind={mediaKind}
+                          onAddMoreImages={openAddMoreImagesPicker}
+                          onRemove={removeLoadedMedia}
+                          onReplace={openReplaceMediaPicker}
+                        />
+                      </div>
                     ) : null
                   }
                   onSelect={(id) => {
@@ -11405,7 +11426,7 @@ export default function WatermarkPage() {
                         <button
                           className={`rounded-xl border px-3 py-2 text-xs font-semibold transition shadow-sm ${
                             blurBrushSize === option.id
-                              ? "border-2 border-signal bg-signal/15 text-ed-fg ring-2 ring-signal/30"
+                              ? "editor-selected-strong"
                               : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:text-ed-fg"
                           }`}
                           key={option.id}
@@ -11737,6 +11758,7 @@ export default function WatermarkPage() {
                       controls={false}
                       key={videoUrl}
                       playsInline
+                      preload="auto"
                       ref={videoElementRef}
                       src={videoUrl}
                     />
@@ -11757,6 +11779,7 @@ export default function WatermarkPage() {
                   disablePictureInPicture
                   key={videoUrl}
                   playsInline
+                  preload="auto"
                   ref={videoElementRef}
                   src={videoUrl}
                 />
@@ -11810,7 +11833,7 @@ export default function WatermarkPage() {
                     zoomOutDisabled={previewZoomOutDisabled}
                   />
                   <PreviewCanvasMediaControls
-                    className={`pointer-events-auto absolute left-2 md:bottom-6 md:left-6 ${
+                    className={`pointer-events-auto absolute left-2 max-md:hidden md:bottom-6 md:left-6 ${
                       showMobileBottomDock
                         ? "bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))]"
                         : "bottom-14"
@@ -11882,6 +11905,18 @@ export default function WatermarkPage() {
         exportDisabled={isExportDisabled}
         exportLabel={exportButtonLabel}
         exportTitle={exportDisabledReason}
+        mediaActions={
+          hasMedia ? (
+            <EditorMediaActionButtons
+              isPdfLoading={isPdfLoading}
+              mediaKind={mediaKind}
+              onAddMoreImages={openAddMoreImagesPicker}
+              onAddMoreVideos={openAddMoreVideosPicker}
+              onRemove={removeLoadedMedia}
+              onReplace={openReplaceMediaPicker}
+            />
+          ) : null
+        }
         onExit={handleEditorExitRequest}
         onExport={handleExport}
         onRedo={redoWatermarkSettings}
@@ -12092,7 +12127,7 @@ function ImageBatchStrip({
               <button
                 className={`group relative block w-full overflow-hidden rounded-lg border transition ${
                   isActive
-                    ? "border-2 border-signal ring-2 ring-signal/35"
+                    ? "editor-selected-ring"
                     : "border-ed-border hover:border-signal/50"
                 }`}
                 onClick={() => onSelect(entry.id)}
@@ -12163,7 +12198,7 @@ function VideoBatchStrip({
               <button
                 className={`group relative block w-full overflow-hidden rounded-lg border transition ${
                   isActive
-                    ? "border-2 border-signal ring-2 ring-signal/35"
+                    ? "editor-selected-ring"
                     : "border-ed-border hover:border-signal/50"
                 }`}
                 onClick={() => onSelect(entry.id)}
@@ -12228,7 +12263,7 @@ function PdfPageStrip({
             <button
               className={`block w-full overflow-hidden rounded-lg border transition shadow-sm ${
                 isActive
-                  ? "border-2 border-signal ring-2 ring-signal/35"
+                  ? "editor-selected-ring"
                   : "border-ed-border hover:border-signal/50"
               }`}
               onClick={() => onSelect(page.id)}

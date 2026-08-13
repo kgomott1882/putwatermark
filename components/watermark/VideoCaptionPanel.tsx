@@ -80,8 +80,8 @@ export function VideoCaptionPanel({
   }
 
   return (
-    <div className="flex flex-col gap-2 max-md:gap-1.5">
-      <EditorPanelSection className="max-md:order-1" title="Style">
+    <div className="flex flex-col gap-2 max-md:gap-1">
+      <EditorPanelSection className="max-md:hidden max-md:order-1" title="Style">
         <EditorCard className="space-y-0 p-2 max-md:p-1.5 md:p-2.5">
           <label className="flex items-center justify-between gap-3 py-0.5 md:py-1">
             <span className="text-[11px] font-semibold text-ed-fg">Captions</span>
@@ -89,7 +89,7 @@ export function VideoCaptionPanel({
               aria-pressed={captionsEnabled}
               className={`relative h-5 w-9 rounded-full border shadow-sm transition-colors ${
                 captionsEnabled
-                  ? "border-signal bg-signal ring-2 ring-signal/25"
+                  ? "editor-toggle-on"
                   : "border-ed-border bg-ed-bg-card"
               }`}
               onClick={() => onCaptionsEnabledChange(!captionsEnabled)}
@@ -108,12 +108,12 @@ export function VideoCaptionPanel({
       </EditorPanelSection>
 
       <EditorPanelSection
-        className="max-md:order-2 md:order-4"
+        className="max-md:order-1 md:order-4"
         hideTitleOnMobile
         title="Caption text"
       >
         <textarea
-          className="editor-field min-h-[3rem] resize-y text-sm max-md:min-h-[2.75rem] max-md:py-2 md:min-h-[4rem]"
+          className="editor-field min-h-[3rem] resize-y text-sm max-md:!h-7 max-md:!min-h-0 max-md:resize-none max-md:!py-0.5 max-md:text-xs max-md:leading-tight md:min-h-[4rem]"
           onChange={(event) =>
             onLayerChange(activeLayer.id, { text: event.target.value })
           }
@@ -124,7 +124,7 @@ export function VideoCaptionPanel({
         <p className="mt-1 hidden text-[10px] leading-4 text-ed-fg-muted md:block">
           Drag the caption directly on the video preview to move it anywhere.
         </p>
-        <p className="mt-1 text-[9px] leading-3.5 text-ed-fg-muted md:hidden">
+        <p className="mt-0.5 hidden text-[8px] leading-3 text-ed-fg-muted md:hidden">
           Drag on preview to reposition.
         </p>
 
@@ -148,18 +148,18 @@ export function VideoCaptionPanel({
       </EditorPanelSection>
 
       {headlineControls ? (
-        <div className="max-md:order-3 md:hidden">{headlineControls}</div>
+        <div className="max-md:order-2 md:hidden">{headlineControls}</div>
       ) : null}
 
       <EditorPanelSection
-        className="max-md:order-4 md:order-2"
+        className="max-md:order-3 md:order-2"
         hideTitleOnMobile
         title="Caption"
       >
-        <div className="space-y-2 max-md:space-y-1.5">
+        <div className="space-y-2 max-md:space-y-1">
           <select
             aria-label="Font"
-            className="editor-field-sm w-full max-md:py-1.5"
+            className="editor-field-sm w-full max-md:h-5 max-md:py-0 max-md:text-[10px]"
             id="caption-panel-font-family"
             onChange={(event) =>
               onLayerChange(activeLayer.id, { fontFamily: event.target.value })
@@ -177,17 +177,17 @@ export function VideoCaptionPanel({
             ))}
           </select>
 
-          <div className="flex items-center gap-2">
-            <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.08em] text-ed-fg-muted">
+          <div className="flex items-center gap-1.5 max-md:gap-1">
+            <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.08em] text-ed-fg-muted max-md:text-[8px]">
               Text
             </span>
-            <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto overscroll-x-contain max-md:gap-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {TEXT_WATERMARK_COLOR_PALETTE.map((color) => (
                 <button
                   aria-label={color.label}
-                  className={`h-5 w-5 shrink-0 rounded-full border md:h-6 md:w-6 ${
+                  className={`h-5 w-5 shrink-0 rounded-full border max-md:h-3.5 max-md:w-3.5 md:h-6 md:w-6 ${
                     activeLayer.textColor === color.value
-                      ? "border-signal ring-2 ring-signal/30"
+                      ? "editor-selected-ring"
                       : "border-ed-border"
                   }`}
                   key={color.value}
@@ -201,16 +201,16 @@ export function VideoCaptionPanel({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.08em] text-ed-fg-muted">
+          <div className="flex items-center gap-1.5 max-md:gap-1">
+            <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.08em] text-ed-fg-muted max-md:text-[8px]">
               Bg
             </span>
-            <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto overscroll-x-contain max-md:gap-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <button
                 aria-label="Transparent background"
-                className={`h-5 w-5 shrink-0 rounded-full border bg-transparent md:h-6 md:w-6 ${
+                className={`h-5 w-5 shrink-0 rounded-full border bg-transparent max-md:h-3.5 max-md:w-3.5 md:h-6 md:w-6 ${
                   activeLayer.backgroundColor === "transparent"
-                    ? "border-signal ring-2 ring-signal/30"
+                    ? "editor-selected-ring"
                     : "border-ed-border"
                 }`}
                 onClick={() =>
@@ -223,9 +223,9 @@ export function VideoCaptionPanel({
               {TEXT_WATERMARK_COLOR_PALETTE.map((color) => (
                 <button
                   aria-label={color.label}
-                  className={`h-5 w-5 shrink-0 rounded-full border md:h-6 md:w-6 ${
+                  className={`h-5 w-5 shrink-0 rounded-full border max-md:h-3.5 max-md:w-3.5 md:h-6 md:w-6 ${
                     activeLayer.backgroundColor === color.value
-                      ? "border-signal ring-2 ring-signal/30"
+                      ? "editor-selected-ring"
                       : "border-ed-border"
                   }`}
                   key={`bg-${color.value}`}
@@ -260,7 +260,7 @@ export function VideoCaptionPanel({
               <button
                 className={`max-w-full rounded-lg border px-2 py-1 text-left transition max-md:px-1.5 max-md:py-0.5 ${
                   isActive
-                    ? "border-signal bg-signal/10 text-ed-fg"
+                    ? "editor-selected text-ed-fg"
                     : "border-ed-border bg-ed-bg text-ed-fg-muted hover:border-signal/40 hover:text-ed-fg"
                 }`}
                 key={layer.id}

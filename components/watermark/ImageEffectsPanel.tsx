@@ -91,7 +91,7 @@ export function ImageEffectsPanel({
                 aria-pressed={isSelected}
                 className={`relative w-full overflow-hidden rounded-xl border text-left transition-colors shadow-sm ${
                   isSelected
-                    ? "border-signal text-ed-fg"
+                    ? "editor-selected-strong text-ed-fg"
                     : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:border-signal/50 hover:text-ed-fg"
                 }`}
                 key={id}

@@ -308,22 +308,22 @@ function MobileHeadlineControls({
   onCaptionChange,
 }: VideoCaptionHeadlinePanelProps) {
   return (
-    <div className="space-y-1.5 rounded-lg border border-ed-border bg-ed-bg-card p-2 md:hidden">
-      <div className="flex items-center gap-2">
+    <div className="space-y-1 md:hidden">
+      <div className="flex items-center gap-1.5">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-1">
             <label
-              className="text-[9px] font-bold uppercase tracking-[0.08em] text-ed-fg"
+              className="text-[8px] font-bold uppercase tracking-[0.06em] text-ed-fg"
               htmlFor="caption-font-size-mobile"
             >
               Size
             </label>
-            <span className="text-[10px] font-semibold tabular-nums text-ed-fg">
+            <span className="text-[8px] font-semibold tabular-nums text-ed-fg-muted">
               {caption.fontSizePx}px
             </span>
           </div>
           <input
-            className="editor-range mt-1 w-full"
+            className="editor-range mt-0.5 w-full"
             id="caption-font-size-mobile"
             max={120}
             min={16}
@@ -341,9 +341,9 @@ function MobileHeadlineControls({
           <button
             aria-label="Bold"
             aria-pressed={caption.fontWeight === "bold"}
-            className={`flex h-8 w-8 items-center justify-center rounded-md border transition ${
+            className={`flex h-5 w-5 items-center justify-center rounded border transition ${
               caption.fontWeight === "bold"
-                ? "border-signal bg-signal/10 text-ed-fg"
+                ? "editor-selected"
                 : "editor-secondary-button border-ed-border text-ed-fg-muted"
             }`}
             onClick={() =>
@@ -353,14 +353,14 @@ function MobileHeadlineControls({
             }
             type="button"
           >
-            <Bold className="h-3.5 w-3.5" strokeWidth={2.5} />
+            <Bold className="h-2.5 w-2.5" strokeWidth={2.5} />
           </button>
           <button
             aria-label="Italic"
             aria-pressed={caption.fontStyle === "italic"}
-            className={`flex h-8 w-8 items-center justify-center rounded-md border transition ${
+            className={`flex h-5 w-5 items-center justify-center rounded border transition ${
               caption.fontStyle === "italic"
-                ? "border-signal bg-signal/10 text-ed-fg"
+                ? "editor-selected"
                 : "editor-secondary-button border-ed-border text-ed-fg-muted"
             }`}
             onClick={() =>
@@ -371,14 +371,14 @@ function MobileHeadlineControls({
             }
             type="button"
           >
-            <Italic className="h-3.5 w-3.5" strokeWidth={2.5} />
+            <Italic className="h-2.5 w-2.5" strokeWidth={2.5} />
           </button>
           <button
             aria-label="Underline"
             aria-pressed={caption.underline}
-            className={`flex h-8 w-8 items-center justify-center rounded-md border transition ${
+            className={`flex h-5 w-5 items-center justify-center rounded border transition ${
               caption.underline
-                ? "border-signal bg-signal/10 text-ed-fg"
+                ? "editor-selected"
                 : "editor-secondary-button border-ed-border text-ed-fg-muted"
             }`}
             onClick={() =>
@@ -386,14 +386,14 @@ function MobileHeadlineControls({
             }
             type="button"
           >
-            <Underline className="h-3.5 w-3.5" strokeWidth={2.5} />
+            <Underline className="h-2.5 w-2.5" strokeWidth={2.5} />
           </button>
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1">
-          <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.08em] text-ed-fg-muted">
+      <div className="flex items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-0.5">
+          <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.06em] text-ed-fg-muted">
             Align
           </span>
           <div className="flex flex-1 gap-0.5">
@@ -407,22 +407,22 @@ function MobileHeadlineControls({
               <button
                 aria-label={`Align ${align}`}
                 aria-pressed={caption.textAlign === align}
-                className={`flex h-7 flex-1 items-center justify-center rounded-md border transition ${
+                className={`flex h-5 flex-1 items-center justify-center rounded border transition ${
                   caption.textAlign === align
-                    ? "border-signal bg-signal/10 text-ed-fg"
+                    ? "editor-selected"
                     : "editor-secondary-button border-ed-border text-ed-fg-muted"
                 }`}
                 key={align}
                 onClick={() => onCaptionChange({ textAlign: align })}
                 type="button"
               >
-                <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
+                <Icon className="h-2.5 w-2.5" strokeWidth={2.25} />
               </button>
             ))}
           </div>
         </div>
-        <div className="flex min-w-0 flex-1 items-center gap-1">
-          <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.08em] text-ed-fg-muted">
+        <div className="flex min-w-0 flex-1 items-center gap-0.5">
+          <span className="shrink-0 text-[8px] font-bold uppercase tracking-[0.06em] text-ed-fg-muted">
             Pos
           </span>
           <div className="flex flex-1 gap-0.5">
@@ -433,10 +433,10 @@ function MobileHeadlineControls({
                   !caption.customPosition &&
                   caption.verticalPosition === position
                 }
-                className={`flex h-7 flex-1 items-center justify-center rounded-md border text-[9px] font-semibold uppercase transition ${
+                className={`flex h-5 flex-1 items-center justify-center rounded border text-[8px] font-semibold uppercase transition ${
                   !caption.customPosition &&
                   caption.verticalPosition === position
-                    ? "border-signal bg-signal/10 text-ed-fg"
+                    ? "editor-selected"
                     : "editor-secondary-button border-ed-border text-ed-fg-muted"
                 }`}
                 key={position}

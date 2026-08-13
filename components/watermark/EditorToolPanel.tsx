@@ -72,12 +72,12 @@ export function EditorToolPanel({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
         {!mobileControlsCollapsed && onToggleMobileControls ? (
           <button
-            className="flex shrink-0 items-center justify-center gap-1.5 border-b border-ed-border bg-ed-bg-card px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-ed-fg md:hidden"
+            className="flex shrink-0 items-center justify-center gap-1 border-b border-emerald-200 bg-emerald-100 px-3 py-1 text-[8px] font-bold uppercase tracking-[0.08em] text-emerald-900 transition hover:bg-emerald-200/80 md:hidden"
             onClick={onToggleMobileControls}
             type="button"
           >
-            Show preview
-            <span aria-hidden className="text-sm leading-none">
+            Preview Full Screen
+            <span aria-hidden className="text-[10px] leading-none">
               ↓
             </span>
           </button>
@@ -190,6 +190,7 @@ type EditorSegmentProps = {
   compact?: boolean;
   groupId?: string;
   onClick: () => void;
+  ultraCompact?: boolean;
 };
 
 export function EditorSegment({
@@ -199,14 +200,17 @@ export function EditorSegment({
   compact = false,
   groupId,
   onClick,
+  ultraCompact = false,
 }: EditorSegmentProps) {
   return (
     <motion.button
       aria-pressed={active}
       className={`relative rounded-md font-semibold uppercase tracking-[0.04em] transition-all ${
-        compact
-          ? "px-2 py-1 text-[10px]"
-          : "rounded-lg px-2.5 py-1.5 text-[11px] max-md:px-2 max-md:py-1 max-md:text-[10px]"
+        ultraCompact
+          ? "px-1.5 py-0.5 text-[8px]"
+          : compact
+            ? "px-2 py-1 text-[10px]"
+            : "rounded-lg px-2.5 py-1.5 text-[11px] max-md:px-2 max-md:py-1 max-md:text-[10px]"
       } ${
         active ? "font-bold text-ed-fg" : "text-ed-fg-muted hover:bg-ed-bg/70 hover:text-ed-fg"
       } ${className}`}
@@ -247,7 +251,7 @@ export function EditorPill({
       aria-pressed={active}
       className={`relative rounded-md border px-2 py-1 text-[11px] font-medium transition-all ${
         active
-          ? "border-signal font-semibold text-ed-fg"
+          ? "editor-selected border font-semibold text-ed-fg"
           : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:text-ed-fg"
       } ${className}`}
       onClick={onClick}
@@ -288,7 +292,7 @@ export function EditorGridChoice({
       aria-pressed={active}
       className={`relative h-7 rounded border text-[11px] transition-all ${
         active
-          ? "border-signal font-semibold text-ed-fg"
+          ? "editor-selected border font-semibold text-ed-fg"
           : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:text-ed-fg"
       } ${className}`}
       onClick={onClick}
@@ -354,7 +358,7 @@ export function EditorToggleRow({
         aria-pressed={checked}
         className={`relative h-5 w-9 rounded-full border shadow-sm transition-colors ${
           checked
-            ? "border-signal bg-signal ring-2 ring-signal/25"
+            ? "editor-toggle-on"
             : "border-ed-border bg-ed-bg-card"
         }`}
         onClick={onChange}

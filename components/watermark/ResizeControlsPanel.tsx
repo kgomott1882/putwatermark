@@ -148,7 +148,7 @@ export function ResizeControlsPanel({
               aria-pressed={scaleMode === id}
               className={`flex flex-col items-center gap-1 rounded-lg border px-1 py-2 text-[9px] font-bold uppercase tracking-[0.08em] transition ${
                 scaleMode === id
-                  ? "border-signal bg-ed-bg text-ed-fg shadow-sm ring-2 ring-signal/20"
+                  ? "editor-selected-strong"
                   : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:border-signal/40 hover:text-ed-fg"
               }`}
               key={id}

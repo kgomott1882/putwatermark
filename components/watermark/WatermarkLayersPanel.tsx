@@ -216,7 +216,7 @@ export function WatermarkLayersPanel({
             <button
               className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition ${
                 id === activeLayerId
-                  ? "border-2 border-signal bg-ed-bg font-bold text-ed-fg shadow-sm"
+                  ? "editor-selected-pill"
                   : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:text-ed-fg"
               }`}
               key={id}
@@ -336,7 +336,7 @@ export function WatermarkLayersPanel({
                         aria-pressed={logoLayer.isLogoBackgroundRemoved}
                         className={`mt-1 flex w-full items-center justify-between rounded-full border p-0.5 text-xs font-semibold transition ${
                           logoLayer.isLogoBackgroundRemoved
-                            ? "border-2 border-signal bg-signal/15 text-ed-fg shadow-sm ring-2 ring-signal/25"
+                            ? "editor-selected-strong"
                             : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:border-signal/40 hover:text-ed-fg"
                         }`}
                         onClick={onLogoBackgroundToggle}

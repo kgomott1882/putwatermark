@@ -39,7 +39,7 @@ function RailItem({ active, disabled, icon, label, onClick }: RailItemProps) {
     <button
       className={`flex shrink-0 flex-col items-center gap-1.5 rounded-xl px-2 py-2 text-[10px] leading-tight transition disabled:cursor-not-allowed md:gap-2 md:px-1.5 md:py-3 md:text-[11px] ${
         active
-          ? "bg-ed-bg-card text-ed-fg font-bold shadow-sm"
+          ? "editor-selected-pill"
           : disabled
             ? "font-medium text-ed-fg-muted opacity-35"
             : "font-bold text-ed-fg hover:bg-ed-bg-card/70"

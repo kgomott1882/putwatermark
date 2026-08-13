@@ -118,7 +118,7 @@ export function VideoBlurPanel({
                 <button
                   className={`rounded-md border px-1 py-0.5 text-[9px] font-semibold transition shadow-sm ${
                     brushSize === option.id
-                      ? "border-2 border-signal bg-signal/15 text-ed-fg ring-1 ring-signal/30"
+                      ? "editor-selected-strong"
                       : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:text-ed-fg"
                   }`}
                   key={option.id}
@@ -139,7 +139,7 @@ export function VideoBlurPanel({
             <button
               className={`rounded-lg border px-2 py-1 text-[10px] font-semibold transition shadow-sm md:rounded-xl md:px-3 md:py-2 md:text-xs ${
                 brushSize === option.id
-                  ? "border-2 border-signal bg-signal/15 text-ed-fg ring-2 ring-signal/30"
+                  ? "editor-selected-strong"
                   : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:text-ed-fg"
               }`}
               key={option.id}

@@ -61,7 +61,7 @@ export function EditorSubToolButton({
     <button
       className={`flex shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] leading-tight transition disabled:cursor-not-allowed md:w-full md:gap-2 md:rounded-xl md:px-1.5 md:py-3 md:text-[10px] ${
         active
-          ? "bg-ed-bg-card text-ed-fg font-bold shadow-sm"
+          ? "editor-selected-pill"
           : disabled
             ? "font-medium text-ed-fg-muted opacity-35"
             : "font-bold text-ed-fg hover:bg-ed-bg-card/70"
