@@ -1,14 +1,11 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { Plus, Trash2 } from "lucide-react";
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import {
   CAPTION_EMOJI_OPTIONS,
-  CAPTION_STYLE_PRESETS,
   getCaptionLayerSummary,
   getCaptionLayerTimingLabel,
-  type CaptionPresetId,
   type VideoCaptionLayer,
 } from "@/lib/videoCaptions";
 import { TEXT_WATERMARK_COLOR_PALETTE } from "@/lib/watermarkTextStyle";
@@ -21,6 +18,7 @@ type VideoCaptionPanelProps = {
     fonts: ReadonlyArray<{ label: string; value: string }>;
     label: string;
   }>;
+  headlineControls?: ReactNode;
   layers: VideoCaptionLayer[];
   onActiveLayerSelect: (layerId: string) => void;
   onAddLayer: () => void;
@@ -29,7 +27,6 @@ type VideoCaptionPanelProps = {
     layerId: string,
     patch: Partial<VideoCaptionLayer>,
   ) => void;
-  onPresetSelect: (layerId: string, presetId: CaptionPresetId) => void;
   onRemoveLayer: (layerId: string) => void;
   videoDurationSeconds: number;
 };
@@ -38,12 +35,12 @@ export function VideoCaptionPanel({
   activeLayerId,
   captionsEnabled,
   fontFamilyGroups,
+  headlineControls,
   layers,
   onActiveLayerSelect,
   onAddLayer,
   onCaptionsEnabledChange,
   onLayerChange,
-  onPresetSelect,
   onRemoveLayer,
   videoDurationSeconds,
 }: VideoCaptionPanelProps) {
@@ -83,10 +80,10 @@ export function VideoCaptionPanel({
   }
 
   return (
-    <div className="space-y-2">
-      <EditorPanelSection title="Style">
-        <EditorCard className="space-y-0 p-2.5">
-          <label className="flex items-center justify-between gap-3 py-1">
+    <div className="flex flex-col gap-2 max-md:gap-1.5">
+      <EditorPanelSection className="max-md:order-1" title="Style">
+        <EditorCard className="space-y-0 p-2 max-md:p-1.5 md:p-2.5">
+          <label className="flex items-center justify-between gap-3 py-0.5 md:py-1">
             <span className="text-[11px] font-semibold text-ed-fg">Captions</span>
             <button
               aria-pressed={captionsEnabled}
@@ -110,71 +107,85 @@ export function VideoCaptionPanel({
         </EditorCard>
       </EditorPanelSection>
 
-      <EditorPanelSection title="Caption">
-        <div className="grid grid-cols-2 gap-2">
-          {CAPTION_STYLE_PRESETS.map((preset) => {
-            const isSelected = activeLayer.presetId === preset.id;
+      <EditorPanelSection
+        className="max-md:order-2 md:order-4"
+        hideTitleOnMobile
+        title="Caption text"
+      >
+        <textarea
+          className="editor-field min-h-[3rem] resize-y text-sm max-md:min-h-[2.75rem] max-md:py-2 md:min-h-[4rem]"
+          onChange={(event) =>
+            onLayerChange(activeLayer.id, { text: event.target.value })
+          }
+          placeholder="Type caption headline…"
+          ref={textareaRef}
+          value={activeLayer.text}
+        />
+        <p className="mt-1 hidden text-[10px] leading-4 text-ed-fg-muted md:block">
+          Drag the caption directly on the video preview to move it anywhere.
+        </p>
+        <p className="mt-1 text-[9px] leading-3.5 text-ed-fg-muted md:hidden">
+          Drag on preview to reposition.
+        </p>
 
-            return (
-              <motion.button
-                aria-pressed={isSelected}
-                className={`flex min-h-[2.75rem] items-center justify-center rounded-lg border px-2 py-2.5 text-center transition-colors ${
-                  isSelected
-                    ? "border-signal bg-ed-bg-card text-ed-fg"
-                    : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:border-signal/50 hover:text-ed-fg"
-                }`}
-                key={preset.id}
-                onClick={() => onPresetSelect(activeLayer.id, preset.id)}
+        <div className="mt-2 hidden md:block">
+          <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.1em] text-ed-fg-muted">
+            Emoji
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {CAPTION_EMOJI_OPTIONS.map((emoji) => (
+              <button
+                className="flex h-7 w-7 items-center justify-center rounded-md border border-ed-border bg-ed-bg text-base transition hover:border-signal/50 hover:bg-ed-bg-card"
+                key={emoji}
+                onClick={() => insertEmoji(emoji)}
                 type="button"
-                whileTap={{ scale: 0.97 }}
               >
-                <span
-                  className={`block truncate text-xs font-semibold leading-tight ${preset.previewClassName}`}
-                >
-                  {preset.label}
-                </span>
-              </motion.button>
-            );
-          })}
-        </div>
-
-        <div className="mt-3 space-y-3">
-          <div>
-            <label
-              className="text-[10px] font-bold uppercase tracking-[0.1em] text-ed-fg"
-              htmlFor="caption-panel-font-family"
-            >
-              Font
-            </label>
-            <select
-              className="editor-field-sm mt-1 w-full"
-              id="caption-panel-font-family"
-              onChange={(event) =>
-                onLayerChange(activeLayer.id, { fontFamily: event.target.value })
-              }
-              value={activeLayer.fontFamily}
-            >
-              {fontFamilyGroups.map((group) => (
-                <optgroup key={group.label} label={group.label}>
-                  {group.fonts.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+                {emoji}
+              </button>
+            ))}
           </div>
+        </div>
+      </EditorPanelSection>
 
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-ed-fg">
-              Font color
-            </p>
-            <div className="mt-1 flex flex-wrap gap-1.5">
+      {headlineControls ? (
+        <div className="max-md:order-3 md:hidden">{headlineControls}</div>
+      ) : null}
+
+      <EditorPanelSection
+        className="max-md:order-4 md:order-2"
+        hideTitleOnMobile
+        title="Caption"
+      >
+        <div className="space-y-2 max-md:space-y-1.5">
+          <select
+            aria-label="Font"
+            className="editor-field-sm w-full max-md:py-1.5"
+            id="caption-panel-font-family"
+            onChange={(event) =>
+              onLayerChange(activeLayer.id, { fontFamily: event.target.value })
+            }
+            value={activeLayer.fontFamily}
+          >
+            {fontFamilyGroups.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.fonts.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+
+          <div className="flex items-center gap-2">
+            <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.08em] text-ed-fg-muted">
+              Text
+            </span>
+            <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {TEXT_WATERMARK_COLOR_PALETTE.map((color) => (
                 <button
                   aria-label={color.label}
-                  className={`h-6 w-6 rounded-full border ${
+                  className={`h-5 w-5 shrink-0 rounded-full border md:h-6 md:w-6 ${
                     activeLayer.textColor === color.value
                       ? "border-signal ring-2 ring-signal/30"
                       : "border-ed-border"
@@ -190,14 +201,14 @@ export function VideoCaptionPanel({
             </div>
           </div>
 
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-ed-fg">
-              Word background
-            </p>
-            <div className="mt-1 flex flex-wrap gap-1.5">
+          <div className="flex items-center gap-2">
+            <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.08em] text-ed-fg-muted">
+              Bg
+            </span>
+            <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <button
                 aria-label="Transparent background"
-                className={`h-6 w-6 rounded-full border bg-transparent ${
+                className={`h-5 w-5 shrink-0 rounded-full border bg-transparent md:h-6 md:w-6 ${
                   activeLayer.backgroundColor === "transparent"
                     ? "border-signal ring-2 ring-signal/30"
                     : "border-ed-border"
@@ -212,7 +223,7 @@ export function VideoCaptionPanel({
               {TEXT_WATERMARK_COLOR_PALETTE.map((color) => (
                 <button
                   aria-label={color.label}
-                  className={`h-6 w-6 rounded-full border ${
+                  className={`h-5 w-5 shrink-0 rounded-full border md:h-6 md:w-6 ${
                     activeLayer.backgroundColor === color.value
                       ? "border-signal ring-2 ring-signal/30"
                       : "border-ed-border"
@@ -232,41 +243,12 @@ export function VideoCaptionPanel({
         </div>
       </EditorPanelSection>
 
-      <EditorPanelSection title="Caption text">
-        <textarea
-          className="editor-field min-h-[4rem] resize-y text-sm"
-          onChange={(event) =>
-            onLayerChange(activeLayer.id, { text: event.target.value })
-          }
-          placeholder="Type caption headline…"
-          ref={textareaRef}
-          value={activeLayer.text}
-        />
-        <p className="mt-1.5 text-[10px] leading-4 text-ed-fg-muted">
-          Drag the caption directly on the video preview to move it anywhere.
-        </p>
-
-        <div className="mt-2">
-          <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.1em] text-ed-fg-muted">
-            Emoji
-          </p>
-          <div className="flex flex-wrap gap-1">
-            {CAPTION_EMOJI_OPTIONS.map((emoji) => (
-              <button
-                className="flex h-7 w-7 items-center justify-center rounded-md border border-ed-border bg-ed-bg text-base transition hover:border-signal/50 hover:bg-ed-bg-card"
-                key={emoji}
-                onClick={() => insertEmoji(emoji)}
-                type="button"
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-        </div>
-      </EditorPanelSection>
-
-      <EditorPanelSection title="Your captions">
-        <div className="flex flex-wrap gap-1.5">
+      <EditorPanelSection
+        className="max-md:order-5 md:order-5"
+        hideTitleOnMobile
+        title="Your captions"
+      >
+        <div className="flex flex-wrap gap-1 max-md:gap-0.5 md:gap-1.5">
           {layers.map((layer, index) => {
             const isActive = layer.id === activeLayer.id;
             const timingLabel = getCaptionLayerTimingLabel(
@@ -276,7 +258,7 @@ export function VideoCaptionPanel({
 
             return (
               <button
-                className={`max-w-full rounded-lg border px-2 py-1 text-left transition ${
+                className={`max-w-full rounded-lg border px-2 py-1 text-left transition max-md:px-1.5 max-md:py-0.5 ${
                   isActive
                     ? "border-signal bg-signal/10 text-ed-fg"
                     : "border-ed-border bg-ed-bg text-ed-fg-muted hover:border-signal/40 hover:text-ed-fg"
@@ -285,11 +267,11 @@ export function VideoCaptionPanel({
                 onClick={() => onActiveLayerSelect(layer.id)}
                 type="button"
               >
-                <span className="block truncate text-[10px] font-medium leading-tight">
+                <span className="block truncate text-[10px] font-medium leading-tight max-md:text-[9px]">
                   {getCaptionLayerSummary(layer, index)}
                 </span>
                 <span
-                  className={`mt-0.5 block truncate text-[8px] leading-tight ${
+                  className={`mt-0.5 block truncate text-[8px] leading-tight max-md:text-[7px] ${
                     isActive ? "text-signal/80" : "text-ed-fg-muted/80"
                   }`}
                 >
@@ -300,7 +282,7 @@ export function VideoCaptionPanel({
           })}
           <button
             aria-label="Add caption"
-            className="inline-flex items-center gap-1 rounded-full border border-dashed border-ed-border px-2 py-1 text-[10px] font-semibold text-ed-fg-muted transition hover:border-signal/50 hover:text-ed-fg"
+            className="inline-flex items-center gap-1 rounded-full border border-dashed border-ed-border px-2 py-1 text-[10px] font-semibold text-ed-fg-muted transition hover:border-signal/50 hover:text-ed-fg max-md:px-1.5 max-md:py-0.5 max-md:text-[9px]"
             onClick={onAddLayer}
             type="button"
           >
@@ -311,7 +293,7 @@ export function VideoCaptionPanel({
 
         {layers.length > 1 ? (
           <button
-            className="mt-2 inline-flex items-center gap-1 text-[10px] font-medium text-ed-fg-muted transition hover:text-ed-accent"
+            className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-medium text-ed-fg-muted transition hover:text-ed-accent max-md:mt-1 max-md:text-[9px]"
             onClick={() => onRemoveLayer(activeLayer.id)}
             type="button"
           >
@@ -320,7 +302,7 @@ export function VideoCaptionPanel({
           </button>
         ) : null}
 
-        <p className="mt-1.5 text-[10px] leading-4 text-ed-fg-muted">
+        <p className="mt-1.5 hidden text-[10px] leading-4 text-ed-fg-muted md:block">
           Add multiple captions for different times and positions. Select one
           above, then set timing on the timeline below the video.
         </p>

@@ -98,10 +98,10 @@ export const DEFAULT_TEXT_LAYER_FONT_SIZE_SCALE = 25;
 export const DEFAULT_TEXT_LAYER_OPACITY = 55;
 export const DEFAULT_TEXT_LAYER_FONT_WEIGHT: TextWatermarkFontWeight = 700;
 
-/** Above preview zoom/control icons (bottom-right) in single-text mode. */
+/** Default anchor for single text watermarks (top-left of the media frame). */
 export const DEFAULT_SINGLE_TEXT_WATERMARK_POSITION: CustomPosition = {
-  xPercent: 0.88,
-  yPercent: 0.84,
+  xPercent: 0.08,
+  yPercent: 0.08,
 };
 
 export type TextWatermarkModeDefaults = {
@@ -115,13 +115,13 @@ export type TextWatermarkModeDefaults = {
 };
 
 export const SINGLE_TEXT_WATERMARK_DEFAULTS: TextWatermarkModeDefaults = {
-  customPosition: { ...DEFAULT_SINGLE_TEXT_WATERMARK_POSITION },
+  customPosition: null,
   fontFamily: DEFAULT_TEXT_LAYER_FONT_FAMILY,
   fontSizeScale: DEFAULT_TEXT_LAYER_FONT_SIZE_SCALE,
   fontWeight: DEFAULT_TEXT_LAYER_FONT_WEIGHT,
   opacity: DEFAULT_TEXT_LAYER_OPACITY,
   textColor: DEFAULT_TEXT_WATERMARK_COLOR,
-  watermarkPosition: "bottom-right",
+  watermarkPosition: "top-left",
 };
 
 export const TILE_TEXT_WATERMARK_DEFAULTS: TextWatermarkModeDefaults = {
@@ -146,7 +146,9 @@ export function createDefaultTextLayer(
   partial?: Partial<Pick<TextWatermarkLayer, "text">>,
 ): TextWatermarkLayer {
   return {
-    customPosition: { ...SINGLE_TEXT_WATERMARK_DEFAULTS.customPosition! },
+    customPosition: SINGLE_TEXT_WATERMARK_DEFAULTS.customPosition
+      ? { ...SINGLE_TEXT_WATERMARK_DEFAULTS.customPosition }
+      : null,
     fontFamily: SINGLE_TEXT_WATERMARK_DEFAULTS.fontFamily,
     fontSizeScale: SINGLE_TEXT_WATERMARK_DEFAULTS.fontSizeScale,
     fontWeight: SINGLE_TEXT_WATERMARK_DEFAULTS.fontWeight,

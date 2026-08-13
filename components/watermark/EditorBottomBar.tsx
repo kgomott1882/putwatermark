@@ -15,6 +15,7 @@ import {
 type EditorBottomBarProps = {
   canRedo: boolean;
   canUndo: boolean;
+  className?: string;
   exportDisabled?: boolean;
   exportLabel: string;
   exportTitle?: string;
@@ -33,6 +34,7 @@ type EditorBottomBarProps = {
 export function EditorBottomBar({
   canRedo,
   canUndo,
+  className = "",
   exportDisabled,
   exportLabel,
   exportTitle,
@@ -48,7 +50,9 @@ export function EditorBottomBar({
   onZoomOut,
 }: EditorBottomBarProps) {
   return (
-    <footer className="flex shrink-0 items-center justify-between gap-1.5 border-t border-ed-border bg-ed-panel px-1.5 py-1.5 sm:gap-3 sm:px-3 sm:py-2">
+    <footer
+      className={`flex shrink-0 items-center justify-between gap-1.5 border-t border-ed-border bg-ed-panel px-1.5 py-1.5 sm:gap-3 sm:px-3 sm:py-2 ${className}`}
+    >
       <Link
         className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-signal px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.08em] text-white shadow-sm transition hover:brightness-110 md:hidden"
         href="/pricing"

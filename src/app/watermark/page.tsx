@@ -337,7 +337,6 @@ import {
 } from "../../lib/videoWatermarkVisibility";
 import { createClient } from "../../../utils/supabase/client";
 import {
-  applyCaptionPreset,
   createDefaultVideoCaptionLayer,
   createInitialVideoCaptionLayers,
   drawVideoCaption,
@@ -345,7 +344,6 @@ import {
   getTimedCaptionLayers,
   getUntimedCaptionLayers,
   isCaptionLayerActive,
-  type CaptionPresetId,
   type CaptionVerticalPosition,
   type VideoCaptionLayer,
 } from "../../lib/videoCaptions";
@@ -357,6 +355,7 @@ import {
   type VideoBlurRegion,
 } from "../../lib/videoBlurRegions";
 import {
+  getMediaFitPreviewSize,
   getVideoDisplayFrame,
   getVideoElementFrameInCanvas,
   getVideoNaturalDimensions,
@@ -1272,6 +1271,13 @@ export default function WatermarkPage() {
   const [lastPdfCompressResult, setLastPdfCompressResult] =
     useState<PdfCompressStats | null>(null);
   const [previewZoomPercent, setPreviewZoomPercent] = useState(PREVIEW_ZOOM_DEFAULT);
+  const [mobileControlsExpanded, setMobileControlsExpanded] = useState(false);
+
+  useEffect(() => {
+    if (mediaKind) {
+      setMobileControlsExpanded(false);
+    }
+  }, [mediaKind]);
   const previewZoomScale = previewZoomPercent / 100;
   const canvasSize: PreviewCanvasSize = {
     height: Math.max(240, Math.floor(previewBaseSize.height * previewZoomScale)),
@@ -2913,12 +2919,40 @@ export default function WatermarkPage() {
         240,
         Math.floor(sizeNode.clientHeight - paddingY),
       );
+      const isMobilePreview = window.matchMedia("(max-width: 767px)").matches;
+      let nextWidth = baseWidth;
+      let nextHeight = baseHeight;
+
+      if (isMobilePreview) {
+        if (mediaKind === "video" && videoSize) {
+          const fitSize = getMediaFitPreviewSize(
+            baseWidth,
+            baseHeight,
+            videoSize.width,
+            videoSize.height,
+          );
+          nextWidth = fitSize.width;
+          nextHeight = fitSize.height;
+        } else if (
+          (mediaKind === "image" || mediaKind === "pdf") &&
+          uploadedImageSize
+        ) {
+          const fitSize = getMediaFitPreviewSize(
+            baseWidth,
+            baseHeight,
+            uploadedImageSize.width,
+            uploadedImageSize.height,
+          );
+          nextWidth = fitSize.width;
+          nextHeight = fitSize.height;
+        }
+      }
 
       setPreviewBaseSize((current) => {
         const next = {
-          height: baseHeight,
+          height: nextHeight,
           pixelRatio,
-          width: baseWidth,
+          width: nextWidth,
         };
 
         if (
@@ -2941,7 +2975,13 @@ export default function WatermarkPage() {
     return () => {
       resizeObserver.disconnect();
     };
-  }, []);
+  }, [
+    activeEditorPanel,
+    mediaKind,
+    mobileControlsExpanded,
+    uploadedImageSize,
+    videoSize,
+  ]);
 
   useEffect(() => {
     const preview = videoPreviewRef.current;
@@ -5530,6 +5570,28 @@ export default function WatermarkPage() {
     );
   }
 
+  function handleTextWatermarkChange(value: string) {
+    const patch: Partial<TextWatermarkLayer> = { text: value };
+
+    if (
+      mediaKind === "video" &&
+      watermarkMode === "single" &&
+      value.trim() &&
+      !activeTextLayer.text.trim()
+    ) {
+      patch.customPosition = null;
+      patch.watermarkPosition = "top-left";
+    }
+
+    updateTextLayer(activeTextLayerId, patch);
+    setWatermarkText(value);
+
+    if (patch.watermarkPosition) {
+      setWatermarkPosition(patch.watermarkPosition);
+      setCustomPosition(null);
+    }
+  }
+
   function syncLegacyFromLogoLayer(layer: LogoWatermarkLayer) {
     setLogoImage(layer.logoImage);
     setOriginalLogoImage(layer.originalLogoImage);
@@ -5622,6 +5684,12 @@ export default function WatermarkPage() {
         imageX: frame.x,
         imageY: frame.y,
         logoLayers: paintLogoLayers,
+        resolveCustomPosition: (position) => ({
+          textAlign: "center",
+          textBaseline: "middle",
+          x: frame.x + position.xPercent * frame.width,
+          y: frame.y + position.yPercent * frame.height,
+        }),
         signatureFontSizeScale: fontSizeScale,
         signatureImage: watermarkType === "signature" ? logoImage : null,
         signatureOpacity: watermarkOpacity,
@@ -8085,12 +8153,21 @@ export default function WatermarkPage() {
     }
   }
 
+  function expandMobileControls() {
+    setMobileControlsExpanded(true);
+  }
+
+  function toggleMobileControls() {
+    setMobileControlsExpanded((current) => !current);
+  }
+
   function handlePhotoToolSelect(tool: PhotoToolId) {
     if (tool !== "watermark" && !imageToolsEnabled) {
       return;
     }
 
     if (isPhotoImageTool(tool)) {
+      expandMobileControls();
       void openPhotoImageTool(tool);
       return;
     }
@@ -8103,6 +8180,7 @@ export default function WatermarkPage() {
     cropDragRef.current = null;
     resizeDragRef.current = null;
     blurDragRef.current = null;
+    expandMobileControls();
   }
 
   function applyTextWatermarkModeDefaults(mode: WatermarkMode) {
@@ -8148,6 +8226,7 @@ export default function WatermarkPage() {
 
   function handleWatermarkToolSelect(tool: WatermarkToolId) {
     setActiveWatermarkTool(tool);
+    expandMobileControls();
 
     if (tool === "text") {
       const shouldApplySingleDefaults =
@@ -8197,6 +8276,8 @@ export default function WatermarkPage() {
       setFormatUploadPrompt(null);
       setLastPdfCompressResult(null);
     }
+
+    expandMobileControls();
   }
 
   function clearImageEditToolState() {
@@ -8223,6 +8304,8 @@ export default function WatermarkPage() {
         syncLegacyFromTextLayer(activeTextLayer);
       }
     }
+
+    expandMobileControls();
   }
 
   function handleEditorPanelSelect(panel: EditorPanelId) {
@@ -9858,19 +9941,6 @@ export default function WatermarkPage() {
     updateVideoCaptionLayer(activeVideoCaptionLayerId, patch);
   }
 
-  function handleCaptionPresetSelect(
-    layerId: string,
-    presetId: CaptionPresetId,
-  ) {
-    setVideoCaptionLayers((current) =>
-      current.map((layer) =>
-        layer.id === layerId
-          ? { ...applyCaptionPreset(layer, presetId), id: layer.id }
-          : layer,
-      ),
-    );
-  }
-
   function addVideoCaptionLayer() {
     const positions: CaptionVerticalPosition[] = ["bottom", "center", "top"];
     const nextPosition = positions[videoCaptionLayers.length % 3];
@@ -9919,18 +9989,154 @@ export default function WatermarkPage() {
             : null;
   const showMobileBottomDock = hasMedia && showEditorPanel;
   const showMobileFormatToolRail = showEditorPanel && hasMedia;
-  const reserveMobileVideoTimelineSlot =
-    mediaKind === "video" &&
-    hasMedia &&
-    activeEditorPanel === "video" &&
-    !showVideoOverviewPreview &&
-    (activeVideoTool === "caption" ||
-      activeVideoTool === "watermark" ||
-      activeVideoTool === "trim" ||
-      activeVideoTool === "blur");
+  const showMobilePreviewTopRail = showEditorPanel && (!hasMedia || showMobileFormatToolRail);
+  const mobileEditorChromeInset = showMobileBottomDock
+    ? "max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]"
+    : "";
+  const videoTimelineDock = showVideoTimelineDock ? (
+    <>
+      {showVideoTrimDock ? (
+        <VideoVisibilityTimeline
+          currentTimeSeconds={videoPreviewTime}
+          durationSeconds={videoDuration}
+          isPlaying={isVideoPlaying}
+          layout="dock"
+          onPauseVideo={() => {
+            videoElementRef.current?.pause();
+          }}
+          onResetRange={resetVideoTrim}
+          onSeek={(seconds) => seekVideoPreview(seconds, true)}
+          onTogglePlay={() => {
+            const video = videoElementRef.current;
+
+            if (!video) {
+              return;
+            }
+
+            if (video.paused) {
+              if (video.currentTime >= resolvedVideoTrim.endSeconds - 0.05) {
+                video.currentTime = resolvedVideoTrim.startSeconds;
+              }
+
+              void video.play();
+            } else {
+              video.pause();
+            }
+          }}
+          onVisibleFromChange={(value) => {
+            setVideoCropSavedNotice(false);
+            setVideoTrimStartSeconds(value ?? 0);
+          }}
+          onVisibleUntilChange={(value) => {
+            setVideoCropSavedNotice(false);
+            setVideoTrimEndSeconds(value ?? videoDuration);
+          }}
+          variant="trim"
+          videoUrl={videoUrl}
+          visibleFromSeconds={resolvedVideoTrim.startSeconds}
+          visibleUntilSeconds={resolvedVideoTrim.endSeconds}
+        />
+      ) : null}
+      {showCaptionTimelineDock ||
+      showWatermarkTimelineDock ||
+      showVideoBlurTimelineDock ? (
+        <VideoVisibilityTimeline
+          currentTimeSeconds={videoPreviewTime}
+          durationSeconds={videoDuration}
+          isPlaying={isVideoPlaying}
+          layerLabel={
+            showCaptionTimelineDock
+              ? activeVideoCaptionLayer?.text.trim() || "Caption"
+              : showVideoBlurTimelineDock
+                ? activeVideoBlurRegion?.label || "Blur"
+                : activeTextLayer.text.trim() || "Text watermark"
+          }
+          layout="dock"
+          onPauseVideo={() => {
+            videoElementRef.current?.pause();
+          }}
+          onSeek={seekVideoPreview}
+          onTogglePlay={() => {
+            const video = videoElementRef.current;
+
+            if (!video) {
+              return;
+            }
+
+            if (video.paused) {
+              void video.play();
+            } else {
+              video.pause();
+            }
+          }}
+          onVisibleFromChange={(value) => {
+            if (showCaptionTimelineDock) {
+              updateActiveVideoCaptionLayer({
+                visibleFromSeconds: value,
+              });
+              return;
+            }
+
+            if (showVideoBlurTimelineDock && activeVideoBlurRegion) {
+              updateActiveVideoBlurRegion((region) =>
+                updateVideoBlurRegionTiming(
+                  region,
+                  { visibleFromSeconds: value },
+                  videoDuration,
+                ),
+              );
+              return;
+            }
+
+            updateTextLayer(activeTextLayerId, {
+              visibleFromSeconds: value,
+            });
+          }}
+          onVisibleUntilChange={(value) => {
+            if (showCaptionTimelineDock) {
+              updateActiveVideoCaptionLayer({
+                visibleUntilSeconds: value,
+              });
+              return;
+            }
+
+            if (showVideoBlurTimelineDock && activeVideoBlurRegion) {
+              updateActiveVideoBlurRegion((region) =>
+                updateVideoBlurRegionTiming(
+                  region,
+                  { visibleUntilSeconds: value },
+                  videoDuration,
+                ),
+              );
+              return;
+            }
+
+            updateTextLayer(activeTextLayerId, {
+              visibleUntilSeconds: value,
+            });
+          }}
+          videoUrl={videoUrl}
+          visibleFromSeconds={
+            showCaptionTimelineDock
+              ? activeVideoCaptionLayer?.visibleFromSeconds
+              : showVideoBlurTimelineDock
+                ? activeVideoBlurRegion?.visibleFromSeconds
+                : activeTextLayer.visibleFromSeconds
+          }
+          visibleUntilSeconds={
+            showCaptionTimelineDock
+              ? activeVideoCaptionLayer?.visibleUntilSeconds
+              : showVideoBlurTimelineDock
+                ? activeVideoBlurRegion?.visibleUntilSeconds
+                : activeTextLayer.visibleUntilSeconds
+          }
+        />
+      ) : null}
+    </>
+  ) : null;
 
   return (
-    <div className="flex h-[94dvh] w-full flex-col overflow-hidden pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] md:h-[100svh] md:pt-0 md:pb-0">
+    <div className="flex h-[100dvh] w-full flex-col overflow-hidden pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] md:h-[100svh] md:pt-0 md:pb-0">
       {authChecked && isAuthenticated ? (
         <div className="hidden shrink-0 md:block">
           <SiteNavClient
@@ -9943,15 +10149,19 @@ export default function WatermarkPage() {
           />
         </div>
       ) : null}
-      <main className="editor-theme flex min-h-0 flex-1 w-full flex-col overflow-hidden">
+      <main className="editor-theme relative flex min-h-0 flex-1 w-full flex-col overflow-hidden">
       <WatermarkFontLoader />
       <motion.div
         className="flex min-h-0 flex-1 flex-col md:grid md:grid-cols-[auto_minmax(0,1fr)]"
         initial={false}
       >
         <div
-          className={`relative order-2 flex min-h-0 min-w-0 flex-col overflow-hidden border-t border-ed-border bg-ed-panel shadow-[0_-8px_32px_rgba(43,43,43,0.08)] max-md:h-[min(40svh,360px)] max-md:min-h-[min(40svh,360px)] max-md:max-h-[min(40svh,360px)] md:order-none md:h-full md:max-h-full md:flex-row md:border-t-0 md:border-r md:shadow-none ${
-            showMobileBottomDock ? "max-md:shrink-0" : "max-md:hidden"
+          className={`editor-mobile-controls-sheet order-2 flex min-h-0 min-w-0 flex-col overflow-hidden border-t border-ed-border bg-ed-panel shadow-[0_-8px_32px_rgba(43,43,43,0.08)] md:order-none md:relative md:bottom-auto md:h-full md:max-h-full md:flex-row md:border-t-0 md:border-r md:shadow-none ${
+            mobileControlsExpanded
+              ? "editor-mobile-controls-sheet-expanded"
+              : "editor-mobile-controls-sheet-collapsed"
+          } ${
+            showMobileBottomDock ? "" : "max-md:hidden"
           }`}
         >
           <input
@@ -10093,10 +10303,18 @@ export default function WatermarkPage() {
           </div>
 
           {showEditorPanel ? (
+            <>
+              {mobileControlsExpanded && videoTimelineDock ? (
+                <div className="shrink-0 overflow-hidden border-b border-ed-border md:hidden">
+                  {videoTimelineDock}
+                </div>
+              ) : null}
             <EditorToolPanel
               icon={editorPanelIcon}
               instant
+              mobileControlsCollapsed={!mobileControlsExpanded}
               onClose={handleEditorPanelClose}
+              onToggleMobileControls={toggleMobileControls}
               title={editorPanelTitle}
               toolRail={
                 activeEditorPanel === "photos" ? (
@@ -10476,10 +10694,7 @@ export default function WatermarkPage() {
                         setIsWatermarkHovering(false);
                       }}
                       onRemoveLayer={removeTextLayer}
-                      onTextChange={(value) => {
-                        updateTextLayer(activeTextLayerId, { text: value });
-                        setWatermarkText(value);
-                      }}
+                      onTextChange={handleTextWatermarkChange}
                       onTextColorChange={(value) => {
                         if (shouldIgnoreManualSettingsChange()) {
                           return;
@@ -10582,10 +10797,7 @@ export default function WatermarkPage() {
                       applyTextWatermarkModeDefaults(value);
                     }}
                     onRemoveLayer={removeTextLayer}
-                    onTextChange={(value) => {
-                      updateTextLayer(activeTextLayerId, { text: value });
-                      setWatermarkText(value);
-                    }}
+                    onTextChange={handleTextWatermarkChange}
                     onTextColorChange={(value) => {
                       if (shouldIgnoreManualSettingsChange()) {
                         return;
@@ -11241,6 +11453,16 @@ export default function WatermarkPage() {
                     activeLayerId={activeVideoCaptionLayerId}
                     captionsEnabled={captionsMasterEnabled}
                     fontFamilyGroups={watermarkFontFamilyGroups}
+                    headlineControls={
+                      activeVideoCaptionLayer ? (
+                        <VideoCaptionHeadlinePanel
+                          caption={activeVideoCaptionLayer}
+                          onCaptionChange={(patch) => {
+                            updateActiveVideoCaptionLayer(patch);
+                          }}
+                        />
+                      ) : null
+                    }
                     layers={videoCaptionLayers}
                     onActiveLayerSelect={setActiveVideoCaptionLayerId}
                     onAddLayer={addVideoCaptionLayer}
@@ -11252,20 +11474,9 @@ export default function WatermarkPage() {
                         void loadWatermarkFont(patch.fontFamily, 700);
                       }
                     }}
-                    onPresetSelect={handleCaptionPresetSelect}
                     onRemoveLayer={removeVideoCaptionLayer}
                     videoDurationSeconds={videoDuration}
                   />
-                  {activeVideoCaptionLayer ? (
-                    <div className="md:hidden">
-                      <VideoCaptionHeadlinePanel
-                        caption={activeVideoCaptionLayer}
-                        onCaptionChange={(patch) => {
-                          updateActiveVideoCaptionLayer(patch);
-                        }}
-                      />
-                    </div>
-                  ) : null}
                 </>
               ) : activeVideoTool === "trim" ? (
                 <VideoTrimPanel
@@ -11323,6 +11534,7 @@ export default function WatermarkPage() {
           ) : null}
 
             </EditorToolPanel>
+            </>
           ) : null}
 
           {uploadError ? (
@@ -11362,7 +11574,7 @@ export default function WatermarkPage() {
                 showVideoTimelineDock ? "overflow-hidden" : ""
               }`}
             >
-              <div className="shrink-0 border-b border-ed-border bg-ed-panel md:hidden">
+              <div className="editor-mobile-preview-overlay-rail shrink-0 border-b border-ed-border bg-ed-panel md:hidden">
                 {!hasMedia ? (
                   <ToolIconRail
                     activePanel={highlightedEditorPanel}
@@ -11374,7 +11586,7 @@ export default function WatermarkPage() {
                 ) : null}
               </div>
               {showMobileFormatToolRail ? (
-                <div className="shrink-0 border-b border-ed-border bg-ed-panel md:hidden">
+                <div className="editor-mobile-preview-overlay-rail shrink-0 border-b border-ed-border bg-ed-panel md:hidden md:relative">
                   {activeEditorPanel === "photos" ? (
                     <PhotosToolRail
                       activeTool={activePhotoTool}
@@ -11401,18 +11613,20 @@ export default function WatermarkPage() {
                   ) : null}
                 </div>
               ) : null}
-              <div className="relative min-h-0 flex-1">
+              <div className="relative min-h-0 flex-1 max-md:absolute max-md:inset-0">
               <div
                 ref={previewCheckerboardRef}
                 className={`editor-checkerboard group absolute inset-0 ${
+                  showMobilePreviewTopRail ? "max-md:pt-11" : ""
+                } ${
                   showVideoTimelineDock
                     ? previewZoomPercent > PREVIEW_ZOOM_DEFAULT && hasPreviewContent
-                      ? "overflow-auto p-3 md:p-6"
-                      : "overflow-hidden p-3 md:p-6"
+                      ? "overflow-auto p-0 md:p-6"
+                      : "overflow-hidden p-0 md:p-6"
                     : hasPreviewContent
-                      ? "overflow-auto p-3 md:p-6"
+                      ? "overflow-auto p-0 md:p-6"
                       : "overflow-hidden p-4 md:p-6"
-                }`}
+                } ${canvasMetaLabel && !showVideoTimelineDock ? "max-md:pb-8" : ""} ${mobileEditorChromeInset}`}
               >
             {isPdfLoading ? (
               <div className="flex min-h-full min-w-full items-center justify-center text-center">
@@ -11424,9 +11638,9 @@ export default function WatermarkPage() {
                 </div>
               </div>
             ) : hasPreviewContent ? (
-              <div className="flex min-h-full min-w-full items-center justify-center">
+              <div className="flex min-h-full min-w-full items-center justify-center max-md:min-h-0 max-md:flex-1">
                 <div
-                  className="relative shrink-0"
+                  className="relative flex shrink-0 items-center justify-center max-md:max-h-full max-md:max-w-full"
                   style={{
                     height: canvasSize.height,
                     width: canvasSize.width,
@@ -11552,9 +11766,9 @@ export default function WatermarkPage() {
             )}
               </div>
               {hasPreviewContent && !isPdfLoading ? (
-                <div className="pointer-events-none absolute inset-0 z-30 p-3 md:p-6">
+                <div className="pointer-events-none absolute inset-0 z-30 p-2 md:p-6">
                   <PreviewCanvasZoomControls
-                    className="pointer-events-auto absolute top-3 right-3 md:top-6 md:right-6"
+                    className="pointer-events-auto absolute top-2 right-2 md:top-6 md:right-6"
                     onReset={handlePreviewZoomReset}
                     onZoomIn={handlePreviewZoomIn}
                     onZoomOut={handlePreviewZoomOut}
@@ -11563,7 +11777,11 @@ export default function WatermarkPage() {
                     zoomOutDisabled={previewZoomOutDisabled}
                   />
                   <PreviewCanvasMediaControls
-                    className="pointer-events-auto absolute bottom-3 left-3 md:bottom-6 md:left-6"
+                    className={`pointer-events-auto absolute left-2 md:bottom-6 md:left-6 ${
+                      showMobileBottomDock
+                        ? "bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))]"
+                        : "bottom-14"
+                    }`}
                     mediaKind={mediaKind}
                     onAddMoreVideos={openAddMoreVideosPicker}
                     onRemove={handlePreviewMediaRemove}
@@ -11573,152 +11791,11 @@ export default function WatermarkPage() {
               ) : null}
               </div>
 
-              <div
-                className={`shrink-0 border-t border-ed-border bg-ed-panel ${
-                  reserveMobileVideoTimelineSlot
-                    ? "max-md:h-[112px] max-md:min-h-[112px] max-md:max-h-[112px] max-md:shrink-0 max-md:overflow-hidden"
-                    : ""
-                }`}
-              >
-              {showVideoTrimDock ? (
-                <VideoVisibilityTimeline
-                  currentTimeSeconds={videoPreviewTime}
-                  durationSeconds={videoDuration}
-                  isPlaying={isVideoPlaying}
-                  layout="dock"
-                  onPauseVideo={() => {
-                    videoElementRef.current?.pause();
-                  }}
-                  onResetRange={resetVideoTrim}
-                  onSeek={(seconds) => seekVideoPreview(seconds, true)}
-                  onTogglePlay={() => {
-                    const video = videoElementRef.current;
-
-                    if (!video) {
-                      return;
-                    }
-
-                    if (video.paused) {
-                      if (video.currentTime >= resolvedVideoTrim.endSeconds - 0.05) {
-                        video.currentTime = resolvedVideoTrim.startSeconds;
-                      }
-
-                      void video.play();
-                    } else {
-                      video.pause();
-                    }
-                  }}
-                  onVisibleFromChange={(value) => {
-                    setVideoCropSavedNotice(false);
-                    setVideoTrimStartSeconds(value ?? 0);
-                  }}
-                  onVisibleUntilChange={(value) => {
-                    setVideoCropSavedNotice(false);
-                    setVideoTrimEndSeconds(value ?? videoDuration);
-                  }}
-                  variant="trim"
-                  videoUrl={videoUrl}
-                  visibleFromSeconds={resolvedVideoTrim.startSeconds}
-                  visibleUntilSeconds={resolvedVideoTrim.endSeconds}
-                />
-              ) : null}
-
-              {showCaptionTimelineDock ||
-              showWatermarkTimelineDock ||
-              showVideoBlurTimelineDock ? (
-                <VideoVisibilityTimeline
-                  currentTimeSeconds={videoPreviewTime}
-                  durationSeconds={videoDuration}
-                  isPlaying={isVideoPlaying}
-                  layerLabel={
-                    showCaptionTimelineDock
-                      ? activeVideoCaptionLayer?.text.trim() || "Caption"
-                      : showVideoBlurTimelineDock
-                        ? activeVideoBlurRegion?.label || "Blur"
-                        : activeTextLayer.text.trim() || "Text watermark"
-                  }
-                  layout="dock"
-                  onPauseVideo={() => {
-                    videoElementRef.current?.pause();
-                  }}
-                  onSeek={seekVideoPreview}
-                  onTogglePlay={() => {
-                    const video = videoElementRef.current;
-
-                    if (!video) {
-                      return;
-                    }
-
-                    if (video.paused) {
-                      void video.play();
-                    } else {
-                      video.pause();
-                    }
-                  }}
-                  onVisibleFromChange={(value) => {
-                    if (showCaptionTimelineDock) {
-                      updateActiveVideoCaptionLayer({
-                        visibleFromSeconds: value,
-                      });
-                      return;
-                    }
-
-                    if (showVideoBlurTimelineDock && activeVideoBlurRegion) {
-                      updateActiveVideoBlurRegion((region) =>
-                        updateVideoBlurRegionTiming(
-                          region,
-                          { visibleFromSeconds: value },
-                          videoDuration,
-                        ),
-                      );
-                      return;
-                    }
-
-                    updateTextLayer(activeTextLayerId, {
-                      visibleFromSeconds: value,
-                    });
-                  }}
-                  onVisibleUntilChange={(value) => {
-                    if (showCaptionTimelineDock) {
-                      updateActiveVideoCaptionLayer({
-                        visibleUntilSeconds: value,
-                      });
-                      return;
-                    }
-
-                    if (showVideoBlurTimelineDock && activeVideoBlurRegion) {
-                      updateActiveVideoBlurRegion((region) =>
-                        updateVideoBlurRegionTiming(
-                          region,
-                          { visibleUntilSeconds: value },
-                          videoDuration,
-                        ),
-                      );
-                      return;
-                    }
-
-                    updateTextLayer(activeTextLayerId, {
-                      visibleUntilSeconds: value,
-                    });
-                  }}
-                  videoUrl={videoUrl}
-                  visibleFromSeconds={
-                    showCaptionTimelineDock
-                      ? activeVideoCaptionLayer?.visibleFromSeconds
-                      : showVideoBlurTimelineDock
-                        ? activeVideoBlurRegion?.visibleFromSeconds
-                        : activeTextLayer.visibleFromSeconds
-                  }
-                  visibleUntilSeconds={
-                    showCaptionTimelineDock
-                      ? activeVideoCaptionLayer?.visibleUntilSeconds
-                      : showVideoBlurTimelineDock
-                        ? activeVideoBlurRegion?.visibleUntilSeconds
-                        : activeTextLayer.visibleUntilSeconds
-                  }
-                />
-              ) : null}
+              {videoTimelineDock ? (
+              <div className="hidden shrink-0 border-t border-ed-border bg-ed-panel md:block md:relative md:h-auto">
+              {videoTimelineDock}
               </div>
+              ) : null}
             </div>
 
             {showWatermarkAdjustAside ? (
@@ -11754,7 +11831,9 @@ export default function WatermarkPage() {
           {canvasMetaLabel ? (
             <p
               className={`border-t border-ed-border bg-ed-bg-card py-2 text-center text-xs text-ed-fg-muted ${
-                showVideoTimelineDock ? "max-md:hidden" : ""
+                showVideoTimelineDock
+                  ? "max-md:hidden"
+                  : "editor-mobile-preview-meta md:relative md:border-t md:bg-ed-bg-card md:py-2 md:text-xs"
               }`}
             >
               {canvasMetaLabel}
@@ -11766,6 +11845,7 @@ export default function WatermarkPage() {
       <EditorBottomBar
         canRedo={canRedoSettings}
         canUndo={canUndoSettings}
+        className="editor-mobile-footer"
         exportDisabled={isExportDisabled}
         exportLabel={exportButtonLabel}
         exportTitle={exportDisabledReason}

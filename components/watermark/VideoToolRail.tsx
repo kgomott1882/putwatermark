@@ -47,19 +47,19 @@ export function VideoToolRail({
         />
       </div>
       <EditorSubToolButton
+        active={activeTool === "watermark"}
+        disabled={toolsDisabled}
+        icon={<Droplets className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.75} />}
+        label="Watermark"
+        onClick={() => onSelectTool("watermark")}
+      />
+      <EditorSubToolButton
         active={activeTool === "caption"}
         disabled={toolsDisabled}
         icon={<Captions className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.75} />}
         label="Add Caption"
         mobileLabel="Caption"
         onClick={() => onSelectTool("caption")}
-      />
-      <EditorSubToolButton
-        active={activeTool === "watermark"}
-        disabled={toolsDisabled}
-        icon={<Droplets className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.75} />}
-        label="Watermark"
-        onClick={() => onSelectTool("watermark")}
       />
       <div className="relative flex flex-col gap-0.5 md:gap-1">
         <EditorSubToolButton

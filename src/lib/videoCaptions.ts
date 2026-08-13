@@ -210,7 +210,7 @@ export function captionHasTimingRange(caption: VideoCaptionSettings) {
 }
 
 export function isCaptionLayerActive(caption: VideoCaptionSettings) {
-  return caption.enabled && caption.presetId !== "none" && caption.text.trim().length > 0;
+  return caption.enabled && caption.text.trim().length > 0;
 }
 
 export function isCaptionVisibleAtTime(

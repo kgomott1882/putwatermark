@@ -55,6 +55,25 @@ export function getVideoDisplayFrame(
   };
 }
 
+export function getMediaFitPreviewSize(
+  containerWidth: number,
+  containerHeight: number,
+  mediaWidth: number,
+  mediaHeight: number,
+) {
+  const frame = getVideoDisplayFrame(
+    containerWidth,
+    containerHeight,
+    mediaWidth,
+    mediaHeight,
+  );
+
+  return {
+    height: Math.max(240, Math.floor(frame.height)),
+    width: Math.max(240, Math.floor(frame.width)),
+  };
+}
+
 export function getVideoNaturalDimensions(
   video: HTMLVideoElement,
   fallbackWidth: number,

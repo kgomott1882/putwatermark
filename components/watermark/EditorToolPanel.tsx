@@ -18,7 +18,9 @@ type EditorToolPanelProps = {
   className?: string;
   icon?: ReactNode;
   instant?: boolean;
+  mobileControlsCollapsed?: boolean;
   onClose: () => void;
+  onToggleMobileControls?: () => void;
   title: string;
   toolRail?: ReactNode;
 };
@@ -28,7 +30,9 @@ export function EditorToolPanel({
   className = "",
   icon,
   instant = false,
+  mobileControlsCollapsed = false,
   onClose,
+  onToggleMobileControls,
   title,
   toolRail,
 }: EditorToolPanelProps) {
@@ -66,14 +70,57 @@ export function EditorToolPanel({
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+        {!mobileControlsCollapsed && onToggleMobileControls ? (
+          <button
+            className="flex shrink-0 items-center justify-center gap-1.5 border-b border-ed-border bg-ed-bg-card px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-ed-fg md:hidden"
+            onClick={onToggleMobileControls}
+            type="button"
+          >
+            Show preview
+            <span aria-hidden className="text-sm leading-none">
+              ↓
+            </span>
+          </button>
+        ) : null}
         {toolRail ? (
-          <div className="z-10 flex shrink-0 flex-col border-b border-ed-border bg-ed-panel md:overflow-y-auto md:border-b-0">
-            {toolRail}
+          <div
+            className={`z-10 flex shrink-0 flex-col border-b border-ed-border bg-ed-panel md:overflow-y-auto md:border-b-0 ${
+              mobileControlsCollapsed
+                ? "max-md:min-h-[2.75rem] max-md:flex-row max-md:items-stretch max-md:border-b-0"
+                : "max-md:hidden"
+            }`}
+          >
+            <div className="min-w-0 flex-1 max-md:[&_nav]:border-t-0">{toolRail}</div>
+            {mobileControlsCollapsed && onToggleMobileControls ? (
+              <button
+                className="flex shrink-0 items-center justify-center gap-1 border-l border-ed-border bg-ed-bg-card px-4 text-[10px] font-bold uppercase tracking-[0.12em] text-ed-fg md:hidden"
+                onClick={onToggleMobileControls}
+                type="button"
+              >
+                Tools
+                <span aria-hidden className="text-sm leading-none">
+                  ↑
+                </span>
+              </button>
+            ) : null}
           </div>
+        ) : mobileControlsCollapsed && onToggleMobileControls ? (
+          <button
+            className="flex shrink-0 items-center justify-center gap-1.5 border-b border-ed-border bg-ed-bg-card px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-ed-fg md:hidden"
+            onClick={onToggleMobileControls}
+            type="button"
+          >
+            Show tools
+            <span aria-hidden className="text-sm leading-none">
+              ↑
+            </span>
+          </button>
         ) : null}
         <motion.div
           animate={{ opacity: 1, x: 0 }}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-1.5 py-1 md:px-2.5 md:py-2"
+          className={`min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-1.5 py-1 md:px-2.5 md:py-2 ${
+            mobileControlsCollapsed ? "max-md:hidden" : ""
+          }`}
           initial={instant ? false : { opacity: 0, x: 14 }}
           transition={instant ? { duration: 0 } : { duration: 0.38, ease: panelEase }}
         >
