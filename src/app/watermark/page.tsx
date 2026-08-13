@@ -2814,11 +2814,7 @@ export default function WatermarkPage() {
         void bootstrapEditorSession(true);
       }
 
-      if (
-        user.email_confirmed_at &&
-        hasPendingExportAfterLogin() &&
-        resumeExportAfterLoginRef.current
-      ) {
+      if (user.email_confirmed_at && hasPendingExportAfterLogin()) {
         setIsRestoringAnonymousDraft(true);
 
         try {
@@ -5905,10 +5901,26 @@ export default function WatermarkPage() {
     patch: Partial<LogoWatermarkLayer>,
   ) {
     clearActiveLogoTemplate();
+    const isAssigningVisibility =
+      typeof patch.visibleFromSeconds === "number" ||
+      typeof patch.visibleUntilSeconds === "number";
+
     setLogoLayers((layers) =>
-      layers.map((layer) =>
-        layer.id === layerId ? { ...layer, ...patch } : layer,
-      ),
+      layers.map((layer) => {
+        if (layer.id === layerId) {
+          return { ...layer, ...patch };
+        }
+
+        if (isAssigningVisibility) {
+          return {
+            ...layer,
+            visibleFromSeconds: undefined,
+            visibleUntilSeconds: undefined,
+          };
+        }
+
+        return layer;
+      }),
     );
   }
 
@@ -9874,9 +9886,9 @@ export default function WatermarkPage() {
     isPdfDocsWatermarkActive ||
     isVideoWatermarkActive;
   const showWatermarkTimelineDock =
-    isWatermarkPanelActive &&
-    watermarkType === "text" &&
-    videoDuration > 0;
+    isVideoWatermarkActive &&
+    videoDuration > 0 &&
+    (activeWatermarkTool === "text" || activeWatermarkTool === "logo");
   const showVideoOverviewPreview =
     activeEditorPanel === "video" &&
     activeVideoTool === "overview" &&
@@ -10049,7 +10061,9 @@ export default function WatermarkPage() {
               ? activeVideoCaptionLayer?.text.trim() || "Caption"
               : showVideoBlurTimelineDock
                 ? activeVideoBlurRegion?.label || "Blur"
-                : activeTextLayer.text.trim() || "Text watermark"
+                : showWatermarkTimelineDock && activeWatermarkTool === "logo"
+                  ? activeLogoLayer.logoFileName.trim() || "Logo watermark"
+                  : activeTextLayer.text.trim() || "Text watermark"
           }
           layout="dock"
           onPauseVideo={() => {
@@ -10088,6 +10102,13 @@ export default function WatermarkPage() {
               return;
             }
 
+            if (showWatermarkTimelineDock && activeWatermarkTool === "logo") {
+              updateLogoLayer(activeLogoLayerId, {
+                visibleFromSeconds: value,
+              });
+              return;
+            }
+
             updateTextLayer(activeTextLayerId, {
               visibleFromSeconds: value,
             });
@@ -10111,6 +10132,13 @@ export default function WatermarkPage() {
               return;
             }
 
+            if (showWatermarkTimelineDock && activeWatermarkTool === "logo") {
+              updateLogoLayer(activeLogoLayerId, {
+                visibleUntilSeconds: value,
+              });
+              return;
+            }
+
             updateTextLayer(activeTextLayerId, {
               visibleUntilSeconds: value,
             });
@@ -10121,14 +10149,18 @@ export default function WatermarkPage() {
               ? activeVideoCaptionLayer?.visibleFromSeconds
               : showVideoBlurTimelineDock
                 ? activeVideoBlurRegion?.visibleFromSeconds
-                : activeTextLayer.visibleFromSeconds
+                : showWatermarkTimelineDock && activeWatermarkTool === "logo"
+                  ? activeLogoLayer.visibleFromSeconds
+                  : activeTextLayer.visibleFromSeconds
           }
           visibleUntilSeconds={
             showCaptionTimelineDock
               ? activeVideoCaptionLayer?.visibleUntilSeconds
               : showVideoBlurTimelineDock
                 ? activeVideoBlurRegion?.visibleUntilSeconds
-                : activeTextLayer.visibleUntilSeconds
+                : showWatermarkTimelineDock && activeWatermarkTool === "logo"
+                  ? activeLogoLayer.visibleUntilSeconds
+                  : activeTextLayer.visibleUntilSeconds
           }
         />
       ) : null}
@@ -11721,7 +11753,8 @@ export default function WatermarkPage() {
               >
                 <video
                   className="block h-full w-full object-contain"
-                  controls={watermarkType !== "text"}
+                  controls={false}
+                  disablePictureInPicture
                   key={videoUrl}
                   playsInline
                   ref={videoElementRef}
@@ -12966,6 +12999,18 @@ function paintWatermarkLayers({
         continue;
       }
 
+      if (
+        videoPreviewTimeSeconds !== undefined &&
+        videoDurationSeconds !== undefined &&
+        !isElementVisibleAt(
+          layer,
+          videoPreviewTimeSeconds,
+          videoDurationSeconds,
+        )
+      ) {
+        continue;
+      }
+
       drawLayer({
         customPosition: layer.customPosition,
         fontFamily: defaultWatermarkFontFamily,
@@ -13460,6 +13505,116 @@ async function buildClientVideoOverlayPasses({
     ? getUntimedCaptionLayers(videoCaptionLayers)
     : [];
   const includeUntimedCaptions = untimedCaptionLayers.length > 0;
+
+  if (settings.watermarkType === "logo") {
+    const logoLayers = settings.logoLayers ?? [];
+    const timedLayers = logoLayers.filter(hasVideoVisibilityRange);
+    const untimedLayers = logoLayers.filter(
+      (layer) => !hasVideoVisibilityRange(layer),
+    );
+
+    if (timedLayers.length > 1) {
+      throw new VideoExportFailedError(
+        "Only one logo watermark can have a visibility time range per export.",
+      );
+    }
+
+    const passes: VideoOverlayPass[] = [];
+
+    const pushLogoPass = async (
+      layers: LogoWatermarkLayer[],
+      timing?: { end: number; start: number },
+    ) => {
+      if (!layers.some((layer) => layer.logoImage)) {
+        return;
+      }
+
+      const canvas = await renderWatermarkOverlayCanvas({
+        ...settings,
+        applyStaticFreeExportStamp,
+        height,
+        includeCaptionOnPass: includeUntimedCaptions,
+        logoLayers: layers,
+        videoCaptionLayers: includeUntimedCaptions
+          ? videoCaptionLayers
+          : undefined,
+        watermarkReferenceWidth,
+        width,
+      });
+
+      passes.push({
+        overlayPngBytes: await canvasToPngBytes(canvas),
+        ...(timing
+          ? {
+              visibleFromSeconds: timing.start,
+              visibleUntilSeconds: timing.end,
+            }
+          : {}),
+      });
+    };
+
+    const timedLayer = timedLayers[0];
+
+    if (!timedLayer) {
+      await pushLogoPass(logoLayers);
+
+      const withCaption = await appendTimedCaptionLayerPasses(
+        passes,
+        videoCaptionLayers,
+        durationSeconds,
+        height,
+        width,
+      );
+
+      if (withCaption.length === 0) {
+        if (videoBlurRegions?.some((region) => region.strokes.length > 0)) {
+          return finalizeClientVideoOverlayPasses([], {
+            height,
+            videoBlurRegions,
+            videoElement,
+            width,
+          });
+        }
+
+        throw new VideoExportFailedError(
+          "Could not prepare the watermark overlay for export.",
+        );
+      }
+
+      return finalizeClientVideoOverlayPasses(withCaption, {
+        height,
+        videoBlurRegions,
+        videoElement,
+        width,
+      });
+    }
+
+    const range = resolveVideoVisibilityRange(timedLayer, durationSeconds);
+
+    if (!range || range.start >= range.end) {
+      throw new VideoExportFailedError(
+        "Set a valid visibility time range. Start must be before end.",
+      );
+    }
+
+    await pushLogoPass(untimedLayers);
+    await pushLogoPass([timedLayer], range);
+
+    const withCaption = await appendTimedCaptionLayerPasses(
+      passes,
+      videoCaptionLayers,
+      durationSeconds,
+      height,
+      width,
+    );
+
+    return finalizeClientVideoOverlayPasses(withCaption, {
+      height,
+      videoBlurRegions,
+      videoElement,
+      width,
+    });
+  }
 
   if (settings.watermarkType !== "text") {
     const canvas = await renderWatermarkOverlayCanvas({

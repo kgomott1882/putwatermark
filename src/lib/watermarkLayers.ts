@@ -54,6 +54,8 @@ export type LogoWatermarkLayer = {
   opacity: number;
   originalLogoImage: HTMLImageElement | null;
   type: "logo";
+  visibleFromSeconds?: number;
+  visibleUntilSeconds?: number;
   watermarkPosition: WatermarkPosition;
 };
 
@@ -87,6 +89,8 @@ export type WatermarkLayerSnapshot =
       opacity: number;
       originalLogoDataUrl: string | null;
       type: "logo";
+      visibleFromSeconds?: number;
+      visibleUntilSeconds?: number;
       watermarkPosition: WatermarkPosition;
     };
 
@@ -260,6 +264,8 @@ export async function serializeLogoLayer(
     opacity: layer.opacity,
     originalLogoDataUrl: await imageElementToDataUrl(layer.originalLogoImage),
     type: "logo",
+    visibleFromSeconds: layer.visibleFromSeconds,
+    visibleUntilSeconds: layer.visibleUntilSeconds,
     watermarkPosition: layer.watermarkPosition,
   };
 }
@@ -311,6 +317,8 @@ export async function deserializeLogoLayer(
     opacity: snapshot.opacity,
     originalLogoImage,
     type: "logo",
+    visibleFromSeconds: snapshot.visibleFromSeconds,
+    visibleUntilSeconds: snapshot.visibleUntilSeconds,
     watermarkPosition: snapshot.watermarkPosition,
   };
 }

@@ -327,7 +327,7 @@ export function VideoVisibilityTimeline({
   const rootClass = isSide
     ? "flex h-full w-[17rem] shrink-0 flex-col border-l border-ed-border bg-ed-fg text-ed-bg shadow-[-8px_0_24px_rgba(0,0,0,0.12)]"
     : isDock
-      ? "flex h-full max-md:min-h-0 max-md:flex-col max-md:overflow-hidden shrink-0 border-t border-ed-border bg-ed-fg text-ed-bg shadow-[0_-8px_24px_rgba(0,0,0,0.18)]"
+      ? "flex shrink-0 flex-col border-t border-ed-border bg-ed-fg text-ed-bg shadow-[0_-8px_24px_rgba(0,0,0,0.18)] md:min-h-[10.5rem]"
       : "space-y-2";
 
   const playheadLineClass = isDocked ? "bg-white" : "bg-ed-fg";
@@ -494,7 +494,7 @@ export function VideoVisibilityTimeline({
                     <span className="rounded-full bg-black/55 px-3 py-1 text-[11px] font-medium text-white/80">
                       {isTrim
                         ? "Drag the handles to set what to keep"
-                        : "Drag the handles to set when this text appears"}
+                        : "Drag the handles to set when this layer appears"}
                     </span>
                   </div>
                 ) : null}
