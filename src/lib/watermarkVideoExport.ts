@@ -697,7 +697,7 @@ export async function exportVideoWithOverlay({
     "-c:v",
     "libx264",
     "-preset",
-    "fast",
+    "veryfast",
     "-crf",
     "22",
     "-pix_fmt",

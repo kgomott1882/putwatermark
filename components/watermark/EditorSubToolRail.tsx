@@ -1,12 +1,11 @@
 "use client";
 
-import { X } from "lucide-react";
 import type { ReactNode } from "react";
 
 export type EditorSubToolRailProps = {
   ariaLabel: string;
   children: ReactNode;
-  onMobileExit?: () => void;
+  mobileTrailingAccessory?: ReactNode;
 };
 
 export type EditorSubToolButtonProps = {
@@ -21,27 +20,22 @@ export type EditorSubToolButtonProps = {
 export function EditorSubToolRail({
   ariaLabel,
   children,
-  onMobileExit,
+  mobileTrailingAccessory,
 }: EditorSubToolRailProps) {
   return (
     <div className="relative">
       <nav
         aria-label={ariaLabel}
         className={`flex min-w-0 w-full shrink-0 flex-row gap-0.5 overflow-x-auto overscroll-x-contain bg-ed-panel px-1 py-1 [-ms-overflow-style:none] [scrollbar-width:none] md:w-[5rem] md:flex-col md:gap-1 md:overflow-x-visible md:overflow-y-auto md:border-b-0 md:border-r md:px-1.5 md:py-2 [&::-webkit-scrollbar]:hidden ${
-          onMobileExit ? "max-md:pr-8" : ""
+          mobileTrailingAccessory ? "max-md:pr-[5.75rem]" : ""
         }`}
       >
         <div className="flex flex-row gap-0.5 md:flex-col md:gap-1">{children}</div>
       </nav>
-      {onMobileExit ? (
-        <button
-          aria-label="Exit editor"
-          className="absolute right-1 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md border border-ed-border/80 bg-ed-panel/95 text-ed-fg-muted shadow-sm backdrop-blur-[2px] transition hover:bg-ed-bg-card hover:text-ed-fg md:hidden"
-          onClick={onMobileExit}
-          type="button"
-        >
-          <X className="h-3.5 w-3.5" strokeWidth={2} />
-        </button>
+      {mobileTrailingAccessory ? (
+        <div className="pointer-events-auto absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 md:hidden">
+          {mobileTrailingAccessory}
+        </div>
       ) : null}
     </div>
   );

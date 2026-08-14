@@ -4,13 +4,13 @@ import {
   VideoExportCancelledError,
   VideoExportFailedError,
   VideoExportTimeoutError,
-  cancelVideoExportWorker,
   exportVideoWithOverlay,
   getVideoExportFileName,
   getVideoExportRejectionMessage,
   getVideoExportRoute,
   isAnyVideoExportEligible,
   isServerSideVideoExportRoute,
+  loadFfmpeg,
   type VideoOverlayPass,
 } from "../../lib/watermarkVideoExport";
 import {
@@ -128,6 +128,7 @@ import {
 } from "../../lib/forcedTileExport";
 import {
   estimateClientExportCost,
+  shouldApplyForcedWatermarkForPhotoExport,
   shouldShowWatermarkedExportUpsell,
   shouldRequireCreditsBeforeExport,
   wouldReceiveWatermarkedExport,
@@ -211,6 +212,7 @@ import {
   ChevronRight,
   FileText,
   Images,
+  Plus,
   RefreshCw,
   Trash2,
   Video,
@@ -291,6 +293,8 @@ import { VideoVisibilityTimeline } from "../../../components/watermark/VideoVisi
 import { WatermarkFontLoader } from "../../../components/watermark/WatermarkFontLoader";
 import { WatermarkStyleControls } from "../../../components/watermark/WatermarkStyleControls";
 import { WatermarkedExportUpsellModal } from "../../../components/watermark/WatermarkedExportUpsellModal";
+import { EditorCreditsCheckoutModal } from "../../../components/pricing/EditorCreditsCheckoutModal";
+import { usePayPalClientId } from "../../../components/pricing/PayPalClientIdProvider";
 import { UnsignedPdfExportConfirmModal } from "../../../components/watermark/UnsignedPdfExportConfirmModal";
 import {
   ExportLoginGateModal,
@@ -683,12 +687,12 @@ const watermarkTemplates: WatermarkTemplate[] = [
     tileGap: 120,
   },
   {
-    density: "dense",
+    density: "sparse",
     fontFamily: defaultFontFamily,
     fontSizeScale: 20,
-    icon: "dense",
-    id: "protect-dense",
-    label: "Protect (dense)",
+    icon: "sparse",
+    id: "protect-light",
+    label: "Protect (light)",
     mode: "tile",
     opacity: 40,
     position: "bottom-right",
@@ -696,12 +700,12 @@ const watermarkTemplates: WatermarkTemplate[] = [
     tileGap: 130,
   },
   {
-    density: "sparse",
+    density: "dense",
     fontFamily: defaultFontFamily,
     fontSizeScale: 20,
-    icon: "sparse",
-    id: "protect-light",
-    label: "Protect (light)",
+    icon: "dense",
+    id: "protect-dense",
+    label: "Protect (dense)",
     mode: "tile",
     opacity: 40,
     position: "bottom-right",
@@ -724,11 +728,11 @@ const logoWatermarkTemplates: LogoWatermarkTemplate[] = [
     tileGap: 120,
   },
   {
-    density: "dense",
+    density: "sparse",
     fontSizeScale: 28,
-    icon: "dense",
-    id: "logo-protect-dense",
-    label: "Protect (dense)",
+    icon: "sparse",
+    id: "logo-protect-light",
+    label: "Protect (light)",
     mode: "tile",
     opacity: 45,
     position: "bottom-right",
@@ -736,11 +740,11 @@ const logoWatermarkTemplates: LogoWatermarkTemplate[] = [
     tileGap: 130,
   },
   {
-    density: "sparse",
+    density: "dense",
     fontSizeScale: 28,
-    icon: "sparse",
-    id: "logo-protect-light",
-    label: "Protect (light)",
+    icon: "dense",
+    id: "logo-protect-dense",
+    label: "Protect (dense)",
     mode: "tile",
     opacity: 45,
     position: "bottom-right",
@@ -973,6 +977,7 @@ async function sampleOverlayPngBytesCenter(
 }
 
 export default function WatermarkPage() {
+  const paypalClientId = usePayPalClientId();
   const pathname = usePathname();
   const router = useRouter();
   const isEditorRoute =
@@ -1168,11 +1173,13 @@ export default function WatermarkPage() {
   const [userDisplayName, setUserDisplayName] = useState<string | null>(null);
   const [showWatermarkedExportUpsell, setShowWatermarkedExportUpsell] =
     useState(false);
+  const [showEditorCreditsCheckout, setShowEditorCreditsCheckout] = useState(false);
   const [showExportLoginGate, setShowExportLoginGate] = useState(false);
   const [loginGatePhase, setLoginGatePhase] = useState<ExportLoginGatePhase>("saving");
   const [loginGateError, setLoginGateError] = useState("");
   const pendingExportRef = useRef<(() => void) | null>(null);
   const resumeExportAfterLoginRef = useRef(false);
+  const pendingBuyCreditsAfterLoginRef = useRef(false);
   const anonymousDraftRestoreRef = useRef<AnonymousExportDraftState | null>(null);
   const pendingDraftRestoreResolverRef = useRef<(() => void) | null>(null);
   const [exportServerStage, setExportServerStage] =
@@ -2449,6 +2456,29 @@ export default function WatermarkPage() {
     const balance = await fetchUserCreditBalance(supabase, user.id);
     setCreditBalance(balance);
 
+    const shouldOpenCreditsCheckout = pendingBuyCreditsAfterLoginRef.current;
+    pendingBuyCreditsAfterLoginRef.current = false;
+
+    if (shouldOpenCreditsCheckout) {
+      setIsRestoringAnonymousDraft(true);
+
+      try {
+        await restoreAnonymousDraftIntoEditor();
+      } catch (error) {
+        setExportNotice(
+          error instanceof Error
+            ? `${error.message} Your editor is still open — continue to buy credits.`
+            : "Could not restore your saved draft. Your editor is still open — continue to buy credits.",
+        );
+      } finally {
+        setIsRestoringAnonymousDraft(false);
+      }
+
+      setShowEditorCreditsCheckout(true);
+      resumeExportAfterLoginRef.current = false;
+      return;
+    }
+
     setIsRestoringAnonymousDraft(true);
 
     try {
@@ -2476,6 +2506,7 @@ export default function WatermarkPage() {
     setShowExportLoginGate(false);
     setLoginGateError("");
     resumeExportAfterLoginRef.current = false;
+    pendingBuyCreditsAfterLoginRef.current = false;
   }
 
   function proceedWithExport() {
@@ -2524,6 +2555,52 @@ export default function WatermarkPage() {
   function handleDismissWatermarkedExportUpsell() {
     setShowWatermarkedExportUpsell(false);
     pendingExportRef.current = null;
+  }
+
+  async function openEditorCreditsCheckout() {
+    setShowWatermarkedExportUpsell(false);
+    setShowServerVideoCreditGate(false);
+
+    if (isAuthenticated && isEmailConfirmed) {
+      setShowEditorCreditsCheckout(true);
+      return;
+    }
+
+    pendingBuyCreditsAfterLoginRef.current = true;
+    resumeExportAfterLoginRef.current = false;
+    setLoginGateError("");
+
+    if (isAuthenticated && !isEmailConfirmed) {
+      setLoginGatePhase("verify-email");
+      setShowExportLoginGate(true);
+      return;
+    }
+
+    setLoginGatePhase("saving");
+    setShowExportLoginGate(true);
+
+    if (hasMedia) {
+      try {
+        await saveDraftForLoginGate();
+      } catch (error) {
+        setLoginGateError(
+          error instanceof Error
+            ? `${error.message} You can still sign in to buy credits.`
+            : "Could not save your work before sign in. You can still sign in to buy credits.",
+        );
+      }
+    }
+
+    setLoginGatePhase("auth");
+  }
+
+  function handleEditorCreditsPurchaseComplete(balance: number) {
+    setCreditBalance(balance);
+    setShowEditorCreditsCheckout(false);
+  }
+
+  function handleDismissEditorCreditsCheckout() {
+    setShowEditorCreditsCheckout(false);
   }
 
   function getCurrentExportFileType(): ReturnType<typeof getExportFileType> {
@@ -2599,7 +2676,13 @@ export default function WatermarkPage() {
       entryReferenceImageSize,
     );
 
-    if (isCleanExportTier(auth.tier)) {
+    if (
+      !shouldApplyForcedWatermarkForPhotoExport({
+        authTier: auth.tier,
+        creditBalance,
+        resolvedBalance: auth.balance,
+      })
+    ) {
       return input;
     }
 
@@ -2922,9 +3005,10 @@ export default function WatermarkPage() {
 
       if (isMobilePreview) {
         if (mediaKind === "video" && videoSize) {
+          const mobileVideoPlayerChrome = 34;
           const fitSize = getMediaFitPreviewSize(
             baseWidth,
-            baseHeight,
+            Math.max(160, baseHeight - mobileVideoPlayerChrome),
             videoSize.width,
             videoSize.height,
           );
@@ -3159,6 +3243,43 @@ export default function WatermarkPage() {
       video.removeEventListener("loadeddata", syncVideoSizeFromElement);
     };
   }, [mediaKind, videoUrl]);
+
+  useEffect(() => {
+    if (mediaKind !== "video" || !videoUrl || !videoSize) {
+      return;
+    }
+
+    const duration = getVideoTrimDuration(
+      videoTrimAppliedStartSeconds,
+      videoTrimAppliedEndSeconds,
+      videoDuration,
+    );
+
+    if (duration <= 0) {
+      return;
+    }
+
+    const exportRoute = getVideoExportRoute(
+      duration,
+      videoSize.width,
+      videoSize.height,
+      videoFileSize > 0 ? videoFileSize : Number.MAX_SAFE_INTEGER,
+    );
+
+    if (exportRoute !== "client") {
+      return;
+    }
+
+    void loadFfmpeg(() => undefined, { logLabel: "ffmpeg warmup" });
+  }, [
+    mediaKind,
+    videoDuration,
+    videoFileSize,
+    videoSize,
+    videoTrimAppliedEndSeconds,
+    videoTrimAppliedStartSeconds,
+    videoUrl,
+  ]);
 
   useEffect(() => {
     if (mediaKind !== "video" || !videoUrl) {
@@ -5400,18 +5521,18 @@ export default function WatermarkPage() {
     setExportError("");
     setIsExporting(true);
     setIsExportPreparing(true);
-    setBatchExportProgress({ current: 0, total: imageBatch.length });
+
+    const nextBatch = persistActiveBatchEntry(imageBatch, activeBatchImageId);
+    setBatchExportProgress({ current: 0, total: nextBatch.length });
 
     const exportId = createExportId();
     const fileType = getCurrentExportFileType();
+    const batchFileMeta = { photoCount: nextBatch.length };
 
     try {
-      const nextBatch = persistActiveBatchEntry(imageBatch, activeBatchImageId);
-      setImageBatch(nextBatch);
-
       const auth = await resolveExportAuthorization({
         exportId,
-        fileMeta: { photoCount: nextBatch.length },
+        fileMeta: batchFileMeta,
         fileType,
       });
       applyAuthorizeNotice(auth);
@@ -5447,12 +5568,26 @@ export default function WatermarkPage() {
 
       const zipBlob = await zip.generateAsync({ type: "blob" });
       downloadBlob(zipBlob, "watermarked-images.zip");
+      setImageBatch(nextBatch);
 
       if (isCleanExportTier(auth.tier)) {
-        await finalizeCleanExportBilling(auth);
+        try {
+          await finalizeCleanExportBilling({
+            ...auth,
+            fileMeta: batchFileMeta,
+          });
+        } catch {
+          setExportNotice(
+            "Export completed, but credits could not be deducted. Please contact support if this persists.",
+          );
+        }
       }
-    } catch {
-      setUploadError("We could not export those images. Please try again.");
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "We could not export those images. Please try again.",
+      );
     } finally {
       setIsExporting(false);
       setIsExportPreparing(false);
@@ -6205,6 +6340,10 @@ export default function WatermarkPage() {
     if (openPanelForKind) {
       setFormatUploadPrompt(null);
       openEditorPanelForMediaKind(openPanelForKind);
+
+      if (openPanelForKind === "image" || openPanelForKind === "video") {
+        collapseMobileControlsIfPhone();
+      }
     }
   }
 
@@ -6851,18 +6990,6 @@ export default function WatermarkPage() {
     }
   }
 
-  function handleCancelExport() {
-    videoExportCancelRef.current = true;
-    videoExportAbortControllerRef.current?.abort();
-    cancelVideoExportWorker();
-    setIsExporting(false);
-    setExportProgress(null);
-    setExportServerStage(null);
-    setIsServerVideoExport(false);
-    setExportError("");
-    setExportNotice("Export cancelled.");
-  }
-
   async function handleVideoExport() {
     logRealVideoExport("STEP 6/15: handleVideoExport() entered", {
       creditBalance,
@@ -6932,15 +7059,28 @@ export default function WatermarkPage() {
     const fileMeta = getVideoExportFileMeta();
 
     try {
-      const videoResponse = await fetch(videoUrl);
+      const activeVideoEntry =
+        videoBatch.find((entry) => entry.id === activeBatchVideoId) ??
+        videoBatch[0];
+      let videoBlob: Blob;
 
-      if (!videoResponse.ok) {
-        throw new VideoExportFailedError(
-          "We could not read the loaded video. Please reload it and try again.",
-        );
+      if (activeVideoEntry?.file) {
+        setExportProgress(2);
+        videoBlob = activeVideoEntry.file;
+      } else {
+        setExportProgress(1);
+        const videoResponse = await fetch(videoUrl);
+
+        if (!videoResponse.ok) {
+          throw new VideoExportFailedError(
+            "We could not read the loaded video. Please reload it and try again.",
+          );
+        }
+
+        videoBlob = await videoResponse.blob();
       }
 
-      const videoBlob = await videoResponse.blob();
+      setExportProgress(3);
       const effectiveFileSize = videoFileSize || videoBlob.size;
       const exportRoute = getVideoExportRoute(
         exportVideoDuration,
@@ -6970,6 +7110,7 @@ export default function WatermarkPage() {
         },
       });
       applyAuthorizeNotice(auth);
+      setExportProgress(5);
 
       logRealVideoExport("STEP 8/15: export authorization resolved", {
         authBalance: auth.balance ?? null,
@@ -7054,6 +7195,8 @@ export default function WatermarkPage() {
         width: videoSize.width,
       });
 
+      setExportProgress(6);
+
       const videoPreviewFrame =
         videoOverlaySize.width > 0 && videoSize
           ? getVideoDisplayFrame(
@@ -7077,6 +7220,7 @@ export default function WatermarkPage() {
         watermarkReferenceWidth: videoPreviewFrame.width,
         width: videoSize.width,
       });
+      setExportProgress(8);
       const overlayPngBytes = clientOverlayPasses[0]?.overlayPngBytes;
 
       logRealVideoExport("STEP 12/15: overlay passes built", {
@@ -7132,6 +7276,10 @@ export default function WatermarkPage() {
         settings: summarizeWatermarkSettingsForExportLog(watermarkSettings),
       });
 
+      const reportVideoEncodeProgress = (progress: number) => {
+        setExportProgress(Math.min(99, Math.round(8 + progress * 0.92)));
+      };
+
       const exportedBlob =
         exportRoute === "long-server"
           ? await exportLongVideoOnServer({
@@ -7142,7 +7290,7 @@ export default function WatermarkPage() {
               height: videoSize.height,
               inputFileName: fileName,
               onProcessingDetailChange: setLongVideoProcessingDetail,
-              onProgress: setExportProgress,
+              onProgress: reportVideoEncodeProgress,
               onStageChange: setExportServerStage,
               overlayPngBytes,
               shouldCancel: () => videoExportCancelRef.current,
@@ -7157,7 +7305,7 @@ export default function WatermarkPage() {
               fileSizeBytes: effectiveFileSize,
               height: videoSize.height,
               inputFileName: fileName,
-              onProgress: setExportProgress,
+              onProgress: reportVideoEncodeProgress,
               onStageChange: setExportServerStage,
               overlayPngBytes,
               shouldCancel: () => videoExportCancelRef.current,
@@ -7168,7 +7316,7 @@ export default function WatermarkPage() {
             })
           : await exportVideoWithOverlay({
               inputFileName: fileName,
-              onProgress: setExportProgress,
+              onProgress: reportVideoEncodeProgress,
               overlayPasses: clientOverlayPasses,
               shouldCancel: () => videoExportCancelRef.current,
               trimEndSeconds: resolvedAppliedVideoTrim.endSeconds,
@@ -8184,6 +8332,15 @@ export default function WatermarkPage() {
     setMobileControlsExpanded(true);
   }
 
+  function collapseMobileControlsIfPhone() {
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches
+    ) {
+      setMobileControlsExpanded(false);
+    }
+  }
+
   function toggleMobileControls() {
     setMobileControlsExpanded((current) => !current);
   }
@@ -8207,14 +8364,24 @@ export default function WatermarkPage() {
     cropDragRef.current = null;
     resizeDragRef.current = null;
     blurDragRef.current = null;
-    expandMobileControls();
+
+    if (tool !== "watermark") {
+      expandMobileControls();
+    }
   }
 
   function applyTextWatermarkModeDefaults(mode: WatermarkMode) {
-    const defaults =
-      mode === "single"
-        ? SINGLE_TEXT_WATERMARK_DEFAULTS
-        : TILE_TEXT_WATERMARK_DEFAULTS;
+    if (mode === "tile") {
+      const template = watermarkTemplates.find((entry) => entry.id === "protect-light");
+
+      if (template) {
+        applyTextTemplate(template);
+      }
+
+      return;
+    }
+
+    const defaults = SINGLE_TEXT_WATERMARK_DEFAULTS;
 
     clearActiveTextTemplate();
     setWatermarkMode(mode);
@@ -8242,18 +8409,29 @@ export default function WatermarkPage() {
     );
     setWatermarkPosition(defaults.watermarkPosition);
 
+    setIsWatermarkHovering(false);
+  }
+
+  function applyLogoWatermarkModeDefaults(mode: WatermarkMode) {
     if (mode === "tile") {
-      setTileAngle(DEFAULT_TILE_ANGLE);
-      setTileDensity(DEFAULT_TILE_DENSITY);
-      setTileGap(DEFAULT_TILE_GAP);
+      const template = logoWatermarkTemplates.find(
+        (entry) => entry.id === "logo-protect-light",
+      );
+
+      if (template) {
+        applyLogoTemplate(template);
+      }
+
+      return;
     }
 
+    clearActiveTemplates();
+    setWatermarkMode(mode);
     setIsWatermarkHovering(false);
   }
 
   function handleWatermarkToolSelect(tool: WatermarkToolId) {
     setActiveWatermarkTool(tool);
-    expandMobileControls();
 
     if (tool === "text") {
       const shouldApplySingleDefaults =
@@ -8315,7 +8493,10 @@ export default function WatermarkPage() {
     blurDragRef.current = null;
   }
 
-  function handleVideoToolSelect(tool: VideoToolId) {
+  function handleVideoToolSelect(
+    tool: VideoToolId,
+    options?: { expandMobile?: boolean },
+  ) {
     setActiveEditorPanel("video");
     setActiveVideoTool(tool);
     clearImageEditToolState();
@@ -8332,7 +8513,9 @@ export default function WatermarkPage() {
       }
     }
 
-    expandMobileControls();
+    if (options?.expandMobile !== false && tool !== "watermark") {
+      expandMobileControls();
+    }
   }
 
   function handleEditorPanelSelect(panel: EditorPanelId) {
@@ -9516,34 +9699,32 @@ export default function WatermarkPage() {
     mediaKind === "video" &&
     videoServerCostEstimate !== null &&
     isServerSideVideoExportRoute(currentVideoExportRoute);
-  const videoExportStageLabel =
-    exportServerStage === "preparing"
-      ? "Preparing server export..."
-      : exportServerStage === "uploading"
-        ? "Uploading video..."
-        : exportServerStage === "processing"
-          ? longVideoProcessingDetail ??
-            (currentVideoExportRoute === "long-server"
-              ? "Processing long video on our servers. Keep this tab open"
-              : "Processing on our servers. This may take longer")
-          : exportServerStage === "downloading"
-            ? "Downloading processed video..."
-            : "Export progress";
   const exportButtonLabel =
     mediaKind === "video"
       ? isExporting
-        ? "Exporting..."
+        ? exportProgress !== null
+          ? `Processing ${exportProgress}%`
+          : "Processing..."
         : "Export MP4"
       : mediaKind === "pdf"
         ? isExporting
-          ? "Exporting..."
+          ? pdfExportProgress
+            ? `Processing ${Math.round(
+                (pdfExportProgress.current / pdfExportProgress.total) * 100,
+              )}%`
+            : "Processing..."
           : "Export PDF"
         : isBatchImageMode
           ? isExporting
-            ? "Exporting..."
+            ? batchExportProgress
+              ? `Processing ${Math.round(
+                  (batchExportProgress.current / batchExportProgress.total) *
+                    100,
+                )}%`
+              : "Processing..."
             : "Export all"
           : isExporting
-            ? "Exporting..."
+            ? "Processing..."
             : "Export JPEG";
   const isExportDisabled =
     isExporting ||
@@ -9669,7 +9850,7 @@ export default function WatermarkPage() {
     }
 
     if (window.matchMedia("(max-width: 767px)").matches) {
-      handleVideoToolSelect("watermark");
+      handleVideoToolSelect("watermark", { expandMobile: false });
     }
   }, [activeVideoTool, mediaKind]);
 
@@ -9692,9 +9873,7 @@ export default function WatermarkPage() {
                   return;
                 }
 
-                clearActiveTemplates();
-                setWatermarkMode(value);
-                setIsWatermarkHovering(false);
+                applyLogoWatermarkModeDefaults(value);
               }}
             >
               {label}
@@ -9926,6 +10105,10 @@ export default function WatermarkPage() {
     showCaptionTimelineDock ||
     showWatermarkTimelineDock ||
     showVideoBlurTimelineDock;
+  const showMobileVideoTimelineDock =
+    showVideoTrimDock ||
+    showCaptionTimelineDock ||
+    showVideoBlurTimelineDock;
   const videoPreviewDisplayFrame =
     mediaKind === "video" && videoSize
       ? getVideoDisplayFrame(
@@ -10014,6 +10197,8 @@ export default function WatermarkPage() {
           : formatUploadPrompt === "video"
             ? "video"
             : null;
+  const showMobileVideoPreviewStack =
+    mediaKind === "video" && hasMedia && Boolean(videoUrl);
   const showMobileBottomDock = hasMedia && showEditorPanel;
   const showMobileFormatToolRail = showEditorPanel && hasMedia;
   const showMobilePreviewTopRail = showEditorPanel && (!hasMedia || showMobileFormatToolRail);
@@ -10345,13 +10530,16 @@ export default function WatermarkPage() {
             <ToolIconRail
               activePanel={highlightedEditorPanel}
               mediaKind={mediaKind}
+              onBuyCredits={() => {
+                void openEditorCreditsCheckout();
+              }}
               onSelectPanel={handleEditorPanelSelect}
             />
           </div>
 
           {showEditorPanel ? (
             <>
-              {mobileControlsExpanded && videoTimelineDock ? (
+              {mobileControlsExpanded && showMobileVideoTimelineDock && videoTimelineDock ? (
                 <div className="shrink-0 overflow-hidden border-b border-ed-border md:hidden">
                   {videoTimelineDock}
                 </div>
@@ -10421,7 +10609,7 @@ export default function WatermarkPage() {
               }
             >
           {isWatermarkPanelActive ? (
-            <div className="space-y-2">
+            <div className="space-y-0 md:space-y-2">
               {!hasMedia ? (
                 <EditorCard>
                   <p className="text-sm leading-6 text-ed-fg-muted">
@@ -10487,6 +10675,7 @@ export default function WatermarkPage() {
                       </div>
                     ) : null
                   }
+                  onAddMore={openAddMoreImagesPicker}
                   onRemove={removeBatchImage}
                   onSelect={selectBatchImage}
                 />
@@ -10591,43 +10780,6 @@ export default function WatermarkPage() {
                       }}
                     />
                   </div>
-                </div>
-              ) : null}
-
-              {isExporting && mediaKind === "video" && exportProgress !== null ? (
-                <div className="rounded-lg border border-ed-border bg-ed-bg-card px-2.5 py-2">
-                  {isServerVideoExport ? (
-                    <p className="text-xs font-medium text-ed-fg-muted">
-                      {videoExportStageLabel}
-                    </p>
-                  ) : null}
-                  <div
-                    className={`flex items-center justify-between gap-2 text-xs ${
-                      isServerVideoExport ? "mt-1.5" : ""
-                    }`}
-                  >
-                    <span className="font-medium text-ed-fg-muted">
-                      {isServerVideoExport ? "Estimated progress" : "Export progress"}
-                    </span>
-                    <span className="font-semibold text-ed-fg">{exportProgress}%</span>
-                  </div>
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-ed-fg/10">
-                    <div
-                      className={`h-full rounded-full bg-ed-accent transition-[width] duration-200 ${
-                        isServerVideoExport && exportServerStage === "processing"
-                          ? "animate-pulse"
-                          : ""
-                      }`}
-                      style={{ width: `${exportProgress}%` }}
-                    />
-                  </div>
-                  <button
-                    className="editor-secondary-button mt-2 w-full rounded-full border-signal/30 px-3 py-2 text-xs font-semibold text-signal hover:bg-signal/5"
-                    onClick={handleCancelExport}
-                    type="button"
-                  >
-                    Cancel
-                  </button>
                 </div>
               ) : null}
 
@@ -10892,7 +11044,7 @@ export default function WatermarkPage() {
                     tileGap={tileGap}
                     tileQuickTemplates={renderQuickTemplates(
                       "text-template-selection-mobile",
-                      watermarkTemplates,
+                      watermarkTemplates.filter((template) => template.mode === "tile"),
                       activeTextTemplate,
                       applyTextTemplate,
                       true,
@@ -11013,9 +11165,7 @@ export default function WatermarkPage() {
                     }}
                     onLogoPick={openLogoPicker}
                     onModeChange={(value) => {
-                      clearActiveTemplates();
-                      setWatermarkMode(value);
-                      setIsWatermarkHovering(false);
+                      applyLogoWatermarkModeDefaults(value);
                     }}
                     onRemoveLayer={removeLogoLayer}
                     onTileAngleChange={(value) => {
@@ -11051,7 +11201,9 @@ export default function WatermarkPage() {
                     tileGap={tileGap}
                     tileQuickTemplates={renderQuickTemplates(
                       "logo-template-selection-mobile",
-                      logoWatermarkTemplates,
+                      logoWatermarkTemplates.filter(
+                        (template) => template.mode === "tile",
+                      ),
                       activeLogoTemplate,
                       applyLogoTemplate,
                       true,
@@ -11251,7 +11403,7 @@ export default function WatermarkPage() {
           ) : null}
 
           {activeEditorPanel === "photos" && activePhotoTool === "crop" ? (
-            <div className="space-y-3">
+            <div className="space-y-0 md:space-y-3">
               {mediaKind !== "image" ? (
                 <EditorCard>
                   <p className="text-sm text-ed-fg-muted">
@@ -11278,7 +11430,7 @@ export default function WatermarkPage() {
           ) : null}
 
           {activeEditorPanel === "photos" && activePhotoTool === "resize" ? (
-            <div className="space-y-3">
+            <div className="space-y-0 md:space-y-3">
               {mediaKind !== "image" ? (
                 <EditorCard>
                   <p className="text-sm text-ed-fg-muted">
@@ -11324,7 +11476,7 @@ export default function WatermarkPage() {
           ) : null}
 
           {activeEditorPanel === "photos" && activePhotoTool === "rotate" ? (
-            <div className="space-y-3">
+            <div className="space-y-0.5 md:space-y-3">
               {mediaKind !== "image" ? (
                 <EditorCard>
                   <p className="text-sm text-ed-fg-muted">
@@ -11333,36 +11485,36 @@ export default function WatermarkPage() {
                 </EditorCard>
               ) : (
                 <>
-                  <EditorCard>
-                    <p className="text-sm leading-6 text-ed-fg-muted">
+                  <EditorCard className="max-md:!p-1">
+                    <p className="hidden text-sm leading-6 text-ed-fg-muted md:block">
                       Rotate the base image. Watermark settings stay unchanged.
                     </p>
-                    <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1 md:mt-3 md:gap-2">
                       <button
-                        className="editor-secondary-button rounded-xl px-3 py-2 text-xs font-semibold text-ed-fg hover:border-signal/50"
+                        className="editor-secondary-button rounded-md px-2 py-1 text-[10px] font-semibold text-ed-fg hover:border-signal/50 md:rounded-xl md:px-3 md:py-2 md:text-xs"
                         onClick={() => rotateBaseImage("left")}
                         type="button"
                       >
                         90° left
                       </button>
                       <button
-                        className="editor-secondary-button rounded-xl px-3 py-2 text-xs font-semibold text-ed-fg hover:border-signal/50"
+                        className="editor-secondary-button rounded-md px-2 py-1 text-[10px] font-semibold text-ed-fg hover:border-signal/50 md:rounded-xl md:px-3 md:py-2 md:text-xs"
                         onClick={() => rotateBaseImage("right")}
                         type="button"
                       >
                         90° right
                       </button>
                     </div>
-                    <div className="mt-3">
-                      <div className="flex items-center justify-between gap-3">
+                    <div className="md:mt-3">
+                      <div className="flex items-center justify-between gap-2 md:gap-3">
                         <label
-                          className="text-xs font-medium text-ed-fg"
+                          className="text-[10px] font-medium text-ed-fg md:text-xs"
                           htmlFor="base-rotation"
                         >
                           Manual angle
                         </label>
                         <input
-                          className="editor-field-sm w-16 text-right"
+                          className="editor-field-sm w-14 text-right text-[11px] md:w-16 md:text-sm"
                           id="base-rotation-value"
                           max={360}
                           min={0}
@@ -11376,7 +11528,7 @@ export default function WatermarkPage() {
                         />
                       </div>
                       <input
-                        className="editor-range mt-2"
+                        className="editor-range mt-1 md:mt-2"
                         id="base-rotation"
                         max={360}
                         min={0}
@@ -11398,7 +11550,7 @@ export default function WatermarkPage() {
           ) : null}
 
           {activeEditorPanel === "photos" && activePhotoTool === "blur" ? (
-            <div className="space-y-3">
+            <div className="space-y-0.5 md:space-y-3">
               {mediaKind !== "image" ? (
                 <EditorCard>
                   <p className="text-sm text-ed-fg-muted">
@@ -11407,15 +11559,19 @@ export default function WatermarkPage() {
                 </EditorCard>
               ) : (
                 <>
-                  <EditorCard>
+                  <EditorCard className="hidden md:block">
                     <p className="text-sm leading-6 text-ed-fg-muted">
                       Click and drag on the photo to pixelate faces or other
                       sensitive areas with a mosaic redaction effect. Each stroke
                       is saved to your edit history.
                     </p>
                   </EditorCard>
-                  <EditorPanelSection title="Brush size">
-                    <div className="grid grid-cols-3 gap-2">
+                  <EditorPanelSection
+                    className="max-md:space-y-0"
+                    hideTitleOnMobile
+                    title="Brush size"
+                  >
+                    <div className="grid grid-cols-3 gap-0.5 md:gap-2">
                       {(
                         [
                           { id: "small", label: "Small" },
@@ -11424,7 +11580,7 @@ export default function WatermarkPage() {
                         ] as const
                       ).map((option) => (
                         <button
-                          className={`rounded-xl border px-3 py-2 text-xs font-semibold transition shadow-sm ${
+                          className={`rounded-md border px-1.5 py-1 text-[10px] font-semibold transition md:rounded-xl md:px-3 md:py-2 md:text-xs md:shadow-sm ${
                             blurBrushSize === option.id
                               ? "editor-selected-strong"
                               : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:text-ed-fg"
@@ -11440,7 +11596,7 @@ export default function WatermarkPage() {
                   </EditorPanelSection>
                   {blurStrokes.length > 0 ? (
                     <button
-                      className="editor-secondary-button w-full rounded-xl px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-ed-fg-muted hover:text-ed-fg"
+                      className="editor-secondary-button w-full rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-ed-fg-muted hover:text-ed-fg md:rounded-xl md:px-4 md:py-2.5 md:text-xs md:tracking-[0.08em]"
                       onClick={() => updateBlurStrokes(() => [])}
                       type="button"
                     >
@@ -11453,7 +11609,7 @@ export default function WatermarkPage() {
           ) : null}
 
           {activeEditorPanel === "photos" && activePhotoTool === "filters" ? (
-            <div className="space-y-3">
+            <div className="space-y-0 md:space-y-3">
               {mediaKind !== "image" ? (
                 <EditorCard>
                   <p className="text-sm text-ed-fg-muted">
@@ -11627,8 +11783,8 @@ export default function WatermarkPage() {
                 showVideoTimelineDock ? "overflow-hidden" : ""
               }`}
             >
-              <div className="editor-mobile-preview-overlay-rail shrink-0 border-b border-ed-border bg-ed-panel md:hidden">
-                {!hasMedia ? (
+              {!hasMedia ? (
+                <div className="editor-mobile-preview-overlay-rail shrink-0 border-b border-ed-border bg-ed-panel md:hidden">
                   <ToolIconRail
                     activePanel={highlightedEditorPanel}
                     mediaKind={mediaKind}
@@ -11636,21 +11792,25 @@ export default function WatermarkPage() {
                     onSelectPanel={handleEditorPanelSelect}
                     showBuyCredits={false}
                   />
-                ) : null}
-              </div>
+                </div>
+              ) : null}
               {showMobileFormatToolRail ? (
-                <div className="editor-mobile-preview-overlay-rail shrink-0 border-b border-ed-border bg-ed-panel md:hidden md:relative">
+                <div
+                  className={`editor-mobile-preview-overlay-rail shrink-0 border-b border-ed-border bg-ed-panel md:hidden md:relative ${
+                    showMobileVideoPreviewStack
+                      ? "editor-mobile-preview-overlay-rail-in-flow"
+                      : ""
+                  }`}
+                >
                   {activeEditorPanel === "photos" ? (
                     <PhotosToolRail
                       activeTool={activePhotoTool}
                       imageToolsEnabled={imageToolsEnabled}
-                      onMobileExit={handleEditorExitRequest}
                       onSelectTool={handlePhotoToolSelect}
                     />
                   ) : activeEditorPanel === "pdfDocs" ? (
                     <PdfDocsToolRail
                       activeTool={activePdfTool}
-                      onMobileExit={handleEditorExitRequest}
                       onSelectTool={handlePdfDocToolSelect}
                     />
                   ) : activeEditorPanel === "video" ? (
@@ -11658,7 +11818,18 @@ export default function WatermarkPage() {
                       activeTool={activeVideoTool}
                       hasVideo={videoToolsEnabled}
                       hideOverviewOnMobile
-                      onMobileExit={handleEditorExitRequest}
+                      mobileTrailingAccessory={
+                        showMobileVideoPreviewStack ? (
+                          <PreviewCanvasZoomControls
+                            onReset={handlePreviewZoomReset}
+                            onZoomIn={handlePreviewZoomIn}
+                            onZoomOut={handlePreviewZoomOut}
+                            resetDisabled={previewZoomResetDisabled}
+                            zoomInDisabled={previewZoomInDisabled}
+                            zoomOutDisabled={previewZoomOutDisabled}
+                          />
+                        ) : undefined
+                      }
                       onReshortenVideo={beginReshortenSession}
                       onSelectTool={handleVideoToolSelect}
                       showReshortenOnTrim={showReshortenVideoAction}
@@ -11666,11 +11837,19 @@ export default function WatermarkPage() {
                   ) : null}
                 </div>
               ) : null}
-              <div className="relative min-h-0 flex-1 max-md:absolute max-md:inset-0">
+              <div
+                className={`relative min-h-0 flex-1 ${
+                  showMobileVideoPreviewStack
+                    ? "max-md:min-h-0"
+                    : "max-md:absolute max-md:inset-0"
+                }`}
+              >
               <div
                 ref={previewCheckerboardRef}
                 className={`editor-checkerboard group absolute inset-0 ${
-                  showMobilePreviewTopRail ? "max-md:pt-11" : ""
+                  showMobilePreviewTopRail && !showMobileVideoPreviewStack
+                    ? "max-md:pt-11"
+                    : ""
                 } ${
                   showVideoTimelineDock
                     ? previewZoomPercent > PREVIEW_ZOOM_DEFAULT && hasPreviewContent
@@ -11679,7 +11858,7 @@ export default function WatermarkPage() {
                     : hasPreviewContent
                       ? "overflow-auto p-0 md:p-6"
                       : "overflow-hidden p-4 md:p-6"
-                } ${canvasMetaLabel && !showVideoTimelineDock ? "max-md:pb-8" : ""} ${mobileEditorChromeInset}`}
+                } ${canvasMetaLabel && !showVideoTimelineDock && mediaKind !== "video" ? "max-md:pb-8" : ""} ${mobileEditorChromeInset}`}
               >
             {isPdfLoading ? (
               <div className="flex min-h-full min-w-full items-center justify-center text-center">
@@ -11691,7 +11870,11 @@ export default function WatermarkPage() {
                 </div>
               </div>
             ) : hasPreviewContent ? (
-              <div className="flex min-h-full min-w-full items-center justify-center max-md:min-h-0 max-md:flex-1">
+              <div
+                className={`flex min-h-full min-w-full items-center justify-center max-md:min-h-0 max-md:flex-1 ${
+                  showMobileVideoPreviewStack ? "max-md:items-start" : ""
+                }`}
+              >
                 <div
                   className="relative flex shrink-0 items-center justify-center max-md:max-h-full max-md:max-w-full"
                   style={{
@@ -11716,43 +11899,71 @@ export default function WatermarkPage() {
                 style={{ cursor: resolvedCanvasCursor }}
               />
             ) : mediaKind === "video" && videoUrl ? (
-              showVideoOverviewPreview ? (
-                <div
-                  className="flex touch-none"
-                  onPointerCancel={handlePreviewSurfacePointerCancel}
-                  onPointerDown={handlePreviewSurfacePointerDown}
-                  onPointerMove={handlePreviewSurfacePointerMove}
-                  onPointerUp={handlePreviewSurfacePointerUp}
-                  ref={videoPreviewRef}
-                  style={{
-                    cursor:
-                      resolvedCanvasCursor === "auto" ? undefined : resolvedCanvasCursor,
-                    height: videoPreviewDisplayFrame.height,
-                    width: videoPreviewDisplayFrame.width,
+              <div
+                className="flex touch-none"
+                onPointerCancel={
+                  showVideoOverviewPreview
+                    ? handlePreviewSurfacePointerCancel
+                    : undefined
+                }
+                onPointerDown={
+                  showVideoOverviewPreview
+                    ? handlePreviewSurfacePointerDown
+                    : undefined
+                }
+                onPointerMove={
+                  showVideoOverviewPreview
+                    ? handlePreviewSurfacePointerMove
+                    : undefined
+                }
+                onPointerUp={
+                  showVideoOverviewPreview
+                    ? handlePreviewSurfacePointerUp
+                    : undefined
+                }
+                ref={videoPreviewRef}
+                style={{
+                  cursor: showVideoOverviewPreview
+                    ? resolvedCanvasCursor === "auto"
+                      ? undefined
+                      : resolvedCanvasCursor
+                    : undefined,
+                  height: videoPreviewDisplayFrame.height,
+                  width: videoPreviewDisplayFrame.width,
+                }}
+              >
+                <VideoOverviewPlayer
+                  className={
+                    showVideoOverviewPreview ? "" : "md:border-0 md:shadow-none"
+                  }
+                  controlsClassName={
+                    showVideoOverviewPreview ? "" : "md:hidden"
+                  }
+                  currentTimeSeconds={videoPreviewTime}
+                  durationSeconds={videoDuration}
+                  isPlaying={isVideoPlaying}
+                  onPause={() => {
+                    videoElementRef.current?.pause();
                   }}
+                  onSeek={seekVideoPreview}
+                  onTogglePlay={() => {
+                    const video = videoElementRef.current;
+
+                    if (!video) {
+                      return;
+                    }
+
+                    if (video.paused) {
+                      void video.play();
+                    } else {
+                      video.pause();
+                    }
+                  }}
+                  playOverlayClassName={
+                    showVideoOverviewPreview ? "" : "md:hidden"
+                  }
                 >
-                  <VideoOverviewPlayer
-                    currentTimeSeconds={videoPreviewTime}
-                    durationSeconds={videoDuration}
-                    isPlaying={isVideoPlaying}
-                    onPause={() => {
-                      videoElementRef.current?.pause();
-                    }}
-                    onSeek={seekVideoPreview}
-                    onTogglePlay={() => {
-                      const video = videoElementRef.current;
-
-                      if (!video) {
-                        return;
-                      }
-
-                      if (video.paused) {
-                        void video.play();
-                      } else {
-                        video.pause();
-                      }
-                    }}
-                  >
+                  {showVideoOverviewPreview ? (
                     <video
                       className="block h-full max-h-full w-full max-w-full object-contain"
                       controls={false}
@@ -11762,50 +11973,44 @@ export default function WatermarkPage() {
                       ref={videoElementRef}
                       src={videoUrl}
                     />
-                  </VideoOverviewPlayer>
-                </div>
-              ) : (
-              <div
-                className="relative touch-none shadow-lg"
-                ref={videoPreviewRef}
-                style={{
-                  height: videoPreviewDisplayFrame.height,
-                  width: videoPreviewDisplayFrame.width,
-                }}
-              >
-                <video
-                  className="block h-full w-full object-contain"
-                  controls={false}
-                  disablePictureInPicture
-                  key={videoUrl}
-                  playsInline
-                  preload="auto"
-                  ref={videoElementRef}
-                  src={videoUrl}
-                />
-                <canvas
-                  className={`absolute inset-0 h-full w-full touch-none ${
-                    mediaKind === "video" && !isVideoCanvasInteractionActive()
-                      ? "pointer-events-none"
-                      : ""
-                  } ${
-                    isSignatureDropTarget
-                      ? "ring-2 ring-inset ring-signal"
-                      : ""
-                  }`}
-                  onDragLeave={handleSignatureDragLeave}
-                  onDragOver={handleSignatureDragOver}
-                  onDrop={handleSignatureDrop}
-                  onPointerCancel={handleCanvasPointerCancel}
-                  onPointerDown={handleCanvasPointerDown}
-                  onPointerLeave={handleCanvasPointerLeave}
-                  onPointerMove={handleCanvasPointerMove}
-                  onPointerUp={handleCanvasPointerUp}
-                  ref={videoOverlayCanvasRef}
-                  style={{ cursor: resolvedCanvasCursor }}
-                />
+                  ) : (
+                    <div className="relative h-full w-full md:shadow-lg">
+                      <video
+                        className="block h-full max-h-full w-full max-w-full object-contain"
+                        controls={false}
+                        disablePictureInPicture
+                        key={videoUrl}
+                        playsInline
+                        preload="auto"
+                        ref={videoElementRef}
+                        src={videoUrl}
+                      />
+                      <canvas
+                        className={`absolute inset-0 h-full w-full touch-none ${
+                          mediaKind === "video" &&
+                          !isVideoCanvasInteractionActive()
+                            ? "pointer-events-none"
+                            : ""
+                        } ${
+                          isSignatureDropTarget
+                            ? "ring-2 ring-inset ring-signal"
+                            : ""
+                        }`}
+                        onDragLeave={handleSignatureDragLeave}
+                        onDragOver={handleSignatureDragOver}
+                        onDrop={handleSignatureDrop}
+                        onPointerCancel={handleCanvasPointerCancel}
+                        onPointerDown={handleCanvasPointerDown}
+                        onPointerLeave={handleCanvasPointerLeave}
+                        onPointerMove={handleCanvasPointerMove}
+                        onPointerUp={handleCanvasPointerUp}
+                        ref={videoOverlayCanvasRef}
+                        style={{ cursor: resolvedCanvasCursor }}
+                      />
+                    </div>
+                  )}
+                </VideoOverviewPlayer>
               </div>
-              )
             ) : null}
                 </div>
               </div>
@@ -11824,7 +12029,9 @@ export default function WatermarkPage() {
               {hasPreviewContent && !isPdfLoading ? (
                 <div className="pointer-events-none absolute inset-0 z-30 p-2 md:p-6">
                   <PreviewCanvasZoomControls
-                    className="pointer-events-auto absolute top-2 right-2 md:top-6 md:right-6"
+                    className={`pointer-events-auto absolute top-2 right-2 md:top-6 md:right-6 ${
+                      showMobileVideoPreviewStack ? "max-md:hidden" : ""
+                    }`}
                     onReset={handlePreviewZoomReset}
                     onZoomIn={handlePreviewZoomIn}
                     onZoomOut={handlePreviewZoomOut}
@@ -11889,7 +12096,9 @@ export default function WatermarkPage() {
               className={`border-t border-ed-border bg-ed-bg-card py-2 text-center text-xs text-ed-fg-muted ${
                 showVideoTimelineDock
                   ? "max-md:hidden"
-                  : "editor-mobile-preview-meta md:relative md:border-t md:bg-ed-bg-card md:py-2 md:text-xs"
+                  : mediaKind === "video"
+                    ? "max-md:hidden md:relative md:border-t md:bg-ed-bg-card md:py-2 md:text-xs"
+                    : "editor-mobile-preview-meta md:relative md:border-t md:bg-ed-bg-card md:py-2 md:text-xs"
               }`}
             >
               {canvasMetaLabel}
@@ -11905,6 +12114,7 @@ export default function WatermarkPage() {
         exportDisabled={isExportDisabled}
         exportLabel={exportButtonLabel}
         exportTitle={exportDisabledReason}
+        isExporting={isExporting}
         mediaActions={
           hasMedia ? (
             <EditorMediaActionButtons
@@ -11918,6 +12128,9 @@ export default function WatermarkPage() {
           ) : null
         }
         onExit={handleEditorExitRequest}
+        onBuyCredits={() => {
+          void openEditorCreditsCheckout();
+        }}
         onExport={handleExport}
         onRedo={redoWatermarkSettings}
         onUndo={undoWatermarkSettings}
@@ -11930,9 +12143,19 @@ export default function WatermarkPage() {
       />
 
       <WatermarkedExportUpsellModal
+        onBuyCredits={() => {
+          void openEditorCreditsCheckout();
+        }}
         onClose={handleDismissWatermarkedExportUpsell}
         onContinue={handleContinueWithWatermarkedExport}
         open={showWatermarkedExportUpsell}
+      />
+
+      <EditorCreditsCheckoutModal
+        isOpen={showEditorCreditsCheckout}
+        onClose={handleDismissEditorCreditsCheckout}
+        onPurchaseComplete={handleEditorCreditsPurchaseComplete}
+        paypalClientId={paypalClientId}
       />
 
       {showEditorExitConfirm ? (
@@ -11966,6 +12189,9 @@ export default function WatermarkPage() {
 
       <SignFillCreditsRequiredModal
         description="Videos over 60 seconds, above 1080p, or processed on our servers require credits. Buy credits to export, or use a shorter clip within in browser limits for a free watermarked export."
+        onBuyCredits={() => {
+          void openEditorCreditsCheckout();
+        }}
         onClose={handleDismissServerVideoCreditGate}
         open={showServerVideoCreditGate}
         title="Server video export requires credits"
@@ -11997,14 +12223,120 @@ type ImageBatchStripProps = {
   activeId: string | null;
   entries: BatchImageEntry[];
   headerActions?: ReactNode;
+  onAddMore?: () => void;
   onRemove: (id: string) => void;
   onSelect: (id: string) => void;
 };
 
 const stripVisibleCount = 3;
+const mobileBatchThumbSizePx = 44;
+const mobileBatchThumbGapPx = 6;
+const mobileBatchVisibleCount = 4;
+
+type MobileHorizontalBatchStripProps<T> = {
+  activeId: string | null;
+  getItemId: (item: T) => string;
+  items: readonly T[];
+  renderItem: (item: T) => ReactNode;
+};
+
+function MobileHorizontalBatchStrip<T>({
+  activeId,
+  getItemId,
+  items,
+  renderItem,
+}: MobileHorizontalBatchStripProps<T>) {
+  const [startIndex, setStartIndex] = useState(0);
+  const slotCount = items.length;
+  const maxStartIndex = Math.max(0, slotCount - mobileBatchVisibleCount);
+  const safeStartIndex = Math.min(startIndex, maxStartIndex);
+  const canGoLeft = safeStartIndex > 0;
+  const canGoRight = safeStartIndex + mobileBatchVisibleCount < slotCount;
+  const showNavigation = slotCount > mobileBatchVisibleCount;
+  const translateXPx = safeStartIndex * (mobileBatchThumbSizePx + mobileBatchThumbGapPx);
+
+  useEffect(() => {
+    if (!activeId) {
+      return;
+    }
+
+    const activeIndex = items.findIndex((item) => getItemId(item) === activeId);
+
+    if (activeIndex === -1) {
+      return;
+    }
+
+    setStartIndex((previousStart) => {
+      if (activeIndex < previousStart) {
+        return activeIndex;
+      }
+
+      if (activeIndex >= previousStart + mobileBatchVisibleCount) {
+        return activeIndex - mobileBatchVisibleCount + 1;
+      }
+
+      return previousStart;
+    });
+  }, [activeId, getItemId, items]);
+
+  useEffect(() => {
+    setStartIndex((previousStart) => Math.min(previousStart, maxStartIndex));
+  }, [maxStartIndex]);
+
+  return (
+    <div className="mt-1 flex items-center gap-0.5 md:hidden">
+      <button
+        aria-label="Show previous batch images"
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-signal/40 bg-signal text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:border-ed-border disabled:bg-ed-bg-card disabled:text-ed-fg-muted disabled:opacity-30 disabled:shadow-none"
+        disabled={!canGoLeft}
+        onClick={() => setStartIndex((index) => Math.max(0, index - 1))}
+        type="button"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.25} />
+      </button>
+
+      <div className="min-w-0 flex-1 overflow-hidden">
+        <div
+          className="flex items-center gap-1.5 transition-transform duration-200 ease-out"
+          style={{ transform: `translateX(-${translateXPx}px)` }}
+        >
+          {items.map((item) => (
+            <div
+              className="shrink-0"
+              key={getItemId(item)}
+              style={{ height: mobileBatchThumbSizePx, width: mobileBatchThumbSizePx }}
+            >
+              {renderItem(item)}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button
+        aria-label="Show next batch images"
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-signal/40 bg-signal text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:border-ed-border disabled:bg-ed-bg-card disabled:text-ed-fg-muted disabled:opacity-30 disabled:shadow-none"
+        disabled={!canGoRight}
+        onClick={() =>
+          setStartIndex((index) => Math.min(maxStartIndex, index + 1))
+        }
+        type="button"
+      >
+        <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.25} />
+      </button>
+
+      {showNavigation ? (
+        <span className="sr-only">
+          Showing {safeStartIndex + 1} to{" "}
+          {Math.min(safeStartIndex + mobileBatchVisibleCount, slotCount)} of {slotCount}
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
 type PaginatedThreeColumnStripProps<T> = {
   activeId: string | null;
+  appendSlot?: ReactNode;
   getItemId: (item: T) => string;
   items: readonly T[];
   renderItem: (item: T) => ReactNode;
@@ -12012,6 +12344,7 @@ type PaginatedThreeColumnStripProps<T> = {
 
 function PaginatedThreeColumnStrip<T>({
   activeId,
+  appendSlot,
   getItemId,
   items,
   renderItem,
@@ -12057,19 +12390,20 @@ function PaginatedThreeColumnStrip<T>({
 
   return (
     <>
-      <div className="mt-2 grid grid-cols-3 gap-2">
+      <div className="mt-2 hidden grid-cols-3 gap-2 md:grid">
         {visibleItems.map((item) => (
           <div className="min-w-0" key={getItemId(item)}>
             {renderItem(item)}
           </div>
         ))}
+        {appendSlot ? <div className="min-w-0">{appendSlot}</div> : null}
       </div>
 
       {showNavigation ? (
-        <div className="mt-2 flex items-center justify-between gap-2">
+        <div className="mt-2 hidden items-center justify-between gap-2 md:flex">
           <button
             aria-label="Show previous items"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-ed-border bg-ed-bg-card text-ed-fg-muted transition hover:border-sand/40 hover:text-ed-fg disabled:cursor-not-allowed disabled:opacity-35"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-signal/40 bg-signal text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:border-ed-border disabled:bg-ed-bg-card disabled:text-ed-fg-muted disabled:opacity-35 disabled:shadow-none"
             disabled={!canGoLeft}
             onClick={() => setStartIndex((index) => Math.max(0, index - 1))}
             type="button"
@@ -12085,7 +12419,7 @@ function PaginatedThreeColumnStrip<T>({
 
           <button
             aria-label="Show next items"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-ed-border bg-ed-bg-card text-ed-fg-muted transition hover:border-sand/40 hover:text-ed-fg disabled:cursor-not-allowed disabled:opacity-35"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-signal/40 bg-signal text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:border-ed-border disabled:bg-ed-bg-card disabled:text-ed-fg-muted disabled:opacity-35 disabled:shadow-none"
             disabled={!canGoRight}
             onClick={() =>
               setStartIndex((index) => Math.min(maxStartIndex, index + 1))
@@ -12104,60 +12438,100 @@ function ImageBatchStrip({
   activeId,
   entries,
   headerActions,
+  onAddMore,
   onRemove,
   onSelect,
 }: ImageBatchStripProps) {
+  const addMoreSlot = onAddMore ? (
+    <button
+      aria-label="Add more images"
+      className="flex h-full w-full flex-col items-center justify-center rounded-md border border-emerald-200 bg-emerald-100 text-emerald-900 shadow-sm transition hover:bg-emerald-200/80 md:aspect-square md:rounded-lg"
+      onClick={onAddMore}
+      type="button"
+    >
+      <Plus className="h-4 w-4 md:h-6 md:w-6" strokeWidth={2.5} />
+      <span className="mt-0.5 hidden text-[9px] font-bold uppercase tracking-[0.08em] md:block">
+        Add
+      </span>
+    </button>
+  ) : undefined;
+
+  const renderBatchItem = (entry: BatchImageEntry, compact: boolean) => {
+    const isActive = entry.id === activeId;
+
+    return (
+      <div className="relative h-full w-full">
+        <button
+          className={`group relative block h-full w-full overflow-hidden rounded-md border transition md:rounded-lg ${
+            isActive
+              ? "editor-selected-ring"
+              : "border-ed-border hover:border-signal/50"
+          }`}
+          onClick={() => onSelect(entry.id)}
+          title={entry.fileName}
+          type="button"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            alt={entry.fileName}
+            className={`w-full object-cover ${compact ? "h-full" : "aspect-square"}`}
+            src={entry.objectUrl}
+          />
+          {!compact ? (
+            <span className="block truncate px-1 py-1 text-[10px] text-ed-fg-muted">
+              {entry.fileName}
+            </span>
+          ) : null}
+        </button>
+        <button
+          aria-label={`Remove ${entry.fileName}`}
+          className={`absolute rounded-full bg-ed-bg-card/90 text-ed-fg-muted shadow-sm transition hover:bg-signal hover:text-white ${
+            compact ? "right-0.5 top-0.5 p-0" : "right-1 top-1 p-0.5"
+          }`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove(entry.id);
+          }}
+          type="button"
+        >
+          <X size={compact ? 10 : 12} />
+        </button>
+      </div>
+    );
+  };
+
   return (
-    <div className="rounded-lg border border-ed-border bg-ed-bg-card p-2">
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ed-fg">
+    <div className="rounded-lg border border-ed-border bg-ed-bg-card p-1.5 md:p-2">
+      <div className="mb-1 flex items-center justify-between gap-2 md:mb-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ed-fg md:text-[11px] md:tracking-[0.16em]">
           Batch images
         </p>
-        {headerActions}
+        <div className="flex items-center gap-1.5">
+          {onAddMore ? (
+            <button
+              aria-label="Add more images"
+              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-emerald-200 bg-emerald-100 text-emerald-900 shadow-sm transition hover:bg-emerald-200/80 md:hidden"
+              onClick={onAddMore}
+              type="button"
+            >
+              <Plus className="h-3 w-3" strokeWidth={2.5} />
+            </button>
+          ) : null}
+          {headerActions}
+        </div>
       </div>
-      <PaginatedThreeColumnStrip
+      <MobileHorizontalBatchStrip
         activeId={activeId}
         getItemId={(entry) => entry.id}
         items={entries}
-        renderItem={(entry) => {
-          const isActive = entry.id === activeId;
-
-          return (
-            <div className="relative">
-              <button
-                className={`group relative block w-full overflow-hidden rounded-lg border transition ${
-                  isActive
-                    ? "editor-selected-ring"
-                    : "border-ed-border hover:border-signal/50"
-                }`}
-                onClick={() => onSelect(entry.id)}
-                title={entry.fileName}
-                type="button"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  alt={entry.fileName}
-                  className="aspect-square w-full object-cover"
-                  src={entry.objectUrl}
-                />
-                <span className="block truncate px-1 py-1 text-[10px] text-ed-fg-muted">
-                  {entry.fileName}
-                </span>
-              </button>
-              <button
-                aria-label={`Remove ${entry.fileName}`}
-                className="absolute right-1 top-1 rounded-full bg-ed-bg-card/90 p-0.5 text-ed-fg-muted shadow-sm transition hover:bg-signal hover:text-white"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onRemove(entry.id);
-                }}
-                type="button"
-              >
-                <X size={12} />
-              </button>
-            </div>
-          );
-        }}
+        renderItem={(entry) => renderBatchItem(entry, true)}
+      />
+      <PaginatedThreeColumnStrip
+        activeId={activeId}
+        appendSlot={addMoreSlot}
+        getItemId={(entry) => entry.id}
+        items={entries}
+        renderItem={(entry) => renderBatchItem(entry, false)}
       />
     </div>
   );

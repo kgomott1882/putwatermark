@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type FormEvent,
+  type FocusEvent,
+} from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { EmailOtpVerification } from "../auth/EmailOtpVerification";
@@ -41,6 +48,60 @@ const initialValues: FormValues = {
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const minimumPasswordLength = 8;
 
+function scrollFieldIntoView(event: FocusEvent<HTMLInputElement>) {
+  if (window.innerWidth >= 768) {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    event.currentTarget.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  });
+}
+
+function useVisualViewport(open: boolean) {
+  const [viewport, setViewport] = useState<{
+    height: number;
+    offsetTop: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!open || typeof window === "undefined") {
+      setViewport(null);
+      return;
+    }
+
+    const visualViewport = window.visualViewport;
+
+    if (!visualViewport) {
+      setViewport(null);
+      return;
+    }
+
+    const updateViewport = () => {
+      setViewport({
+        height: visualViewport.height,
+        offsetTop: visualViewport.offsetTop,
+      });
+    };
+
+    updateViewport();
+    visualViewport.addEventListener("resize", updateViewport);
+    visualViewport.addEventListener("scroll", updateViewport);
+    window.addEventListener("orientationchange", updateViewport);
+
+    return () => {
+      visualViewport.removeEventListener("resize", updateViewport);
+      visualViewport.removeEventListener("scroll", updateViewport);
+      window.removeEventListener("orientationchange", updateViewport);
+    };
+  }, [open]);
+
+  return viewport;
+}
+
 export function ExportLoginGateModal({
   errorMessage = "",
   noticeMessage = "",
@@ -60,6 +121,7 @@ export function ExportLoginGateModal({
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [googleError, setGoogleError] = useState("");
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState("");
+  const visualViewport = useVisualViewport(open);
 
   useEffect(() => {
     if (!open) {
@@ -207,60 +269,80 @@ export function ExportLoginGateModal({
   const showVerifyEmail = phase === "verify-email" || Boolean(otpEmail);
 
   return (
-    <div
-      aria-labelledby={titleId}
-      aria-modal="true"
-      className="fixed inset-0 z-[80] flex items-center justify-center p-4"
-      role="dialog"
-    >
+    <div className="fixed inset-0 z-[80]" role="dialog" aria-labelledby={titleId} aria-modal="true">
       <div
         aria-hidden="true"
         className="absolute inset-0 bg-ed-fg/45 backdrop-blur-sm"
       />
 
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-ed-border bg-ed-panel shadow-[0_24px_80px_rgba(43,43,43,0.25)]">
-        <div className="border-b border-ed-border bg-ed-bg-card px-6 py-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ed-fg">
-                Export
-              </p>
-              <h2 className="mt-1 text-lg font-semibold leading-snug text-ed-fg" id={titleId}>
-                {showVerifyEmail ? "Verify your email" : "Sign in to export your file"}
-              </h2>
-              <p className="mt-2 text-sm leading-relaxed text-ed-fg-muted" id={descriptionId}>
-                {showVerifyEmail
-                  ? "Enter the code we sent to your email to finish verifying your account. Your current edits stay saved for 48 hours."
-                  : "Create a free account or log in to download your watermarked export. Your current edits are saved for 48 hours."}
-              </p>
+      <div
+        className="fixed left-0 right-0 flex items-end justify-center p-2 md:inset-0 md:items-center md:justify-center md:p-4"
+        style={
+          visualViewport
+            ? {
+                height: `${visualViewport.height}px`,
+                top: `${visualViewport.offsetTop}px`,
+              }
+            : {
+                bottom: 0,
+                top: 0,
+              }
+        }
+      >
+        <div className="relative flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-xl border border-ed-border bg-ed-panel shadow-[0_24px_80px_rgba(43,43,43,0.25)] md:max-h-[min(92vh,820px)] md:rounded-2xl">
+          <div className="shrink-0 border-b border-ed-border bg-ed-bg-card px-4 py-3 md:px-6 md:py-5">
+            <div className="flex items-start justify-between gap-3 md:gap-4">
+              <div className="min-w-0">
+                <p className="hidden text-[10px] font-bold uppercase tracking-[0.18em] text-ed-fg md:block">
+                  Export
+                </p>
+                <h2
+                  className="text-base font-semibold leading-snug text-ed-fg md:mt-1 md:text-lg"
+                  id={titleId}
+                >
+                  {showVerifyEmail ? "Verify your email" : "Sign in to export"}
+                </h2>
+                <p
+                  className="mt-1 hidden text-sm leading-relaxed text-ed-fg-muted md:mt-2 md:block"
+                  id={descriptionId}
+                >
+                  {showVerifyEmail
+                    ? "Enter the code we sent to your email to finish verifying your account. Your current edits stay saved for 48 hours."
+                    : "Create a free account or log in to download your watermarked export. Your current edits are saved for 48 hours."}
+                </p>
+                <p className="mt-1 text-xs leading-4 text-ed-fg-muted md:hidden">
+                  {showVerifyEmail
+                    ? "Enter the code from your email. Edits stay saved for 48 hours."
+                    : "Log in or sign up to export. Edits stay saved for 48 hours."}
+                </p>
+              </div>
+
+              {phase !== "saving" ? (
+                <button
+                  aria-label="Close"
+                  className="rounded-full p-1.5 text-ed-fg-muted transition hover:bg-ed-fg/10 hover:text-ed-fg md:p-2"
+                  onClick={onClose}
+                  type="button"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
             </div>
-
-            {phase !== "saving" ? (
-              <button
-                aria-label="Close"
-                className="rounded-full p-2 text-ed-fg-muted transition hover:bg-ed-fg/10 hover:text-ed-fg"
-                onClick={onClose}
-                type="button"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            ) : null}
           </div>
-        </div>
 
-        <div className="px-6 py-5">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-3 md:px-6 md:py-5">
           {phase === "saving" ? (
             <LoadingIndicator label="Saving your work before sign-in…" mutedClassName="text-ed-fg-muted" size="sm" />
           ) : null}
 
           {noticeMessage ? (
-            <p className="mb-4 rounded-xl border border-ed-border bg-ed-fg/5 px-4 py-3 text-sm text-ed-fg">
+            <p className="mb-3 rounded-lg border border-ed-border bg-ed-fg/5 px-3 py-2 text-xs text-ed-fg md:mb-4 md:rounded-xl md:px-4 md:py-3 md:text-sm">
               {noticeMessage}
             </p>
           ) : null}
 
           {errorMessage ? (
-            <p className="mb-4 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-800">
+            <p className="mb-3 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-800 md:mb-4 md:rounded-xl md:px-4 md:py-3 md:text-sm">
               {errorMessage}
             </p>
           ) : null}
@@ -277,13 +359,13 @@ export function ExportLoginGateModal({
           ) : phase === "auth" ? (
             <>
               {googleError ? (
-                <p className="mb-4 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-800">
+                <p className="mb-3 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-800 md:mb-4 md:rounded-xl md:px-4 md:py-3 md:text-sm">
                   {googleError}
                 </p>
               ) : null}
 
               <button
-                className="mb-4 flex w-full items-center justify-center gap-3 rounded-xl border border-ed-border bg-ed-bg px-4 py-3 text-sm font-semibold text-ed-fg transition hover:border-signal/40 hover:bg-ed-bg-card disabled:cursor-not-allowed disabled:opacity-60"
+                className="mb-3 flex w-full items-center justify-center gap-2 rounded-lg border border-ed-border bg-ed-bg px-3 py-2 text-xs font-semibold text-ed-fg transition hover:border-signal/40 hover:bg-ed-bg-card disabled:cursor-not-allowed disabled:opacity-60 md:mb-4 md:gap-3 md:rounded-xl md:px-4 md:py-3 md:text-sm"
                 disabled={isGoogleLoading || isSubmitting}
                 onClick={() => {
                   void handleContinueWithGoogle();
@@ -294,17 +376,17 @@ export function ExportLoginGateModal({
                 {isGoogleLoading ? "Redirecting…" : "Continue with Google"}
               </button>
 
-              <div className="mb-4 flex items-center gap-3">
+              <div className="mb-3 flex items-center gap-2 md:mb-4 md:gap-3">
                 <div className="h-px flex-1 bg-ed-border" />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ed-fg-muted">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ed-fg-muted md:text-[11px]">
                   or
                 </span>
                 <div className="h-px flex-1 bg-ed-border" />
               </div>
 
-              <div className="mb-4 flex editor-segment-track rounded-full p-1">
+              <div className="mb-3 flex editor-segment-track rounded-full p-0.5 md:mb-4 md:p-1">
                 <button
-                  className={`flex-1 rounded-full px-3 py-2 text-sm font-medium transition ${
+                  className={`flex-1 rounded-full px-2 py-1.5 text-xs font-medium transition md:px-3 md:py-2 md:text-sm ${
                     mode === "login"
                       ? "editor-selected-pill"
                       : "text-ed-fg-muted hover:text-ed-fg"
@@ -315,7 +397,7 @@ export function ExportLoginGateModal({
                   Log in
                 </button>
                 <button
-                  className={`flex-1 rounded-full px-3 py-2 text-sm font-medium transition ${
+                  className={`flex-1 rounded-full px-2 py-1.5 text-xs font-medium transition md:px-3 md:py-2 md:text-sm ${
                     mode === "signup"
                       ? "editor-selected-pill"
                       : "text-ed-fg-muted hover:text-ed-fg"
@@ -328,92 +410,98 @@ export function ExportLoginGateModal({
               </div>
 
               {formError ? (
-                <p className="mb-4 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-800">
+                <p className="mb-3 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-800 md:mb-4 md:rounded-xl md:px-4 md:py-3 md:text-sm">
                   {formError}
                 </p>
               ) : null}
 
               {mode === "login" ? (
-                <form className="space-y-4" onSubmit={handleLoginSubmit}>
-                  <label className="block text-sm text-ed-fg-muted">
+                <form className="space-y-2.5 md:space-y-4" onSubmit={handleLoginSubmit}>
+                  <label className="block text-xs text-ed-fg-muted md:text-sm">
                     Email
                     <input
                       autoComplete="email"
-                      className="editor-field mt-2 px-4 py-3"
+                      className="editor-field mt-1 max-md:text-base max-md:leading-normal md:mt-2 md:px-4 md:py-3"
                       onChange={(event) => updateValue("email", event.target.value)}
+                      onFocus={scrollFieldIntoView}
                       required
                       type="email"
                       value={values.email}
                     />
                   </label>
-                  <label className="block text-sm text-ed-fg-muted">
+                  <label className="block text-xs text-ed-fg-muted md:text-sm">
                     Password
                     <input
                       autoComplete="current-password"
-                      className="editor-field mt-2 px-4 py-3"
+                      className="editor-field mt-1 max-md:text-base max-md:leading-normal md:mt-2 md:px-4 md:py-3"
                       onChange={(event) => updateValue("password", event.target.value)}
+                      onFocus={scrollFieldIntoView}
                       required
                       type="password"
                       value={values.password}
                     />
                   </label>
-                  <Button as="button" className="w-full" disabled={isSubmitting} type="submit">
+                  <Button as="button" className="w-full text-sm md:text-base" disabled={isSubmitting} type="submit">
                     {isSubmitting ? "Signing in…" : "Continue to export"}
                   </Button>
                 </form>
               ) : (
-                <form className="space-y-4" onSubmit={handleSignupSubmit}>
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="block text-sm text-ed-fg-muted">
+                <form className="space-y-2.5 md:space-y-4" onSubmit={handleSignupSubmit}>
+                  <div className="grid grid-cols-2 gap-2 md:gap-3">
+                    <label className="block text-xs text-ed-fg-muted md:text-sm">
                       Name
                       <input
                         autoComplete="given-name"
-                        className="editor-field mt-2 px-4 py-3"
+                        className="editor-field mt-1 max-md:text-base max-md:leading-normal md:mt-2 md:px-4 md:py-3"
                         onChange={(event) => updateValue("name", event.target.value)}
+                        onFocus={scrollFieldIntoView}
                         required
                         value={values.name}
                       />
                     </label>
-                    <label className="block text-sm text-ed-fg-muted">
+                    <label className="block text-xs text-ed-fg-muted md:text-sm">
                       Surname
                       <input
                         autoComplete="family-name"
-                        className="editor-field mt-2 px-4 py-3"
+                        className="editor-field mt-1 max-md:text-base max-md:leading-normal md:mt-2 md:px-4 md:py-3"
                         onChange={(event) => updateValue("surname", event.target.value)}
+                        onFocus={scrollFieldIntoView}
                         required
                         value={values.surname}
                       />
                     </label>
                   </div>
-                  <label className="block text-sm text-ed-fg-muted">
+                  <label className="block text-xs text-ed-fg-muted md:text-sm">
                     Email
                     <input
                       autoComplete="email"
-                      className="editor-field mt-2 px-4 py-3"
+                      className="editor-field mt-1 max-md:text-base max-md:leading-normal md:mt-2 md:px-4 md:py-3"
                       onChange={(event) => updateValue("email", event.target.value)}
+                      onFocus={scrollFieldIntoView}
                       required
                       type="email"
                       value={values.email}
                     />
                   </label>
-                  <label className="block text-sm text-ed-fg-muted">
+                  <label className="block text-xs text-ed-fg-muted md:text-sm">
                     Password
                     <input
                       autoComplete="new-password"
-                      className="editor-field mt-2 px-4 py-3"
+                      className="editor-field mt-1 max-md:text-base max-md:leading-normal md:mt-2 md:px-4 md:py-3"
                       onChange={(event) => updateValue("password", event.target.value)}
+                      onFocus={scrollFieldIntoView}
                       required
                       type="password"
                       value={values.password}
                     />
                   </label>
-                  <Button as="button" className="w-full" disabled={isSubmitting} type="submit">
+                  <Button as="button" className="w-full text-sm md:text-base" disabled={isSubmitting} type="submit">
                     {isSubmitting ? "Creating account…" : "Create account and export"}
                   </Button>
                 </form>
               )}
 
-              <p className="mt-4 text-center text-xs text-ed-fg-muted">
+              <p className="mt-3 hidden text-center text-xs text-ed-fg-muted md:mt-4 md:block">
                 Prefer the full page?{" "}
                 <Link className="text-ed-fg underline-offset-2 hover:underline" href="/login">
                   Log in
@@ -426,6 +514,7 @@ export function ExportLoginGateModal({
               </p>
             </>
           ) : null}
+          </div>
         </div>
       </div>
     </div>

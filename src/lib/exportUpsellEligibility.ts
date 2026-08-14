@@ -159,6 +159,24 @@ export function shouldApplyForcedWatermarkForClientVideoExport({
   return balance <= 0;
 }
 
+/** Photo exports (single or batch ZIP) use the forced stamp when tier is watermarked or balance is free. */
+export function shouldApplyForcedWatermarkForPhotoExport({
+  authTier,
+  creditBalance,
+  resolvedBalance,
+}: {
+  authTier: "clean" | "watermarked";
+  creditBalance: number | null;
+  resolvedBalance?: number | null;
+}) {
+  if (authTier !== "clean") {
+    return true;
+  }
+
+  const balance = resolvedBalance ?? creditBalance ?? 0;
+  return balance <= 0;
+}
+
 /** True when this export would likely receive the forced center watermark. */
 export function wouldReceiveWatermarkedExport({
   creditBalance,

@@ -147,7 +147,7 @@ export function WatermarkQuickTemplates({
 }: QuickTemplatesProps & { compact?: boolean }) {
   if (compact) {
     return (
-      <div className="flex items-center gap-1">
+      <div className="flex items-center justify-end gap-0.5">
         {quickTemplates.map((template) => {
           const isSelected = activeTemplate === template.id;
 
@@ -155,7 +155,7 @@ export function WatermarkQuickTemplates({
             <motion.button
               aria-label={template.label}
               aria-pressed={isSelected}
-              className={`relative flex h-7 w-10 shrink-0 items-center justify-center rounded-md border px-1 py-0.5 shadow-sm transition ${
+              className={`relative flex h-5 w-6 shrink-0 items-center justify-center rounded border px-0 py-0 shadow-sm transition ${
                 isSelected
                   ? "border-emerald-200 bg-emerald-100"
                   : "border-signal/50 bg-signal/5 hover:border-signal/70"

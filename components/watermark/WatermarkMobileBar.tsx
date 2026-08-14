@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import { Bold, ChevronDown, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { Bold, ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import type { FontFamilyGroup } from "@/lib/watermarkFonts";
 import type {
   LogoWatermarkLayer,
@@ -79,8 +80,8 @@ function LayerTabs({
   type: "text" | "logo";
 }) {
   return (
-    <div className="flex items-center gap-0.5">
-      <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="flex shrink-0 items-center gap-px">
+      <div className="flex max-w-[4.5rem] items-center gap-px overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {layerIds.map((id, index) => (
           <button
             aria-label={
@@ -88,7 +89,7 @@ function LayerTabs({
                 ? `Text watermark ${index + 1}`
                 : `Logo watermark ${index + 1}`
             }
-            className={`shrink-0 rounded px-1 py-px text-[8px] font-semibold uppercase tracking-[0.04em] transition ${
+            className={`shrink-0 rounded px-0.5 py-px text-[7px] font-semibold uppercase tracking-[0.04em] transition ${
               id === activeLayerId
                 ? "editor-selected-pill"
                 : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:text-ed-fg"
@@ -103,21 +104,21 @@ function LayerTabs({
       </div>
       <button
         aria-label={`Add ${type} watermark`}
-        className="editor-secondary-button inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-ed-fg-muted hover:text-ed-fg disabled:opacity-35"
+        className="editor-secondary-button inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-ed-fg-muted hover:text-ed-fg disabled:opacity-35"
         disabled={!canAddLayer}
         onClick={onAddLayer}
         type="button"
       >
-        <Plus className="h-2.5 w-2.5" strokeWidth={2} />
+        <Plus className="h-2 w-2" strokeWidth={2} />
       </button>
       <button
         aria-label={`Delete ${type} watermark`}
-        className="editor-secondary-button inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-ed-fg-muted hover:text-signal disabled:opacity-35"
+        className="editor-secondary-button inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-ed-fg-muted hover:text-signal disabled:opacity-35"
         disabled={layerCount <= 1}
         onClick={() => onRemoveLayer(activeLayerId)}
         type="button"
       >
-        <Trash2 className="h-2.5 w-2.5" strokeWidth={2} />
+        <Trash2 className="h-2 w-2" strokeWidth={2} />
       </button>
     </div>
   );
@@ -133,7 +134,7 @@ function ModeToggle({
   type: "text" | "logo";
 }) {
   return (
-    <div className="grid grid-cols-2 gap-0.5 editor-segment-track">
+    <div className="editor-segment-track grid min-h-[24px] grid-cols-2 gap-0.5">
       {(
         [
           { label: "Single", value: "single" },
@@ -142,6 +143,7 @@ function ModeToggle({
       ).map(({ label, value }) => (
         <EditorSegment
           active={mode === value}
+          className="max-md:rounded-sm max-md:px-1.5 max-md:py-0.5 max-md:text-[8px]"
           groupId={`mobile-watermark-mode-${type}`}
           key={value}
           onClick={() => onModeChange(value)}
@@ -154,7 +156,197 @@ function ModeToggle({
   );
 }
 
-function CompactSlider({
+function ColorSwatchButton({
+  isActive,
+  label,
+  onClick,
+  value,
+}: {
+  isActive: boolean;
+  label: string;
+  onClick: () => void;
+  value: string;
+}) {
+  return (
+    <button
+      aria-label={label}
+      aria-pressed={isActive}
+      className={`relative h-4 w-4 shrink-0 rounded-full border transition ${
+        isActive ? "editor-selected-ring" : "border-ed-border"
+      }`}
+      onClick={onClick}
+      title={label}
+      type="button"
+    >
+      <span
+        className="absolute inset-px rounded-full"
+        style={{ backgroundColor: value }}
+      />
+    </button>
+  );
+}
+
+function MobileTextColorPicker({
+  onTextColorChange,
+  textColor,
+}: {
+  onTextColorChange: (value: string) => void;
+  textColor: string;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const normalizedColor = (textColor ?? "#FFFFFF").toUpperCase();
+  const quickColors = TEXT_WATERMARK_COLOR_PALETTE.slice(0, 2);
+  const menuWidth = 120;
+  const menuGap = 6;
+
+  const updateMenuPosition = useCallback(() => {
+    const anchor = rootRef.current;
+    const menu = menuRef.current;
+
+    if (!anchor) {
+      return;
+    }
+
+    const rect = anchor.getBoundingClientRect();
+    const menuHeight = menu?.offsetHeight ?? 96;
+    const viewportPadding = 8;
+    let top = rect.top - menuHeight - menuGap;
+    let left = rect.right - menuWidth;
+
+    if (top < viewportPadding) {
+      top = rect.bottom + menuGap;
+    }
+
+    left = Math.max(
+      viewportPadding,
+      Math.min(left, window.innerWidth - menuWidth - viewportPadding),
+    );
+
+    setMenuPosition({ left, top });
+  }, []);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!menuOpen) {
+      setMenuPosition(null);
+      return;
+    }
+
+    updateMenuPosition();
+  }, [menuOpen, updateMenuPosition]);
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+
+    const handleReposition = () => updateMenuPosition();
+
+    window.addEventListener("resize", handleReposition);
+    window.addEventListener("scroll", handleReposition, true);
+    return () => {
+      window.removeEventListener("resize", handleReposition);
+      window.removeEventListener("scroll", handleReposition, true);
+    };
+  }, [menuOpen, updateMenuPosition]);
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+
+      if (
+        !rootRef.current?.contains(target) &&
+        !menuRef.current?.contains(target)
+      ) {
+        setMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [menuOpen]);
+
+  const colorMenu =
+    mounted && menuOpen
+      ? createPortal(
+          <div
+            className="fixed z-[100] grid w-[7.5rem] grid-cols-4 gap-1 rounded-md border border-ed-border bg-ed-panel p-1 shadow-lg"
+            ref={menuRef}
+            style={{
+              left: menuPosition?.left ?? -9999,
+              top: menuPosition?.top ?? -9999,
+              visibility: menuPosition ? "visible" : "hidden",
+            }}
+          >
+            {TEXT_WATERMARK_COLOR_PALETTE.map(({ label, value }) => {
+              const isActive = normalizedColor === value.toUpperCase();
+
+              return (
+                <ColorSwatchButton
+                  isActive={isActive}
+                  key={value}
+                  label={label}
+                  onClick={() => {
+                    onTextColorChange(value);
+                    setMenuOpen(false);
+                  }}
+                  value={value}
+                />
+              );
+            })}
+          </div>,
+          document.body,
+        )
+      : null;
+
+  return (
+    <div className="relative flex shrink-0 items-center gap-1" ref={rootRef}>
+      {quickColors.map(({ label, value }) => (
+        <ColorSwatchButton
+          isActive={normalizedColor === value.toUpperCase()}
+          key={value}
+          label={label}
+          onClick={() => {
+            onTextColorChange(value);
+            setMenuOpen(false);
+          }}
+          value={value}
+        />
+      ))}
+      <button
+        aria-expanded={menuOpen}
+        aria-label="More colors"
+        className={`editor-secondary-button flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition ${
+          menuOpen ? "editor-selected" : "border-ed-border text-ed-fg-muted"
+        }`}
+        onClick={() => setMenuOpen((current) => !current)}
+        type="button"
+      >
+        <ChevronUp
+          className={`h-2.5 w-2.5 transition ${menuOpen ? "rotate-180" : ""}`}
+          strokeWidth={2.5}
+        />
+      </button>
+      {colorMenu}
+    </div>
+  );
+}
+
+function InlineSlider({
   id,
   label,
   max,
@@ -172,20 +364,15 @@ function CompactSlider({
   value: number;
 }) {
   return (
-    <div className="min-w-0 space-y-0.5">
-      <div className="flex items-center justify-between gap-1">
-        <label
-          className="text-[8px] font-bold uppercase tracking-[0.06em] text-ed-fg"
-          htmlFor={id}
-        >
-          {label}
-        </label>
-        <span className="text-[8px] font-semibold tabular-nums text-ed-fg-muted">
-          {value}%
-        </span>
-      </div>
+    <div className="flex min-h-[22px] min-w-0 items-center gap-1">
+      <label
+        className="w-8 shrink-0 text-[8px] font-bold uppercase leading-none tracking-[0.04em] text-ed-fg"
+        htmlFor={id}
+      >
+        {label}
+      </label>
       <input
-        className="editor-range"
+        className="editor-range min-w-0 flex-1"
         id={id}
         max={max}
         min={min}
@@ -194,6 +381,9 @@ function CompactSlider({
         type="range"
         value={value}
       />
+      <span className="w-7 shrink-0 text-right text-[8px] font-semibold tabular-nums text-ed-fg-muted">
+        {value}%
+      </span>
     </div>
   );
 }
@@ -202,68 +392,77 @@ export function WatermarkMobileBar(props: WatermarkMobileBarProps) {
   const [showTileOptions, setShowTileOptions] = useState(false);
   const canAddLayer = props.mode === "single";
 
+  const mediaControl =
+    props.type === "text" ? (
+      <input
+        className="editor-field-sm h-[22px] min-w-0 flex-1 rounded-sm px-1 py-0 text-[9px]"
+        onChange={(event) => props.onTextChange(event.target.value)}
+        placeholder="Watermark text"
+        type="text"
+        value={props.layer.text}
+      />
+    ) : props.layer.logoImage ? (
+      <button
+        className="editor-secondary-button h-[22px] min-w-0 flex-1 truncate rounded-sm px-1 text-[9px] font-semibold text-ed-fg"
+        onClick={props.onLogoPick}
+        type="button"
+      >
+        {props.layer.logoFileName}
+      </button>
+    ) : (
+      <button
+        className="editor-secondary-button h-[22px] min-w-0 flex-1 rounded-sm border-dashed px-1 text-[9px] font-semibold text-ed-fg hover:border-signal/50"
+        onClick={props.onLogoPick}
+        type="button"
+      >
+        Upload logo
+      </button>
+    );
+
   return (
-    <div className="space-y-1 px-1.5 pb-1 pt-0.5">
-      <LayerTabs
-        activeLayerId={props.activeLayerId}
-        canAddLayer={canAddLayer}
-        layerCount={props.layerCount}
-        layerIds={props.layerIds}
-        onAddLayer={props.onAddLayer}
-        onLayerSelect={props.onLayerSelect}
-        onRemoveLayer={props.onRemoveLayer}
-        type={props.type}
-      />
-
-      {props.type === "text" ? (
-        <input
-          className="editor-field-sm h-5 w-full rounded-md px-1.5 py-0 text-[10px]"
-          onChange={(event) => props.onTextChange(event.target.value)}
-          placeholder="Add text here"
-          type="text"
-          value={props.layer.text}
+    <div className="space-y-0.5 px-0.5 pb-0.5 pt-0">
+      <div className="flex items-center gap-0.5">
+        <LayerTabs
+          activeLayerId={props.activeLayerId}
+          canAddLayer={canAddLayer}
+          layerCount={props.layerCount}
+          layerIds={props.layerIds}
+          onAddLayer={props.onAddLayer}
+          onLayerSelect={props.onLayerSelect}
+          onRemoveLayer={props.onRemoveLayer}
+          type={props.type}
         />
-      ) : props.layer.logoImage ? (
-        <button
-          className="editor-secondary-button h-5 w-full truncate rounded-md px-1.5 text-[10px] font-semibold text-ed-fg"
-          onClick={props.onLogoPick}
-          type="button"
-        >
-          Change logo · {props.layer.logoFileName}
-        </button>
-      ) : (
-        <button
-          className="editor-secondary-button h-5 w-full rounded-md border-dashed px-1.5 text-[10px] font-semibold text-ed-fg hover:border-signal/50"
-          onClick={props.onLogoPick}
-          type="button"
-        >
-          Upload a logo
-        </button>
-      )}
+        {mediaControl}
+      </div>
 
-      <ModeToggle
-        mode={props.mode}
-        onModeChange={props.onModeChange}
-        type={props.type}
-      />
-
-      {props.mode === "tile" && props.tileQuickTemplates ? (
-        <div>{props.tileQuickTemplates}</div>
-      ) : null}
+      <div className="grid grid-cols-2 items-center gap-0.5">
+        <ModeToggle
+          mode={props.mode}
+          onModeChange={props.onModeChange}
+          type={props.type}
+        />
+        {props.mode === "tile" && props.tileQuickTemplates ? (
+          <div className="flex min-w-0 items-center justify-end overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {props.tileQuickTemplates}
+          </div>
+        ) : (
+          <div aria-hidden className="min-w-0" />
+        )}
+      </div>
 
       <div className="grid grid-cols-2 gap-1">
-        <CompactSlider
+        <InlineSlider
           id="mobile-watermark-size"
-          label={props.type === "logo" ? "Logo size" : "Text size"}
+          label={props.type === "logo" ? "Logo" : "Size"}
           max={135}
           min={15}
           onChange={props.onFontSizeScaleChange}
           step={5}
           value={props.fontSizeScale}
         />
-        <CompactSlider
+        <InlineSlider
           id="mobile-watermark-opacity"
-          label="Opacity"
+          label="Opac"
           max={100}
           min={10}
           onChange={props.onWatermarkOpacityChange}
@@ -275,20 +474,20 @@ export function WatermarkMobileBar(props: WatermarkMobileBarProps) {
       {props.mode === "tile" ? (
         <>
           <button
-            className="flex w-full items-center justify-center gap-0.5 py-px text-[8px] font-semibold uppercase tracking-[0.06em] text-ed-fg-muted"
+            className="flex w-full items-center justify-center gap-0.5 py-px text-[7px] font-semibold uppercase tracking-[0.04em] text-ed-fg-muted"
             onClick={() => setShowTileOptions((current) => !current)}
             type="button"
           >
-            {showTileOptions ? "Hide tile options" : "Tile options"}
+            Tile opts
             <ChevronDown
-              className={`h-2.5 w-2.5 transition ${showTileOptions ? "rotate-180" : ""}`}
+              className={`h-2 w-2 transition ${showTileOptions ? "rotate-180" : ""}`}
             />
           </button>
           {showTileOptions ? (
-            <div className="grid grid-cols-2 gap-1 rounded-md border border-ed-border bg-ed-bg-card p-1">
-              <CompactSlider
+            <div className="grid grid-cols-2 gap-0.5 rounded-sm border border-ed-border bg-ed-bg-card p-0.5">
+              <InlineSlider
                 id="mobile-tile-density"
-                label="Density"
+                label="Dens"
                 max={100}
                 min={0}
                 onChange={(percent) => {
@@ -305,7 +504,7 @@ export function WatermarkMobileBar(props: WatermarkMobileBarProps) {
                       : 100
                 }
               />
-              <CompactSlider
+              <InlineSlider
                 id="mobile-tile-gap"
                 label="Gap"
                 max={300}
@@ -322,7 +521,7 @@ export function WatermarkMobileBar(props: WatermarkMobileBarProps) {
       {props.type === "text" ? (
         <div className="flex items-center gap-0.5">
           <select
-            className="editor-field-sm h-5 min-w-0 flex-1 rounded-md px-1 py-0 text-[10px]"
+            className="editor-field-sm h-[22px] min-w-0 flex-1 rounded-sm px-1 py-0 text-[9px]"
             onChange={(event) => props.onFontFamilyChange(event.target.value)}
             value={
               props.layer.fontFamily ??
@@ -342,15 +541,20 @@ export function WatermarkMobileBar(props: WatermarkMobileBarProps) {
           </select>
           <button
             aria-label="Bold text"
-            aria-pressed={(props.layer.fontWeight ?? DEFAULT_TEXT_WATERMARK_FONT_WEIGHT) === 700}
-            className={`editor-secondary-button flex h-5 w-5 shrink-0 items-center justify-center rounded ${
-              (props.layer.fontWeight ?? DEFAULT_TEXT_WATERMARK_FONT_WEIGHT) === 700
+            aria-pressed={
+              (props.layer.fontWeight ?? DEFAULT_TEXT_WATERMARK_FONT_WEIGHT) ===
+              700
+            }
+            className={`editor-secondary-button flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-sm ${
+              (props.layer.fontWeight ?? DEFAULT_TEXT_WATERMARK_FONT_WEIGHT) ===
+              700
                 ? "editor-selected"
                 : "text-ed-fg-muted"
             }`}
             onClick={() =>
               props.onFontWeightChange(
-                (props.layer.fontWeight ?? DEFAULT_TEXT_WATERMARK_FONT_WEIGHT) === 700
+                (props.layer.fontWeight ?? DEFAULT_TEXT_WATERMARK_FONT_WEIGHT) ===
+                  700
                   ? 400
                   : 700,
               )
@@ -359,41 +563,15 @@ export function WatermarkMobileBar(props: WatermarkMobileBarProps) {
           >
             <Bold className="h-2.5 w-2.5" strokeWidth={2.5} />
           </button>
-        </div>
-      ) : null}
-
-      {props.type === "text" ? (
-        <div className="flex gap-0.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {TEXT_WATERMARK_COLOR_PALETTE.map(({ label, value }) => {
-            const textColor = props.layer.textColor ?? "#FFFFFF";
-            const isActive = textColor.toUpperCase() === value.toUpperCase();
-
-            return (
-              <button
-                aria-label={label}
-                aria-pressed={isActive}
-                className={`relative h-3.5 w-3.5 shrink-0 rounded-full border transition ${
-                  isActive
-                    ? "editor-selected-ring"
-                    : "border-ed-border"
-                }`}
-                key={value}
-                onClick={() => props.onTextColorChange(value)}
-                title={label}
-                type="button"
-              >
-                <span
-                  className="absolute inset-px rounded-full"
-                  style={{ backgroundColor: value }}
-                />
-              </button>
-            );
-          })}
+          <MobileTextColorPicker
+            onTextColorChange={props.onTextColorChange}
+            textColor={props.layer.textColor ?? "#FFFFFF"}
+          />
         </div>
       ) : null}
 
       {props.type === "logo" && props.logoError ? (
-        <p className="text-[10px] leading-4 text-signal">{props.logoError}</p>
+        <p className="text-[9px] leading-3.5 text-signal">{props.logoError}</p>
       ) : null}
     </div>
   );

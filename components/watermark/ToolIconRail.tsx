@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Coins, FileText, Images, Video, X } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -21,6 +20,7 @@ export type EditorMediaKind = "image" | "pdf" | "video";
 type ToolIconRailProps = {
   activePanel: EditorPanelId | null;
   mediaKind: EditorMediaKind | null;
+  onBuyCredits?: () => void;
   onMobileExit?: () => void;
   onSelectPanel: (panel: EditorPanelId) => void;
   showBuyCredits?: boolean;
@@ -98,6 +98,7 @@ function isEditorTabEnabled(
 export function ToolIconRail({
   activePanel,
   mediaKind,
+  onBuyCredits,
   onMobileExit,
   onSelectPanel,
   showBuyCredits = true,
@@ -136,18 +137,19 @@ export function ToolIconRail({
             label="Videos"
             onClick={() => onSelectPanel("video")}
           />
-          {showBuyCredits ? (
-            <Link
+          {showBuyCredits && onBuyCredits ? (
+            <button
               className="hidden flex-col items-center gap-1.5 rounded-xl bg-signal px-1.5 py-2 text-[10px] font-bold leading-tight text-white shadow-md transition hover:brightness-110 md:mx-1.5 md:mb-3 md:mt-auto md:flex md:gap-1.5 md:px-1 md:py-2.5 md:text-[10px]"
-              href="/pricing"
+              onClick={onBuyCredits}
               title="Buy Credits"
+              type="button"
             >
               <Coins className="h-4 w-4 shrink-0 md:h-4 md:w-4" strokeWidth={2} />
               <span className="max-w-full text-center leading-[1.15]">
                 <span className="block">Buy</span>
                 <span className="block">Credits</span>
               </span>
-            </Link>
+            </button>
           ) : null}
         </div>
       </nav>

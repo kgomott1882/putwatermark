@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   shouldApplyForcedWatermarkForClientVideoExport,
+  shouldApplyForcedWatermarkForPhotoExport,
   wouldReceiveWatermarkedExport,
   type WatermarkedExportUpsellContext,
 } from "../src/lib/exportUpsellEligibility";
@@ -180,6 +181,43 @@ async function main() {
     }),
     true,
     "zero-balance client video with clean auth tier still needs forced stamp",
+  );
+
+  assert.equal(
+    shouldApplyForcedWatermarkForPhotoExport({
+      authTier: "watermarked",
+      creditBalance: 0,
+    }),
+    true,
+    "watermarked photo export always needs forced stamp",
+  );
+  assert.equal(
+    shouldApplyForcedWatermarkForPhotoExport({
+      authTier: "clean",
+      creditBalance: 0,
+      resolvedBalance: 0,
+    }),
+    true,
+    "zero-balance photo export needs forced stamp even if auth tier is clean",
+  );
+  assert.equal(
+    shouldApplyForcedWatermarkForPhotoExport({
+      authTier: "clean",
+      creditBalance: 500,
+      resolvedBalance: 500,
+    }),
+    false,
+    "paid photo export with clean tier skips forced stamp",
+  );
+  assert.equal(
+    wouldReceiveWatermarkedExport({
+      creditBalance: 0,
+      estimatedExportCost: 150,
+      fileType: "photo",
+      isAuthenticated: true,
+    }),
+    true,
+    "zero-balance batch photo upsell should offer watermarked export",
   );
 
   const buggyUpsellContext: WatermarkedExportUpsellContext = {

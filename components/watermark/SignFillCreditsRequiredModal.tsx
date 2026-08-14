@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
-
 type SignFillCreditsRequiredModalProps = {
   description?: string;
+  onBuyCredits: () => void;
   onClose: () => void;
   open: boolean;
   title?: string;
@@ -11,6 +10,7 @@ type SignFillCreditsRequiredModalProps = {
 
 export function SignFillCreditsRequiredModal({
   description = "Placing signatures or initials uses 50 credits per page. Fill-text adds 5 credits per page on top. Buy credits to continue, or cancel and keep editing your preview.",
+  onBuyCredits,
   onClose,
   open,
   title = "Sign & Fill requires credits",
@@ -45,12 +45,13 @@ export function SignFillCreditsRequiredModal({
         </div>
 
         <div className="flex flex-col gap-2 px-6 py-5">
-          <Link
+          <button
             className="inline-flex w-full items-center justify-center rounded-xl bg-signal px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110"
-            href="/pricing"
+            onClick={onBuyCredits}
+            type="button"
           >
             Buy Credits
-          </Link>
+          </button>
           <button
             className="editor-secondary-button inline-flex w-full items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold text-ed-fg hover:border-signal/50"
             onClick={onClose}

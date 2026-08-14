@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  ArrowLeftRight,
-  ArrowUpDown,
-  Crop,
-  MoveDiagonal2,
-  Square,
-} from "lucide-react";
+import { ArrowLeftRight, ArrowUpDown } from "lucide-react";
 import {
   EditorApplyButton,
   EditorCard,
@@ -30,45 +24,79 @@ function ResizeDimensionField({
   axis,
   label,
   onChange,
-  unit,
   value,
-}: ResizeDimensionFieldProps) {
+}: Omit<ResizeDimensionFieldProps, "unit">) {
   const Icon = axis === "width" ? ArrowLeftRight : ArrowUpDown;
 
   return (
-    <div className="space-y-1.5">
-      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-ed-fg">
+    <div className="space-y-0 md:space-y-1.5">
+      <p className="hidden text-[10px] font-bold uppercase tracking-[0.12em] text-ed-fg md:block">
         {label}
       </p>
-      <div className="editor-field-sm flex items-center gap-1.5 px-2 py-2">
+      <div className="editor-field-sm flex min-h-[26px] items-center gap-1 px-1.5 py-1 md:min-h-0 md:gap-1.5 md:px-2 md:py-2">
+        <span className="shrink-0 text-[8px] font-bold uppercase text-ed-fg-muted md:hidden">
+          {axis === "width" ? "W" : "H"}
+        </span>
         <Icon
           aria-hidden
-          className="h-3.5 w-3.5 shrink-0 text-ed-fg-muted"
+          className="hidden h-3.5 w-3.5 shrink-0 text-ed-fg-muted md:block"
           strokeWidth={2}
         />
         <input
-          className="min-w-0 flex-1 bg-transparent text-sm font-semibold tabular-nums text-ed-fg outline-none"
+          className="min-w-0 flex-1 bg-transparent text-[11px] font-semibold tabular-nums text-ed-fg outline-none md:text-sm"
           min={1}
           onChange={(event) => onChange(Number(event.target.value))}
           type="number"
           value={value}
         />
-        <span className="shrink-0 text-xs font-medium text-ed-fg-muted">
-          {unit === "percent" ? "%" : "px"}
-        </span>
+      </div>
+    </div>
+  );
+}
+
+function ResizeUnitToggle({
+  onUnitChange,
+  unit,
+}: {
+  onUnitChange: (unit: ResizeUnit) => void;
+  unit: ResizeUnit;
+}) {
+  return (
+    <div className="flex min-w-[2rem] flex-col justify-end md:min-w-0">
+      <p className="mb-0 hidden text-[10px] font-bold uppercase tracking-[0.12em] text-ed-fg md:mb-1.5 md:block">
+        Unit
+      </p>
+      <div className="editor-segment-track flex shrink-0 flex-col gap-0 self-stretch md:flex-row md:gap-2">
+        <EditorSegment
+          active={unit === "px"}
+          className="max-md:flex-1 max-md:rounded-sm max-md:px-1.5 max-md:py-0.5 max-md:text-[8px]"
+          groupId="resize-unit"
+          onClick={() => onUnitChange("px")}
+          ultraCompact
+        >
+          PX
+        </EditorSegment>
+        <EditorSegment
+          active={unit === "percent"}
+          className="max-md:flex-1 max-md:rounded-sm max-md:px-1.5 max-md:py-0.5 max-md:text-[8px]"
+          groupId="resize-unit"
+          onClick={() => onUnitChange("percent")}
+          ultraCompact
+        >
+          %
+        </EditorSegment>
       </div>
     </div>
   );
 }
 
 const scaleModeOptions: {
-  icon: typeof Crop;
   id: ResizeScaleMode;
   label: string;
 }[] = [
-  { icon: Crop, id: "trim", label: "Trim" },
-  { icon: MoveDiagonal2, id: "stretch", label: "Stretch" },
-  { icon: Square, id: "contain", label: "Contain" },
+  { id: "trim", label: "Trim" },
+  { id: "stretch", label: "Stretch" },
+  { id: "contain", label: "Contain" },
 ];
 
 type ResizeControlsPanelProps = {
@@ -103,50 +131,30 @@ export function ResizeControlsPanel({
   warning,
 }: ResizeControlsPanelProps) {
   return (
-    <EditorCard className="space-y-3 p-2.5">
-      <div className="grid grid-cols-2 gap-2">
+    <EditorCard className="space-y-0.5 !p-0.5 md:space-y-3 md:!p-2.5">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-0.5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_5.5rem] md:gap-2">
         <ResizeDimensionField
           axis="width"
           label="Width"
           onChange={onWidthChange}
-          unit={unit}
           value={displayWidth}
         />
         <ResizeDimensionField
           axis="height"
           label="Height"
           onChange={onHeightChange}
-          unit={unit}
           value={displayHeight}
         />
+        <ResizeUnitToggle onUnitChange={onUnitChange} unit={unit} />
       </div>
 
-      <EditorPanelSection title="Unit">
-        <div className="editor-segment-track grid grid-cols-2 gap-2">
-          <EditorSegment
-            active={unit === "px"}
-            groupId="resize-unit"
-            onClick={() => onUnitChange("px")}
-          >
-            PX
-          </EditorSegment>
-          <EditorSegment
-            active={unit === "percent"}
-            groupId="resize-unit"
-            onClick={() => onUnitChange("percent")}
-          >
-            %
-          </EditorSegment>
-        </div>
-      </EditorPanelSection>
-
-      <EditorPanelSection title="Scale mode">
-        <div className="grid grid-cols-3 gap-1">
-          {scaleModeOptions.map(({ icon: Icon, id, label }) => (
+      <EditorPanelSection className="max-md:space-y-0" hideTitleOnMobile title="Scale mode">
+        <div className="grid grid-cols-3 gap-0 md:gap-1">
+          {scaleModeOptions.map(({ id, label }) => (
             <button
               aria-label={label}
               aria-pressed={scaleMode === id}
-              className={`flex flex-col items-center gap-1 rounded-lg border px-1 py-2 text-[9px] font-bold uppercase tracking-[0.08em] transition ${
+              className={`flex items-center justify-center rounded-sm border px-0.5 py-0.5 text-[6px] font-bold uppercase tracking-[0.04em] transition md:rounded-lg md:px-1 md:py-2 md:text-[9px] md:tracking-[0.08em] ${
                 scaleMode === id
                   ? "editor-selected-strong"
                   : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:border-signal/40 hover:text-ed-fg"
@@ -155,7 +163,6 @@ export function ResizeControlsPanel({
               onClick={() => onScaleModeChange(id)}
               type="button"
             >
-              <Icon aria-hidden className="h-4 w-4" strokeWidth={2} />
               {label}
             </button>
           ))}
@@ -164,12 +171,16 @@ export function ResizeControlsPanel({
 
       <EditorToggleRow
         checked={isAspectRatioLocked}
+        className="max-md:gap-1 max-md:py-0 max-md:text-[7px]"
+        compact
         label="Aspect ratio"
         onChange={onAspectRatioChange}
       />
 
       {warning ? (
-        <p className="text-xs leading-4 text-signal">{warning}</p>
+        <p className="text-[10px] leading-3.5 text-signal md:text-xs md:leading-4">
+          {warning}
+        </p>
       ) : null}
 
       <EditorApplyButton disabled={disabled} onClick={onApply} />

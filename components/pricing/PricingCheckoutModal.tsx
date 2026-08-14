@@ -1,7 +1,8 @@
 "use client";
 
-import { X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { useEffect, useId, useRef, type MouseEvent as ReactMouseEvent } from "react";
+import type { PurchaseTierId } from "@/lib/purchasePricing";
 import {
   PricingPayPalCheckout,
   type CheckoutSelection,
@@ -19,22 +20,41 @@ export type CheckoutOrderSummary = {
   title: string;
 };
 
+type CheckoutTierOption = {
+  credits: number;
+  label: string;
+  priceUSD: number;
+  tierId: PurchaseTierId;
+};
+
 type PricingCheckoutModalProps = {
   checkoutKey: string;
+  completionMode?: "editor" | "pricing";
   isOpen: boolean;
   onClose: () => void;
+  onPurchaseComplete?: (balance: number) => void;
   orderSummary: CheckoutOrderSummary;
   paypalClientId: string;
+  selectedTierId?: PurchaseTierId;
   selection: CheckoutSelection;
+  tierOptionLabel?: (tier: CheckoutTierOption) => string;
+  tierOptions?: readonly CheckoutTierOption[];
+  onTierChange?: (tierId: PurchaseTierId) => void;
 };
 
 export function PricingCheckoutModal({
   checkoutKey,
+  completionMode = "pricing",
   isOpen,
   onClose,
+  onPurchaseComplete,
   orderSummary,
   paypalClientId,
+  selectedTierId,
   selection,
+  tierOptionLabel,
+  tierOptions,
+  onTierChange,
 }: PricingCheckoutModalProps) {
   const titleId = useId();
   const descriptionId = useId();
@@ -152,6 +172,39 @@ export function PricingCheckoutModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
+          {tierOptions && selectedTierId && onTierChange ? (
+            <div className="relative mb-4">
+              <label
+                className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] text-sand"
+                htmlFor={`${titleId}-tier`}
+              >
+                Credit pack
+              </label>
+              <div className="relative">
+                <select
+                  className="w-full appearance-none rounded-xl border border-beige/10 bg-night-elevated px-3 py-2.5 pr-9 text-sm font-medium text-beige outline-none transition focus:border-signal/50 focus:ring-2 focus:ring-signal/20"
+                  id={`${titleId}-tier`}
+                  onChange={(event) =>
+                    onTierChange(event.target.value as PurchaseTierId)
+                  }
+                  value={selectedTierId}
+                >
+                  {tierOptions.map((tier) => (
+                    <option key={tier.tierId} value={tier.tierId}>
+                      {tierOptionLabel
+                        ? tierOptionLabel(tier)
+                        : `${tier.label} · $${tier.priceUSD}`}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-beige-dim"
+                />
+              </div>
+            </div>
+          ) : null}
+
           <p className="text-sm leading-6 text-beige-dim" id={descriptionId}>
             {orderSummary.detail}
           </p>
@@ -162,6 +215,8 @@ export function PricingCheckoutModal({
           >
             <PricingPayPalCheckout
               checkoutKey={checkoutKey}
+              completionMode={completionMode}
+              onPurchaseComplete={onPurchaseComplete}
               paypalClientId={paypalClientId}
               selection={selection}
             />

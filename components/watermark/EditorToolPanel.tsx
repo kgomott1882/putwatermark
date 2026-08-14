@@ -98,7 +98,7 @@ export function EditorToolPanel({
             <div className="min-w-0 flex-1 max-md:[&_nav]:border-t-0">{toolRail}</div>
             {mobileControlsCollapsed && onToggleMobileControls ? (
               <button
-                className="flex shrink-0 items-center justify-center gap-1 border-l border-ed-border bg-ed-bg-card px-4 text-[10px] font-bold uppercase tracking-[0.12em] text-ed-fg md:hidden"
+                className="flex shrink-0 items-center justify-center gap-1 border-l border-emerald-200 bg-emerald-100 px-4 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-900 transition hover:bg-emerald-200/80 md:hidden"
                 onClick={onToggleMobileControls}
                 type="button"
               >
@@ -111,7 +111,7 @@ export function EditorToolPanel({
           </div>
         ) : mobileControlsCollapsed && onToggleMobileControls ? (
           <button
-            className="flex shrink-0 items-center justify-center gap-1.5 border-b border-ed-border bg-ed-bg-card px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-ed-fg md:hidden"
+            className="flex shrink-0 items-center justify-center gap-1.5 border-b border-emerald-200 bg-emerald-100 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-900 transition hover:bg-emerald-200/80 md:hidden"
             onClick={onToggleMobileControls}
             type="button"
           >
@@ -123,7 +123,7 @@ export function EditorToolPanel({
         ) : null}
         <motion.div
           animate={{ opacity: 1, x: 0 }}
-          className={`min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-1.5 py-1 md:px-2.5 md:py-2 ${
+          className={`min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-1 py-0.5 md:px-2.5 md:py-2 ${
             mobileControlsCollapsed ? "max-md:hidden" : ""
           }`}
           initial={instant ? false : { opacity: 0, x: 14 }}
@@ -330,14 +330,16 @@ export function EditorApplyButton({
 }: EditorApplyButtonProps) {
   return (
     <motion.button
-      className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-signal px-3 py-2 text-[10px] font-bold uppercase tracking-[0.1em] text-white shadow-md transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+      className="mt-0 flex w-full items-center justify-center gap-0.5 rounded-sm bg-signal px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.06em] text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 md:mt-1.5 md:gap-1.5 md:rounded-lg md:px-3 md:py-2 md:text-[10px] md:tracking-[0.1em] md:shadow-md"
       disabled={disabled}
       onClick={onClick}
       type="button"
       whileTap={{ scale: disabled ? 1 : 0.98 }}
       transition={tapSpring}
     >
-      <span aria-hidden>✓</span>
+      <span aria-hidden className="hidden md:inline">
+        ✓
+      </span>
       {children}
     </motion.button>
   );
@@ -345,23 +347,39 @@ export function EditorApplyButton({
 
 type EditorToggleRowProps = {
   checked: boolean;
+  className?: string;
+  compact?: boolean;
   label: string;
   onChange: () => void;
 };
 
 export function EditorToggleRow({
   checked,
+  className = "",
+  compact = false,
   label,
   onChange,
 }: EditorToggleRowProps) {
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-ed-border py-1 last:border-b-0">
-      <span className="text-[9px] font-bold uppercase tracking-[0.1em] text-ed-fg">
+    <div
+      className={`flex items-center justify-between gap-2 border-b border-ed-border py-1 last:border-b-0 ${className}`}
+    >
+      <span
+        className={`font-bold uppercase tracking-[0.1em] text-ed-fg ${
+          compact
+            ? "text-[7px] tracking-[0.06em] md:text-[9px] md:tracking-[0.1em]"
+            : "text-[9px] md:text-[9px]"
+        }`}
+      >
         {label}
       </span>
       <motion.button
         aria-pressed={checked}
-        className={`relative h-5 w-9 rounded-full border shadow-sm transition-colors ${
+        className={`relative rounded-full border shadow-sm transition-colors ${
+          compact
+            ? "h-4 w-7 md:h-5 md:w-9"
+            : "h-5 w-9"
+        } ${
           checked
             ? "editor-toggle-on"
             : "border-ed-border bg-ed-bg-card"
@@ -371,12 +389,16 @@ export function EditorToggleRow({
         whileTap={{ scale: 0.94 }}
         transition={tapSpring}
       >
-        <motion.span
-          animate={{ left: checked ? "1.125rem" : "0.125rem" }}
-          className={`absolute top-0.5 h-4 w-4 rounded-full shadow-sm ${
-            checked ? "bg-white" : "bg-ed-fg"
+        <span
+          className={`absolute top-0.5 rounded-full shadow-sm transition-[left] duration-200 ${
+            compact ? "h-3 w-3 md:h-4 md:w-4" : "h-4 w-4"
+          } ${checked ? "bg-white" : "bg-ed-fg"} ${
+            checked
+              ? compact
+                ? "left-[0.875rem] md:left-[1.125rem]"
+                : "left-[1.125rem]"
+              : "left-0.5"
           }`}
-          transition={selectionSpring}
         />
       </motion.button>
     </div>

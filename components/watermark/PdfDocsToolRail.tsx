@@ -9,17 +9,15 @@ import type { PdfDocToolId } from "./pdfDocTools";
 
 type PdfDocsToolRailProps = {
   activeTool: PdfDocToolId;
-  onMobileExit?: () => void;
   onSelectTool: (tool: PdfDocToolId) => void;
 };
 
 export function PdfDocsToolRail({
   activeTool,
-  onMobileExit,
   onSelectTool,
 }: PdfDocsToolRailProps) {
   return (
-    <EditorSubToolRail ariaLabel="PDF document tools" onMobileExit={onMobileExit}>
+    <EditorSubToolRail ariaLabel="PDF document tools">
       <EditorSubToolButton
         active={activeTool === "signFill"}
         icon={<PenLine className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.75} />}

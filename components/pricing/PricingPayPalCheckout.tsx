@@ -23,6 +23,8 @@ export type CheckoutSelection =
 
 type PricingPayPalCheckoutProps = {
   checkoutKey: string;
+  completionMode?: "editor" | "pricing";
+  onPurchaseComplete?: (balance: number) => void;
   paypalClientId: string;
   selection: CheckoutSelection;
 };
@@ -34,6 +36,8 @@ const POLL_INTERVAL_MS = 2_000;
 
 export function PricingPayPalCheckout({
   checkoutKey,
+  completionMode = "pricing",
+  onPurchaseComplete,
   paypalClientId,
   selection,
 }: PricingPayPalCheckoutProps) {
@@ -82,6 +86,7 @@ export function PricingPayPalCheckout({
         setMessage(
           `Payment confirmed. ${formatCreditBalance(expectedCredits)} credits were added to your balance.`,
         );
+        onPurchaseComplete?.(balance);
         return;
       }
     }
@@ -108,12 +113,22 @@ export function PricingPayPalCheckout({
           ) : null}
 
           <div className="flex flex-col gap-2.5">
-            <Link
-              className="inline-flex w-full items-center justify-center rounded-xl bg-signal px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-white shadow-sm transition hover:brightness-110"
-              href="/watermark"
-            >
-              Go to Watermark Tool
-            </Link>
+            {completionMode === "editor" ? (
+              <button
+                className="inline-flex w-full items-center justify-center rounded-xl bg-signal px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-white shadow-sm transition hover:brightness-110"
+                onClick={() => onPurchaseComplete?.(updatedBalance ?? 0)}
+                type="button"
+              >
+                Continue Editing
+              </button>
+            ) : (
+              <Link
+                className="inline-flex w-full items-center justify-center rounded-xl bg-signal px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-white shadow-sm transition hover:brightness-110"
+                href="/watermark"
+              >
+                Go to Watermark Tool
+              </Link>
+            )}
             <Link
               className="inline-flex w-full items-center justify-center rounded-xl border border-ink/15 bg-landing-light px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-ink transition hover:border-ink/25 hover:bg-white"
               href="/account"

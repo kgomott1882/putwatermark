@@ -1,6 +1,7 @@
 "use client";
 
 import { Combine, Captions, Clapperboard, Droplets, ScanFace, Scissors } from "lucide-react";
+import type { ReactNode } from "react";
 import {
   EditorSubToolButton,
   EditorSubToolRail,
@@ -18,7 +19,7 @@ type VideoToolRailProps = {
   activeTool: VideoToolId;
   hasVideo: boolean;
   hideOverviewOnMobile?: boolean;
-  onMobileExit?: () => void;
+  mobileTrailingAccessory?: ReactNode;
   onReshortenVideo?: () => void;
   onSelectTool: (tool: VideoToolId) => void;
   showReshortenOnTrim?: boolean;
@@ -28,7 +29,7 @@ export function VideoToolRail({
   activeTool,
   hasVideo,
   hideOverviewOnMobile = false,
-  onMobileExit,
+  mobileTrailingAccessory,
   onReshortenVideo,
   onSelectTool,
   showReshortenOnTrim = false,
@@ -36,7 +37,10 @@ export function VideoToolRail({
   const toolsDisabled = !hasVideo;
 
   return (
-    <EditorSubToolRail ariaLabel="Video tools" onMobileExit={onMobileExit}>
+    <EditorSubToolRail
+      ariaLabel="Video tools"
+      mobileTrailingAccessory={mobileTrailingAccessory}
+    >
       <div className={hideOverviewOnMobile ? "hidden md:contents" : "contents"}>
         <EditorSubToolButton
           active={activeTool === "overview"}

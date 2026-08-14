@@ -1,17 +1,18 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { X } from "lucide-react";
 import { useEffect, useId, useRef } from "react";
 
 type WatermarkedExportUpsellModalProps = {
+  onBuyCredits: () => void;
   onClose: () => void;
   onContinue: () => void;
   open: boolean;
 };
 
 export function WatermarkedExportUpsellModal({
+  onBuyCredits,
   onClose,
   onContinue,
   open,
@@ -106,12 +107,13 @@ export function WatermarkedExportUpsellModal({
           </p>
 
           <div className="mt-6 space-y-2.5">
-            <Link
+            <button
               className="inline-flex w-full items-center justify-center rounded-xl bg-signal px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-white shadow-sm transition hover:brightness-110"
-              href="/pricing"
+              onClick={onBuyCredits}
+              type="button"
             >
               Buy Credits
-            </Link>
+            </button>
             <button
               className="editor-secondary-button inline-flex w-full items-center justify-center rounded-xl px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-ed-fg hover:border-signal/50"
               onClick={onContinue}

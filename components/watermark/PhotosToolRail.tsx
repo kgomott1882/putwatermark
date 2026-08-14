@@ -24,20 +24,18 @@ export type PhotoToolId =
 type PhotosToolRailProps = {
   activeTool: PhotoToolId;
   imageToolsEnabled?: boolean;
-  onMobileExit?: () => void;
   onSelectTool: (tool: PhotoToolId) => void;
 };
 
 export function PhotosToolRail({
   activeTool,
   imageToolsEnabled = true,
-  onMobileExit,
   onSelectTool,
 }: PhotosToolRailProps) {
   const imageToolDisabled = !imageToolsEnabled;
 
   return (
-    <EditorSubToolRail ariaLabel="Photo tools" onMobileExit={onMobileExit}>
+    <EditorSubToolRail ariaLabel="Photo tools">
       <EditorSubToolButton
         active={activeTool === "watermark"}
         icon={<Droplets className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.75} />}
