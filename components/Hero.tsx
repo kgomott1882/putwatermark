@@ -54,7 +54,7 @@ export function Hero() {
             transition={{ staggerChildren: 0.07 }}
           >
             <motion.h1
-              className="max-w-none text-balance text-[clamp(3rem,6.2vw,5.75rem)] font-bold leading-[0.92] tracking-[-0.05em] text-beige xl:text-[clamp(3.25rem,4.8vw,6rem)]"
+              className="max-w-none overflow-visible text-balance text-[clamp(3rem,6.2vw,5.75rem)] font-bold leading-[0.98] tracking-[-0.05em] text-beige max-md:pt-0.5 xl:text-[clamp(3.25rem,4.8vw,6rem)] xl:leading-[0.92]"
               variants={itemVariants}
             >
               Watermark any{" "}

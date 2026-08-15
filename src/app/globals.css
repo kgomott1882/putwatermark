@@ -20,10 +20,21 @@
   }
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+@supports (-webkit-touch-callout: none) {
+  .editor-mobile-shell {
+    height: 100svh;
+    max-height: 100svh;
+  }
 }
 
 body.landing-cursor-none,

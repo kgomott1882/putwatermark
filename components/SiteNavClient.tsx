@@ -225,8 +225,8 @@ export function SiteNavClient({
       : null;
 
   const headerClass = showInEditor
-    ? "sticky top-0 z-50 overflow-visible border-b border-ed-border bg-ed-panel/95 backdrop-blur-md"
-    : "sticky top-0 z-50 overflow-visible bg-night/95 backdrop-blur-md";
+    ? "sticky top-0 z-50 overflow-visible border-b border-ed-border bg-ed-panel/95 pt-[env(safe-area-inset-top,0px)] backdrop-blur-md"
+    : "sticky top-0 z-50 overflow-visible bg-night/95 pt-[env(safe-area-inset-top,0px)] backdrop-blur-md";
   const brandTextClass = showInEditor
     ? "text-base font-bold tracking-[-0.03em] text-ed-fg"
     : "text-base font-bold tracking-[-0.03em] text-beige";

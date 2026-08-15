@@ -10368,7 +10368,7 @@ export default function WatermarkPage() {
   ) : null;
 
   return (
-    <div className="flex h-[100dvh] w-full flex-col overflow-hidden pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] md:h-[100svh] md:pt-0 md:pb-0">
+    <div className="editor-mobile-shell fixed inset-0 flex w-full flex-col overflow-hidden pt-[env(safe-area-inset-top,0px)] md:relative md:inset-auto md:h-[100svh] md:max-h-none md:pt-0">
       {authChecked && isAuthenticated ? (
         <div className="hidden shrink-0 md:block">
           <SiteNavClient

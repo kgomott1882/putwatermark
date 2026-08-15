@@ -1,3 +1,4 @@
+import { MobileEditorViewportShell } from "../../../components/watermark/MobileEditorViewportShell";
 import { PayPalClientIdProvider } from "../../../components/pricing/PayPalClientIdProvider";
 
 export default function WatermarkLayout({
@@ -9,7 +10,7 @@ export default function WatermarkLayout({
 
   return (
     <PayPalClientIdProvider clientId={paypalClientId}>
-      {children}
+      <MobileEditorViewportShell>{children}</MobileEditorViewportShell>
     </PayPalClientIdProvider>
   );
 }
