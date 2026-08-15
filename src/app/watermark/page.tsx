@@ -413,11 +413,14 @@ import {
   type DragEvent,
   type PointerEvent,
   type ReactNode,
+  useCallback,
   useEffect,
   useRef,
   useState,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { resetMobileEditorViewportZoom } from "../../lib/mobileEditorViewport";
+import { useMobileEditorNavigationGuard } from "../../lib/useMobileEditorNavigationGuard";
 
 const imageExportMimeType = "image/jpeg";
 const imageExportQuality = IMAGE_EXPORT_JPEG_QUALITY;
@@ -1286,6 +1289,44 @@ export default function WatermarkPage() {
       setMobileControlsExpanded(false);
     }
   }, [mediaKind]);
+
+  const handleNavigateAwayAttempt = useCallback(() => {
+    setShowEditorExitConfirm(true);
+  }, []);
+
+  const { allowNavigation: allowEditorNavigation } =
+    useMobileEditorNavigationGuard({
+      enabled: true,
+      onNavigateAway: handleNavigateAwayAttempt,
+    });
+
+  useEffect(() => {
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      if (!window.matchMedia("(max-width: 767px)").matches) {
+        return;
+      }
+
+      const hasEditorMedia = Boolean(
+        image ||
+          videoUrl ||
+          isPdfLoading ||
+          (mediaKind === "pdf" && pdfPageCount > 0),
+      );
+
+      if (!hasEditorMedia) {
+        return;
+      }
+
+      event.preventDefault();
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [image, videoUrl, isPdfLoading, mediaKind, pdfPageCount]);
+
   const previewZoomScale = previewZoomPercent / 100;
   const canvasSize: PreviewCanvasSize = {
     height: Math.max(240, Math.floor(previewBaseSize.height * previewZoomScale)),
@@ -8341,6 +8382,11 @@ export default function WatermarkPage() {
     }
   }
 
+  function handleMobileWatermarkTextDone() {
+    collapseMobileControlsIfPhone();
+    resetMobileEditorViewportZoom();
+  }
+
   function toggleMobileControls() {
     setMobileControlsExpanded((current) => !current);
   }
@@ -8724,6 +8770,7 @@ export default function WatermarkPage() {
   }
 
   function handleEditorExitConfirm() {
+    allowEditorNavigation();
     setShowEditorExitConfirm(false);
     clearAllMedia();
     router.push("/");
@@ -11007,6 +11054,7 @@ export default function WatermarkPage() {
                       applyTextWatermarkModeDefaults(value);
                     }}
                     onRemoveLayer={removeTextLayer}
+                    onDoneTyping={handleMobileWatermarkTextDone}
                     onTextChange={handleTextWatermarkChange}
                     onTextColorChange={(value) => {
                       if (shouldIgnoreManualSettingsChange()) {

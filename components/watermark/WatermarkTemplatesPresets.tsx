@@ -3,6 +3,10 @@
 import { motion } from "framer-motion";
 import { BookmarkPlus } from "lucide-react";
 import { EditorCard, EditorPanelSection } from "./EditorToolPanel";
+import {
+  editorFooterMobileCaptionClassName,
+  editorFooterMobileColumnClassName,
+} from "./PreviewZoomControls";
 
 export type QuickTemplateIcon =
   | "center"
@@ -41,6 +45,24 @@ type QuickTemplatesProps = {
   quickTemplates: readonly QuickTemplate[];
 };
 
+function getCompactTemplateCaption(template: QuickTemplate): string {
+  if (template.icon === "sparse") {
+    return "Light";
+  }
+
+  if (template.icon === "dense") {
+    return "Dense";
+  }
+
+  const parenthetical = template.label.match(/\(([^)]+)\)/)?.[1];
+
+  if (parenthetical) {
+    return parenthetical;
+  }
+
+  return template.label.split(" ")[0] ?? template.label;
+}
+
 function TemplateIcon({
   compact = false,
   iconOnly = false,
@@ -52,34 +74,64 @@ function TemplateIcon({
   isSelected: boolean;
   variant: QuickTemplateIcon;
 }) {
-  const markColor = iconOnly
-    ? isSelected
-      ? "bg-emerald-700"
-      : "bg-signal"
-    : isSelected
-      ? "bg-signal"
-      : "bg-ed-fg-muted";
-  const lineColor = iconOnly
-    ? isSelected
-      ? "bg-emerald-600"
-      : "bg-signal/85"
-    : isSelected
-      ? "bg-signal"
-      : "bg-ed-fg-muted/70";
+  const markColor =
+    isSelected && iconOnly && compact
+      ? "bg-white"
+      : isSelected
+        ? "bg-signal"
+        : "bg-ed-fg-muted";
+  const lineColor =
+    isSelected && iconOnly && compact
+      ? "bg-white"
+      : isSelected
+        ? "bg-signal"
+        : "bg-ed-fg-muted/70";
 
   const frameClassName = iconOnly
-    ? `relative block w-full rounded border bg-ed-bg-card ${
-        compact ? "h-4 border-ed-border/70" : "h-5 border-ed-border"
+    ? `relative block h-full w-full rounded ${
+        compact ? "border-0 bg-transparent" : "border border-ed-border bg-ed-bg-card h-5"
       }`
     : `relative block w-full rounded-md border border-ed-border bg-ed-bg-card ${
         compact ? "h-5" : "h-6"
       }`;
 
-  const cornerMarkClass = iconOnly && compact ? "h-1 w-2" : "h-1.5 w-3";
-  const centerMarkClass = iconOnly && compact ? "h-1.5 w-3.5" : "h-2 w-5";
-  const lineMarkClass = iconOnly && compact ? "h-0.5 w-2" : "h-1 w-3";
-  const sparseLineClass = iconOnly && compact ? "h-0.5 w-2.5" : "h-1 w-4";
-  const signatureMarkClass = iconOnly && compact ? "h-1 w-4" : "h-1.5 w-6";
+  const cornerMarkClass = iconOnly && compact ? "h-1 w-1.5" : "h-1.5 w-3";
+  const centerMarkClass = iconOnly && compact ? "h-1 w-2.5" : "h-2 w-5";
+  const lineMarkClass = iconOnly && compact ? "h-px w-1.5" : "h-1 w-3";
+  const sparseLineClass = iconOnly && compact ? "h-px w-2" : "h-1 w-4";
+  const signatureMarkClass = iconOnly && compact ? "h-0.5 w-3" : "h-1.5 w-6";
+
+  const densePositions =
+    iconOnly && compact
+      ? [
+          { left: "12%", top: "22%" },
+          { left: "46%", top: "22%" },
+          { left: "80%", top: "22%" },
+          { left: "12%", top: "62%" },
+          { left: "46%", top: "62%" },
+          { left: "80%", top: "62%" },
+        ]
+      : [
+          { left: "4px", top: "5px" },
+          { left: "15px", top: "5px" },
+          { left: "26px", top: "5px" },
+          { left: "4px", top: "14px" },
+          { left: "15px", top: "14px" },
+          { left: "26px", top: "14px" },
+        ];
+
+  const sparsePositions =
+    iconOnly && compact
+      ? [
+          { left: "14%", top: "28%" },
+          { left: "46%", top: "42%" },
+          { left: "78%", top: "56%" },
+        ]
+      : [
+          { left: "4px", top: "5px" },
+          { left: "15px", top: "9px" },
+          { left: "26px", top: "13px" },
+        ];
 
   return (
     <span className={frameClassName}>
@@ -95,17 +147,14 @@ function TemplateIcon({
       ) : null}
       {variant === "dense" ? (
         <>
-          {[0, 1, 2, 3, 4, 5].map((index) => (
+          {densePositions.map((position, index) => (
             <span
-              className={`absolute rotate-[-35deg] rounded-full ${lineMarkClass} ${lineColor}`}
+              className={`absolute rounded-full ${lineMarkClass} ${lineColor}`}
               key={index}
               style={{
-                left: iconOnly && compact
-                  ? `${2 + (index % 3) * 7}px`
-                  : `${4 + (index % 3) * 11}px`,
-                top: iconOnly && compact
-                  ? `${3 + Math.floor(index / 3) * 6}px`
-                  : `${5 + Math.floor(index / 3) * 9}px`,
+                left: position.left,
+                top: position.top,
+                transform: "translate(-50%, -50%) rotate(-35deg)",
               }}
             />
           ))}
@@ -113,17 +162,14 @@ function TemplateIcon({
       ) : null}
       {variant === "sparse" ? (
         <>
-          {[0, 1, 2].map((index) => (
+          {sparsePositions.map((position, index) => (
             <span
-              className={`absolute rotate-[-35deg] rounded-full ${sparseLineClass} ${lineColor}`}
+              className={`absolute rounded-full ${sparseLineClass} ${lineColor}`}
               key={index}
               style={{
-                left: iconOnly && compact
-                  ? `${2 + index * 7}px`
-                  : `${4 + index * 11}px`,
-                top: iconOnly && compact
-                  ? `${3 + index * 3}px`
-                  : `${5 + index * 4}px`,
+                left: position.left,
+                top: position.top,
+                transform: "translate(-50%, -50%) rotate(-35deg)",
               }}
             />
           ))}
@@ -147,38 +193,41 @@ export function WatermarkQuickTemplates({
 }: QuickTemplatesProps & { compact?: boolean }) {
   if (compact) {
     return (
-      <div className="flex items-center justify-end gap-0.5">
+      <div className="flex items-end justify-end gap-0.5">
         {quickTemplates.map((template) => {
           const isSelected = activeTemplate === template.id;
+          const caption = getCompactTemplateCaption(template);
 
           return (
-            <motion.button
-              aria-label={template.label}
-              aria-pressed={isSelected}
-              className={`relative flex h-5 w-6 shrink-0 items-center justify-center rounded border px-0 py-0 shadow-sm transition ${
-                isSelected
-                  ? "border-emerald-200 bg-emerald-100"
-                  : "border-signal/50 bg-signal/5 hover:border-signal/70"
-              }`}
-              key={template.id}
-              onPointerDown={(event) => event.preventDefault()}
-              onClick={() => onApplyTemplate(template.id)}
-              title={template.label}
-              type="button"
-              whileTap={{ scale: 0.96 }}
-              transition={{
-                type: "spring",
-                stiffness: 420,
-                damping: 28,
-              }}
-            >
-              <TemplateIcon
-                compact
-                iconOnly
-                isSelected={isSelected}
-                variant={template.icon}
-              />
-            </motion.button>
+            <div className={editorFooterMobileColumnClassName} key={template.id}>
+              <motion.button
+                aria-label={template.label}
+                aria-pressed={isSelected}
+                className={`relative flex h-5 w-6 shrink-0 items-center justify-center overflow-hidden rounded border p-0.5 shadow-sm transition ${
+                  isSelected
+                    ? "border-signal bg-signal shadow-sm"
+                    : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted"
+                }`}
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => onApplyTemplate(template.id)}
+                title={template.label}
+                type="button"
+                whileTap={{ scale: 0.96 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 420,
+                  damping: 28,
+                }}
+              >
+                <TemplateIcon
+                  compact
+                  iconOnly
+                  isSelected={isSelected}
+                  variant={template.icon}
+                />
+              </motion.button>
+              <span className={editorFooterMobileCaptionClassName}>{caption}</span>
+            </div>
           );
         })}
       </div>

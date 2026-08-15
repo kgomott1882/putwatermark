@@ -24,8 +24,8 @@ function RailTool({ active, className = "", icon, label, onClick }: RailToolProp
     <button
       className={`flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[8px] font-medium leading-none transition max-md:flex-row md:w-full md:flex-col md:gap-1.5 md:rounded-xl md:px-1.5 md:py-2.5 md:text-[10px] ${className} ${
         active
-          ? "editor-selected-pill"
-          : "text-ed-fg-muted hover:bg-ed-bg-card/70 hover:text-ed-fg"
+          ? "bg-signal font-bold text-white shadow-sm hover:brightness-110"
+          : "editor-secondary-button border-ed-border text-ed-fg-muted hover:text-ed-fg"
       }`}
       onClick={onClick}
       type="button"

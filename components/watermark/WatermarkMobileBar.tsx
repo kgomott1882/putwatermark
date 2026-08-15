@@ -13,6 +13,7 @@ import {
   TEXT_WATERMARK_COLOR_PALETTE,
   type TextWatermarkFontWeight,
 } from "@/lib/watermarkTextStyle";
+import { MOBILE_INPUT_NO_ZOOM_CLASS } from "@/lib/mobileEditorViewport";
 import { EditorSegment } from "./EditorToolPanel";
 
 type WatermarkMode = "single" | "tile";
@@ -30,6 +31,7 @@ type SharedProps = {
   onLayerSelect: (id: string) => void;
   onModeChange: (mode: WatermarkMode) => void;
   onRemoveLayer: (id: string) => void;
+  onDoneTyping?: () => void;
   onTileAngleChange: (value: TileAngle) => void;
   onTileDensityChange: (value: TileDensity) => void;
   onTileGapChange: (value: number) => void;
@@ -390,17 +392,60 @@ function InlineSlider({
 
 export function WatermarkMobileBar(props: WatermarkMobileBarProps) {
   const [showTileOptions, setShowTileOptions] = useState(false);
+  const textInputRef = useRef<HTMLInputElement>(null);
   const canAddLayer = props.mode === "single";
+  const hasWatermarkText =
+    props.type === "text" ? props.layer.text.trim().length > 0 : false;
+
+  function handleTextDone() {
+    textInputRef.current?.blur();
+
+    if (typeof document !== "undefined") {
+      const active = document.activeElement;
+
+      if (active instanceof HTMLElement) {
+        active.blur();
+      }
+    }
+
+    props.onDoneTyping?.();
+  }
+
+  const mobileFieldClassName = `editor-field-sm ${MOBILE_INPUT_NO_ZOOM_CLASS} h-7 min-w-0 flex-1 rounded-sm px-1.5 py-0 max-md:text-[16px] md:h-[22px] md:px-1 md:text-[9px]`;
 
   const mediaControl =
     props.type === "text" ? (
-      <input
-        className="editor-field-sm h-[22px] min-w-0 flex-1 rounded-sm px-1 py-0 text-[9px]"
-        onChange={(event) => props.onTextChange(event.target.value)}
-        placeholder="Watermark text"
-        type="text"
-        value={props.layer.text}
-      />
+      <div className="flex min-w-0 flex-1 items-center gap-0.5">
+        <input
+          ref={textInputRef}
+          className={mobileFieldClassName}
+          enterKeyHint="done"
+          inputMode="text"
+          onChange={(event) => props.onTextChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              handleTextDone();
+            }
+          }}
+          placeholder="Watermark text"
+          type="text"
+          value={props.layer.text}
+        />
+        {props.onDoneTyping ? (
+          <button
+            className={`inline-flex h-7 shrink-0 items-center justify-center rounded-sm px-2 text-[10px] font-bold uppercase tracking-[0.06em] shadow-sm transition ${
+              hasWatermarkText
+                ? "bg-signal text-white hover:brightness-110"
+                : "editor-secondary-button text-ed-fg-muted"
+            }`}
+            onClick={handleTextDone}
+            type="button"
+          >
+            Done
+          </button>
+        ) : null}
+      </div>
     ) : props.layer.logoImage ? (
       <button
         className="editor-secondary-button h-[22px] min-w-0 flex-1 truncate rounded-sm px-1 text-[9px] font-semibold text-ed-fg"
@@ -442,7 +487,7 @@ export function WatermarkMobileBar(props: WatermarkMobileBarProps) {
           type={props.type}
         />
         {props.mode === "tile" && props.tileQuickTemplates ? (
-          <div className="flex min-w-0 items-center justify-end overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex min-w-0 items-end justify-end overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {props.tileQuickTemplates}
           </div>
         ) : (
@@ -521,7 +566,7 @@ export function WatermarkMobileBar(props: WatermarkMobileBarProps) {
       {props.type === "text" ? (
         <div className="flex items-center gap-0.5">
           <select
-            className="editor-field-sm h-[22px] min-w-0 flex-1 rounded-sm px-1 py-0 text-[9px]"
+            className={mobileFieldClassName}
             onChange={(event) => props.onFontFamilyChange(event.target.value)}
             value={
               props.layer.fontFamily ??
