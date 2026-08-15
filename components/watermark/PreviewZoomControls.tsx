@@ -17,6 +17,8 @@ type PreviewZoomControlsProps = {
 
 type PreviewControlButtonProps = {
   ariaLabel: string;
+  caption?: string;
+  captionClassName?: string;
   disabled?: boolean;
   label: string;
   mobileCaption?: string;
@@ -37,6 +39,8 @@ export const editorFooterMobileCaptionClassName =
 
 export function PreviewControlButton({
   ariaLabel,
+  caption,
+  captionClassName = "text-ed-fg-muted",
   children,
   disabled = false,
   label,
@@ -45,6 +49,7 @@ export function PreviewControlButton({
   onClick,
   tooltipPlacement = "above",
 }: PreviewControlButtonProps) {
+  const showTooltip = !caption;
   const tooltipClassName =
     tooltipPlacement === "below"
       ? "pointer-events-none absolute top-[calc(100%+5px)] left-1/2 z-30 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-ed-fg px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-ed-bg opacity-0 shadow-md transition-opacity duration-150 group-hover/btn:opacity-100 group-focus-within/btn:opacity-100 md:block"
@@ -57,29 +62,38 @@ export function PreviewControlButton({
         className={previewControlButtonClassName}
         disabled={disabled}
         onClick={onClick}
-        title={label}
+        title={showTooltip ? label : undefined}
         type="button"
       >
         {children}
       </button>
-      <span aria-hidden="true" className={tooltipClassName}>
-        {label}
-      </span>
+      {showTooltip ? (
+        <span aria-hidden="true" className={tooltipClassName}>
+          {label}
+        </span>
+      ) : null}
     </div>
   );
 
-  if (!mobileCaption) {
+  if (!caption && !mobileCaption) {
     return button;
   }
 
   return (
     <div className={editorFooterMobileColumnClassName}>
       {button}
-      <span
-        className={`md:hidden ${editorFooterMobileCaptionClassName} ${mobileCaptionClassName}`}
-      >
-        {mobileCaption}
-      </span>
+      {caption ? (
+        <span className={`${editorFooterMobileCaptionClassName} ${captionClassName}`}>
+          {caption}
+        </span>
+      ) : null}
+      {mobileCaption ? (
+        <span
+          className={`md:hidden ${editorFooterMobileCaptionClassName} ${mobileCaptionClassName}`}
+        >
+          {mobileCaption}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -111,10 +125,10 @@ export function PreviewCanvasZoomControls({
     >
       <PreviewControlButton
         ariaLabel="Zoom in"
+        caption="In"
+        captionClassName="text-ed-fg"
         disabled={zoomInDisabled}
         label="Zoom In"
-        mobileCaption="In"
-        mobileCaptionClassName="text-ed-fg-muted"
         onClick={onZoomIn}
         tooltipPlacement="below"
       >
@@ -122,10 +136,10 @@ export function PreviewCanvasZoomControls({
       </PreviewControlButton>
       <PreviewControlButton
         ariaLabel="Zoom out"
+        caption="Out"
+        captionClassName="text-ed-fg"
         disabled={zoomOutDisabled}
         label="Zoom Out"
-        mobileCaption="Out"
-        mobileCaptionClassName="text-ed-fg-muted"
         onClick={onZoomOut}
         tooltipPlacement="below"
       >
@@ -133,10 +147,10 @@ export function PreviewCanvasZoomControls({
       </PreviewControlButton>
       <PreviewControlButton
         ariaLabel="Reset zoom"
+        caption="Reset"
+        captionClassName="text-ed-fg"
         disabled={resetDisabled}
         label="Reset Zoom"
-        mobileCaption="Reset"
-        mobileCaptionClassName="text-ed-fg-muted"
         onClick={onReset}
         tooltipPlacement="below"
       >
@@ -170,11 +184,12 @@ export function PreviewCanvasMediaControls({
   return (
     <div
       aria-label="Canvas media controls"
-      className={`pointer-events-auto flex items-center gap-1 ${className}`}
+      className={`pointer-events-auto flex items-start gap-1 ${className}`}
       role="toolbar"
     >
       <PreviewControlButton
         ariaLabel="Change file"
+        caption="Swap"
         label="Change File"
         onClick={onReplace!}
         tooltipPlacement="above"
@@ -185,6 +200,7 @@ export function PreviewCanvasMediaControls({
       {mediaKind === "video" && onAddMoreVideos ? (
         <PreviewControlButton
           ariaLabel="Add more videos"
+          caption="Add"
           label="Add Videos"
           onClick={onAddMoreVideos}
           tooltipPlacement="above"
@@ -195,6 +211,7 @@ export function PreviewCanvasMediaControls({
 
       <PreviewControlButton
         ariaLabel="Delete file"
+        caption="Delete"
         label="Delete File"
         onClick={onRemove!}
         tooltipPlacement="above"

@@ -10368,7 +10368,7 @@ export default function WatermarkPage() {
   ) : null;
 
   return (
-    <div className="editor-mobile-shell fixed inset-0 flex w-full flex-col overflow-hidden pt-[env(safe-area-inset-top,0px)] md:relative md:inset-auto md:h-[100svh] md:max-h-none md:pt-0">
+    <div className="editor-mobile-shell fixed inset-0 flex w-full flex-col overflow-hidden pt-[env(safe-area-inset-top,0px)] max-md:pb-[calc(var(--editor-mobile-footer-height,3.25rem)+env(safe-area-inset-bottom,0px))] md:relative md:inset-auto md:h-[100svh] md:max-h-none md:pb-0 md:pt-0">
       {authChecked && isAuthenticated ? (
         <div className="hidden shrink-0 md:block">
           <SiteNavClient
@@ -10631,6 +10631,7 @@ export default function WatermarkPage() {
               (isPdfLoading || pdfPages.length === 0) ? (
                 <div className="hidden justify-end rounded-lg border border-ed-border bg-ed-bg-card px-2 py-1.5 md:flex">
                   <EditorMediaActionButtons
+                    captionMode="always"
                     isPdfLoading={isPdfLoading}
                     mediaKind={mediaKind}
                     onAddMoreImages={openAddMoreImagesPicker}
@@ -10647,6 +10648,7 @@ export default function WatermarkPage() {
               !isPdfLoading ? (
                 <div className="hidden justify-end rounded-lg border border-ed-border bg-ed-bg-card px-2 py-1.5 md:flex">
                   <EditorMediaActionButtons
+                    captionMode="always"
                     isPdfLoading={false}
                     mediaKind={mediaKind}
                     onAddMoreImages={openAddMoreImagesPicker}
@@ -10665,6 +10667,7 @@ export default function WatermarkPage() {
                     hasMedia ? (
                       <div className="max-md:hidden">
                         <EditorMediaActionButtons
+                          captionMode="always"
                           isPdfLoading={false}
                           mediaKind={mediaKind}
                           onAddMoreImages={openAddMoreImagesPicker}
@@ -10689,6 +10692,7 @@ export default function WatermarkPage() {
                     hasMedia ? (
                       <div className="max-md:hidden">
                         <EditorMediaActionButtons
+                          captionMode="always"
                           isPdfLoading={false}
                           mediaKind={mediaKind}
                           onAddMoreImages={openAddMoreImagesPicker}
@@ -10711,6 +10715,7 @@ export default function WatermarkPage() {
                     hasMedia && !isPdfLoading ? (
                       <div className="max-md:hidden">
                         <EditorMediaActionButtons
+                          captionMode="always"
                           isPdfLoading={isPdfLoading}
                           mediaKind={mediaKind}
                           onAddMoreImages={openAddMoreImagesPicker}
@@ -12662,6 +12667,7 @@ function PdfPageStrip({
 }
 
 type EditorMediaActionButtonsProps = {
+  captionMode?: "always" | "mobile";
   isPdfLoading: boolean;
   mediaKind: MediaKind | null;
   onAddMoreImages: () => void;
@@ -12671,6 +12677,7 @@ type EditorMediaActionButtonsProps = {
 };
 
 function EditorMediaActionButtons({
+  captionMode = "mobile",
   isPdfLoading,
   mediaKind,
   onAddMoreImages,
@@ -12678,15 +12685,21 @@ function EditorMediaActionButtons({
   onRemove,
   onReplace,
 }: EditorMediaActionButtonsProps) {
+  function captionProps(text: string) {
+    return captionMode === "always"
+      ? { caption: text }
+      : { mobileCaption: text };
+  }
+
   return (
-    <div className="flex shrink-0 items-center gap-1 md:items-center">
+    <div className="flex shrink-0 items-start gap-1 md:items-start">
       {!isPdfLoading ? (
         <>
           <PreviewControlButton
             ariaLabel="Replace loaded media"
             label="Replace file"
-            mobileCaption="Swap"
             onClick={onReplace}
+            {...captionProps("Swap")}
           >
             <RefreshCw className="h-3 w-3" strokeWidth={2.35} />
           </PreviewControlButton>
@@ -12695,8 +12708,8 @@ function EditorMediaActionButtons({
             <PreviewControlButton
               ariaLabel="Add more images"
               label="Add images"
-              mobileCaption="Add"
               onClick={onAddMoreImages}
+              {...captionProps("Add")}
             >
               <Images className="h-3 w-3" strokeWidth={2.35} />
             </PreviewControlButton>
@@ -12706,8 +12719,8 @@ function EditorMediaActionButtons({
             <PreviewControlButton
               ariaLabel="Add more videos"
               label="Add videos"
-              mobileCaption="Add"
               onClick={onAddMoreVideos}
+              {...captionProps("Add")}
             >
               <Video className="h-3 w-3" strokeWidth={2.35} />
             </PreviewControlButton>
@@ -12718,8 +12731,8 @@ function EditorMediaActionButtons({
       <PreviewControlButton
         ariaLabel="Remove loaded media"
         label="Delete file"
-        mobileCaption="Delete"
         onClick={onRemove}
+        {...captionProps("Delete")}
       >
         <Trash2 className="h-3 w-3" strokeWidth={2.35} />
       </PreviewControlButton>

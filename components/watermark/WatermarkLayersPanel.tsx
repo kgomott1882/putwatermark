@@ -17,6 +17,10 @@ import type { TextWatermarkFontWeight } from "@/lib/watermarkTextStyle";
 import {
   EditorCard,
 } from "./EditorToolPanel";
+import {
+  editorFooterMobileCaptionClassName,
+  editorFooterMobileColumnClassName,
+} from "./PreviewZoomControls";
 import { WatermarkStyleControls } from "./WatermarkStyleControls";
 
 type WatermarkMode = "single" | "tile";
@@ -137,6 +141,40 @@ function VideoVisibilityTimeInput({
   );
 }
 
+function LayerPanelActionButton({
+  ariaLabel,
+  caption,
+  children,
+  className = "",
+  disabled = false,
+  onClick,
+  title,
+}: {
+  ariaLabel: string;
+  caption: string;
+  children: ReactNode;
+  className?: string;
+  disabled?: boolean;
+  onClick: () => void;
+  title?: string;
+}) {
+  return (
+    <div className={editorFooterMobileColumnClassName}>
+      <button
+        aria-label={ariaLabel}
+        className={`editor-secondary-button inline-flex h-7 w-7 items-center justify-center rounded-md text-ed-fg-muted hover:text-ed-fg disabled:cursor-not-allowed disabled:opacity-35 ${className}`}
+        disabled={disabled}
+        onClick={onClick}
+        title={title}
+        type="button"
+      >
+        {children}
+      </button>
+      <span className={editorFooterMobileCaptionClassName}>{caption}</span>
+    </div>
+  );
+}
+
 export function WatermarkLayersPanel({
   activeLayerId,
   fontFamilyGroups,
@@ -184,10 +222,10 @@ export function WatermarkLayersPanel({
           <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-ed-fg">
             {panelTitle}
           </p>
-          <div className="flex shrink-0 items-center gap-1">
-            <button
-              aria-label={`Add ${type} watermark`}
-              className="editor-secondary-button inline-flex h-7 w-7 items-center justify-center rounded-md text-ed-fg-muted hover:text-ed-fg disabled:cursor-not-allowed disabled:opacity-35"
+          <div className="flex shrink-0 items-start gap-1">
+            <LayerPanelActionButton
+              ariaLabel={`Add ${type} watermark`}
+              caption="Add"
               disabled={!canAddLayer}
               onClick={onAddLayer}
               title={
@@ -195,19 +233,18 @@ export function WatermarkLayersPanel({
                   ? `Add ${type} watermark`
                   : "Switch to Single mode to add multiple watermarks"
               }
-              type="button"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-            </button>
-            <button
-              aria-label={`Delete ${type} watermark ${activeIndex + 1}`}
-              className="editor-secondary-button inline-flex h-7 w-7 items-center justify-center rounded-md text-ed-fg-muted hover:border-signal/50 hover:text-signal disabled:cursor-not-allowed disabled:opacity-35"
+            </LayerPanelActionButton>
+            <LayerPanelActionButton
+              ariaLabel={`Delete ${type} watermark ${activeIndex + 1}`}
+              caption="Delete"
+              className="hover:border-signal/50 hover:text-signal"
               disabled={layerCount <= 1}
               onClick={() => onRemoveLayer(activeLayerId)}
-              type="button"
             >
               <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
-            </button>
+            </LayerPanelActionButton>
           </div>
         </div>
 
