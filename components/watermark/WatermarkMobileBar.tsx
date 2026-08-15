@@ -49,13 +49,16 @@ type TextProps = SharedProps & {
   onFontFamilyChange: (value: string) => void;
   onFontWeightChange: (value: TextWatermarkFontWeight) => void;
   onTextChange: (value: string) => void;
+  onTextFocus?: () => void;
   onTextColorChange: (value: string) => void;
   type: "text";
 };
 
 type LogoProps = SharedProps & {
   layer: LogoWatermarkLayer;
+  logoBackgroundMessage?: string;
   logoError?: string;
+  onLogoBackgroundToggle?: () => void;
   onLogoPick?: () => void;
   type: "logo";
 };
@@ -82,8 +85,8 @@ function LayerTabs({
   type: "text" | "logo";
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-px">
-      <div className="flex max-w-[4.5rem] items-center gap-px overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="flex shrink-0 items-center gap-0.5">
+      <div className="flex max-w-[5.5rem] items-center gap-0.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {layerIds.map((id, index) => (
           <button
             aria-label={
@@ -91,7 +94,8 @@ function LayerTabs({
                 ? `Text watermark ${index + 1}`
                 : `Logo watermark ${index + 1}`
             }
-            className={`shrink-0 rounded px-0.5 py-px text-[7px] font-semibold uppercase tracking-[0.04em] transition ${
+            aria-pressed={id === activeLayerId}
+            className={`inline-flex h-5 min-w-[18px] shrink-0 items-center justify-center rounded px-1 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] transition ${
               id === activeLayerId
                 ? "editor-selected-pill"
                 : "editor-secondary-button border-ed-border bg-ed-bg text-ed-fg-muted hover:text-ed-fg"
@@ -106,21 +110,21 @@ function LayerTabs({
       </div>
       <button
         aria-label={`Add ${type} watermark`}
-        className="editor-secondary-button inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-ed-fg-muted hover:text-ed-fg disabled:opacity-35"
+        className="editor-secondary-button inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-ed-fg-muted hover:text-ed-fg disabled:opacity-35"
         disabled={!canAddLayer}
         onClick={onAddLayer}
         type="button"
       >
-        <Plus className="h-2 w-2" strokeWidth={2} />
+        <Plus className="h-2.5 w-2.5" strokeWidth={2} />
       </button>
       <button
         aria-label={`Delete ${type} watermark`}
-        className="editor-secondary-button inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-ed-fg-muted hover:text-signal disabled:opacity-35"
+        className="editor-secondary-button inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-ed-fg-muted hover:text-signal disabled:opacity-35"
         disabled={layerCount <= 1}
         onClick={() => onRemoveLayer(activeLayerId)}
         type="button"
       >
-        <Trash2 className="h-2 w-2" strokeWidth={2} />
+        <Trash2 className="h-2.5 w-2.5" strokeWidth={2} />
       </button>
     </div>
   );
@@ -423,6 +427,7 @@ export function WatermarkMobileBar(props: WatermarkMobileBarProps) {
           enterKeyHint="done"
           inputMode="text"
           onChange={(event) => props.onTextChange(event.target.value)}
+          onFocus={() => props.onTextFocus?.()}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
@@ -448,13 +453,36 @@ export function WatermarkMobileBar(props: WatermarkMobileBarProps) {
         ) : null}
       </div>
     ) : props.layer.logoImage ? (
-      <button
-        className="editor-secondary-button h-[22px] min-w-0 flex-1 truncate rounded-sm px-1 text-[9px] font-semibold text-ed-fg"
-        onClick={props.onLogoPick}
-        type="button"
-      >
-        {props.layer.logoFileName}
-      </button>
+      <div className="flex min-w-0 flex-1 items-center gap-0.5">
+        <button
+          className="editor-secondary-button h-[22px] min-w-0 max-w-[10.5rem] flex-1 truncate rounded-sm px-1 text-[8px] font-semibold text-ed-fg"
+          onClick={props.onLogoPick}
+          type="button"
+        >
+          {props.layer.logoFileName}
+        </button>
+        {props.onLogoBackgroundToggle ? (
+          <button
+            aria-label="Remove background"
+            aria-pressed={props.layer.isLogoBackgroundRemoved}
+            className={`inline-flex h-[22px] shrink-0 items-center justify-center rounded-sm px-1.5 text-[7px] font-bold uppercase tracking-[0.03em] transition ${
+              props.layer.isLogoBackgroundRemoved
+                ? "bg-signal text-white hover:brightness-110"
+                : "editor-secondary-button text-ed-fg-muted"
+            }`}
+            onClick={props.onLogoBackgroundToggle}
+            title={
+              props.logoBackgroundMessage ||
+              (props.layer.isLogoBackgroundRemoved
+                ? "Background removal on"
+                : "Remove background")
+            }
+            type="button"
+          >
+            Remove BG
+          </button>
+        ) : null}
+      </div>
     ) : (
       <button
         className="editor-secondary-button h-[22px] min-w-0 flex-1 rounded-sm border-dashed px-1 text-[9px] font-semibold text-ed-fg hover:border-signal/50"
@@ -468,16 +496,18 @@ export function WatermarkMobileBar(props: WatermarkMobileBarProps) {
   return (
     <div className="space-y-0.5 px-0.5 pb-0.5 pt-0 max-md:space-y-1">
       <div className="flex items-center gap-0.5">
-        <LayerTabs
-          activeLayerId={props.activeLayerId}
-          canAddLayer={canAddLayer}
-          layerCount={props.layerCount}
-          layerIds={props.layerIds}
-          onAddLayer={props.onAddLayer}
-          onLayerSelect={props.onLayerSelect}
-          onRemoveLayer={props.onRemoveLayer}
-          type={props.type}
-        />
+        {props.type === "text" ? (
+          <LayerTabs
+            activeLayerId={props.activeLayerId}
+            canAddLayer={canAddLayer}
+            layerCount={props.layerCount}
+            layerIds={props.layerIds}
+            onAddLayer={props.onAddLayer}
+            onLayerSelect={props.onLayerSelect}
+            onRemoveLayer={props.onRemoveLayer}
+            type={props.type}
+          />
+        ) : null}
         {mediaControl}
       </div>
 

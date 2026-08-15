@@ -128,6 +128,20 @@ export const SINGLE_TEXT_WATERMARK_DEFAULTS: TextWatermarkModeDefaults = {
   watermarkPosition: "center",
 };
 
+export type LogoWatermarkModeDefaults = {
+  customPosition: CustomPosition | null;
+  fontSizeScale: number;
+  opacity: number;
+  watermarkPosition: WatermarkPosition;
+};
+
+export const SINGLE_LOGO_WATERMARK_DEFAULTS: LogoWatermarkModeDefaults = {
+  customPosition: null,
+  fontSizeScale: DEFAULT_TEXT_LAYER_FONT_SIZE_SCALE,
+  opacity: 70,
+  watermarkPosition: "center",
+};
+
 export const TILE_TEXT_WATERMARK_DEFAULTS: TextWatermarkModeDefaults = {
   customPosition: null,
   fontFamily: DEFAULT_TEXT_LAYER_FONT_FAMILY,
@@ -169,17 +183,17 @@ export function createDefaultTextLayer(
 export function createDefaultLogoLayer(): LogoWatermarkLayer {
   return {
     backgroundRemovedLogoImage: null,
-    customPosition: null,
-    fontSizeScale: 100,
+    customPosition: SINGLE_LOGO_WATERMARK_DEFAULTS.customPosition,
+    fontSizeScale: SINGLE_LOGO_WATERMARK_DEFAULTS.fontSizeScale,
     id: createWatermarkLayerId(),
     isLogoBackgroundRemoved: false,
     logoFileName: "",
     logoImage: null,
     logoObjectUrl: null,
-    opacity: 70,
+    opacity: SINGLE_LOGO_WATERMARK_DEFAULTS.opacity,
     originalLogoImage: null,
     type: "logo",
-    watermarkPosition: "top-left",
+    watermarkPosition: SINGLE_LOGO_WATERMARK_DEFAULTS.watermarkPosition,
   };
 }
 
