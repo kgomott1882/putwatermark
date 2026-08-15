@@ -1,5 +1,8 @@
 import {
+  CUSTOM_CREDITS_MIN,
+  CUSTOM_PRICE_PER_THOUSAND_USD,
   FIXED_PURCHASE_TIERS,
+  computeCustomPurchasePriceUSD,
   type PurchaseTierId,
 } from "@/lib/purchasePricing";
 
@@ -12,7 +15,7 @@ const creditsFormatter = new Intl.NumberFormat("en-US");
 
 export const CHECKOUT_CREDITS_EXPIRY_LINE = "Credits don't expire for 60 days";
 
-export const EDITOR_CHECKOUT_TIER_IDS: PurchaseTierId[] = ["premium", "grow"];
+export const EDITOR_CHECKOUT_TIER_IDS: PurchaseTierId[] = ["grow", "premium"];
 
 export function formatPurchasePrice(amount: number) {
   return currencyFormatter.format(amount);
@@ -20,6 +23,25 @@ export function formatPurchasePrice(amount: number) {
 
 export function formatPurchaseCredits(amount: number) {
   return creditsFormatter.format(amount);
+}
+
+export function buildCustomCheckoutSummary(credits: number) {
+  const priceUSD = computeCustomPurchasePriceUSD(credits);
+
+  return {
+    detail: `${formatPurchaseCredits(credits)} credits · ${formatPurchasePrice(CUSTOM_PRICE_PER_THOUSAND_USD)} per 1,000 · ${CHECKOUT_CREDITS_EXPIRY_LINE}`,
+    key: `extra-${credits}`,
+    price: formatPurchasePrice(priceUSD),
+    title: "Custom credit pack",
+  };
+}
+
+export function buildCustomCheckoutSelection(credits: number) {
+  return {
+    credits,
+    kind: "custom" as const,
+    key: `extra-${credits}`,
+  };
 }
 
 export function buildTierCheckoutSummary(tierId: PurchaseTierId) {

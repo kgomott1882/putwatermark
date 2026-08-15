@@ -95,15 +95,31 @@ export function EditorToolPanel({
                 : "max-md:hidden md:flex md:flex-col"
             }`}
           >
-            <div className="min-w-0 flex-1 max-md:[&_nav]:border-t-0">{toolRail}</div>
+            <div
+              className={`min-w-0 flex-1 max-md:[&_nav]:border-t-0 ${
+                mobileControlsCollapsed ? "max-md:hidden" : ""
+              }`}
+            >
+              {toolRail}
+            </div>
             {mobileControlsCollapsed && onToggleMobileControls ? (
               <button
-                className="flex shrink-0 items-center justify-center gap-1 border-l border-emerald-200 bg-emerald-100 px-4 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-900 transition hover:bg-emerald-200/80 md:hidden"
+                className="flex min-w-0 flex-1 items-center justify-between gap-2 border-l-0 border-emerald-200 bg-emerald-100 px-4 py-2 text-emerald-900 transition hover:bg-emerald-200/80 md:hidden"
                 onClick={onToggleMobileControls}
                 type="button"
               >
-                Tools
-                <span aria-hidden className="text-sm leading-none">
+                <span className="min-w-0 text-left">
+                  <span className="block text-[10px] font-bold uppercase tracking-[0.12em]">
+                    Tools
+                  </span>
+                  <span className="mt-0.5 block text-[9px] font-medium normal-case leading-tight text-emerald-800/85">
+                    Tap for text, logo & settings
+                  </span>
+                </span>
+                <span
+                  aria-hidden
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-700/10 text-sm leading-none text-emerald-900"
+                >
                   ↑
                 </span>
               </button>

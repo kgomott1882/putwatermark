@@ -121,7 +121,7 @@ body.landing-cursor-none * {
 
   .editor-mobile-controls-sheet {
     @apply max-md:!fixed max-md:inset-x-0 max-md:z-40 max-md:pointer-events-auto max-md:border-t max-md:border-ed-border max-md:bg-ed-panel/95 max-md:shadow-[0_-8px_32px_rgba(43,43,43,0.14)] max-md:backdrop-blur-md max-md:transition-[max-height,transform] max-md:duration-300 max-md:ease-out;
-    bottom: calc(var(--editor-mobile-footer-height, 2.75rem) + env(safe-area-inset-bottom, 0px));
+    bottom: calc(var(--editor-mobile-footer-height, 3.25rem) + env(safe-area-inset-bottom, 0px));
   }
 
   .editor-mobile-controls-sheet-collapsed {

@@ -2,6 +2,17 @@
 
 import { ChevronDown, X } from "lucide-react";
 import { useEffect, useId, useRef, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  CUSTOM_CREDITS_MAX,
+  CUSTOM_CREDITS_MIN,
+  CUSTOM_CREDITS_STEP,
+  CUSTOM_PRICE_PER_THOUSAND_USD,
+  computeCustomPurchasePriceUSD,
+} from "@/lib/purchasePricing";
+import {
+  formatPurchaseCredits,
+  formatPurchasePrice,
+} from "@/lib/purchaseCheckoutDisplay";
 import type { PurchaseTierId } from "@/lib/purchasePricing";
 import {
   PricingPayPalCheckout,
@@ -30,8 +41,12 @@ type CheckoutTierOption = {
 type PricingCheckoutModalProps = {
   checkoutKey: string;
   completionMode?: "editor" | "pricing";
+  customPlanCredits?: number;
+  isCustomPlanActive?: boolean;
   isOpen: boolean;
   onClose: () => void;
+  onCustomPlanActiveChange?: (active: boolean) => void;
+  onCustomPlanCreditsChange?: (credits: number) => void;
   onPurchaseComplete?: (balance: number) => void;
   orderSummary: CheckoutOrderSummary;
   paypalClientId: string;
@@ -45,8 +60,12 @@ type PricingCheckoutModalProps = {
 export function PricingCheckoutModal({
   checkoutKey,
   completionMode = "pricing",
+  customPlanCredits,
+  isCustomPlanActive = false,
   isOpen,
   onClose,
+  onCustomPlanActiveChange,
+  onCustomPlanCreditsChange,
   onPurchaseComplete,
   orderSummary,
   paypalClientId,
@@ -60,6 +79,16 @@ export function PricingCheckoutModal({
   const descriptionId = useId();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const modalPanelRef = useRef<HTMLDivElement>(null);
+
+  const showCustomPlan =
+    customPlanCredits !== undefined &&
+    onCustomPlanCreditsChange &&
+    onCustomPlanActiveChange;
+
+  const customPlanPrice =
+    customPlanCredits !== undefined
+      ? computeCustomPurchasePriceUSD(customPlanCredits)
+      : 0;
 
   usePayPalCardOverlayLayout(isOpen);
 
@@ -182,7 +211,8 @@ export function PricingCheckoutModal({
               </label>
               <div className="relative">
                 <select
-                  className="w-full appearance-none rounded-xl border border-beige/10 bg-night-elevated px-3 py-2.5 pr-9 text-sm font-medium text-beige outline-none transition focus:border-signal/50 focus:ring-2 focus:ring-signal/20"
+                  className="w-full appearance-none rounded-xl border border-beige/10 bg-night-elevated px-3 py-2.5 pr-9 text-sm font-medium text-beige outline-none transition focus:border-signal/50 focus:ring-2 focus:ring-signal/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={isCustomPlanActive}
                   id={`${titleId}-tier`}
                   onChange={(event) =>
                     onTierChange(event.target.value as PurchaseTierId)
@@ -203,6 +233,62 @@ export function PricingCheckoutModal({
                 />
               </div>
             </div>
+          ) : null}
+
+          {showCustomPlan ? (
+            <details
+              className="group mb-4 overflow-hidden rounded-xl border border-beige/10 bg-night-elevated"
+              onToggle={(event) => {
+                onCustomPlanActiveChange(event.currentTarget.open);
+              }}
+              open={isCustomPlanActive}
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+                <span className="text-sm font-medium text-beige">Custom plan</span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0 text-beige-dim transition-transform duration-200 group-open:rotate-180"
+                />
+              </summary>
+
+              <div className="border-t border-beige/10 px-3 pb-3 pt-2">
+                <div className="flex items-end justify-between gap-3">
+                  <p className="text-xs leading-5 text-beige-dim">
+                    High volume option above Premium:{" "}
+                    {formatPurchasePrice(CUSTOM_PRICE_PER_THOUSAND_USD)} per 1,000
+                    credits.
+                  </p>
+                  <p className="shrink-0 text-lg font-bold tracking-[-0.04em] text-beige">
+                    {formatPurchasePrice(customPlanPrice)}
+                  </p>
+                </div>
+
+                <div className="mt-4">
+                  <div className="flex items-center justify-between gap-4 text-sm">
+                    <span className="font-medium text-beige-dim">Credits</span>
+                    <span className="font-semibold text-beige">
+                      {formatPurchaseCredits(customPlanCredits)}
+                    </span>
+                  </div>
+                  <input
+                    aria-label="Custom credit pack amount"
+                    className="mt-3 h-2 w-full cursor-pointer appearance-none rounded-full bg-beige/10 accent-signal"
+                    max={CUSTOM_CREDITS_MAX}
+                    min={CUSTOM_CREDITS_MIN}
+                    onChange={(event) =>
+                      onCustomPlanCreditsChange(Number(event.target.value))
+                    }
+                    step={CUSTOM_CREDITS_STEP}
+                    type="range"
+                    value={customPlanCredits}
+                  />
+                  <div className="mt-2 flex justify-between text-[11px] font-semibold uppercase tracking-[0.1em] text-beige-dim">
+                    <span>{formatPurchaseCredits(CUSTOM_CREDITS_MIN)}</span>
+                    <span>{formatPurchaseCredits(CUSTOM_CREDITS_MAX)}</span>
+                  </div>
+                </div>
+              </div>
+            </details>
           ) : null}
 
           <p className="text-sm leading-6 text-beige-dim" id={descriptionId}>

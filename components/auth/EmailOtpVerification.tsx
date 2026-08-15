@@ -9,6 +9,7 @@ import {
   SIGNUP_OTP_RESEND_COOLDOWN_SECONDS,
   verifySignupOtp,
 } from "../../src/lib/authOtp";
+import { scrollInputIntoViewOnMobile } from "@/lib/scrollInputIntoView";
 import { createClient } from "../../utils/supabase/client";
 
 type EmailOtpVerificationProps = {
@@ -148,6 +149,7 @@ export function EmailOtpVerification({
             setError("");
             setInfoMessage("");
           }}
+          onFocus={(event) => scrollInputIntoViewOnMobile(event.currentTarget)}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();

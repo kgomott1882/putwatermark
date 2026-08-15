@@ -19,6 +19,8 @@ type PreviewControlButtonProps = {
   ariaLabel: string;
   disabled?: boolean;
   label: string;
+  mobileCaption?: string;
+  mobileCaptionClassName?: string;
   onClick: () => void;
   tooltipPlacement?: "above" | "below";
   children: ReactNode;
@@ -27,20 +29,28 @@ type PreviewControlButtonProps = {
 export const previewControlButtonClassName =
   "flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-b from-[#ef6b6b] to-[#c41e3a] text-white shadow-[0_2px_8px_rgba(196,30,58,0.3)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45";
 
+export const editorFooterMobileColumnClassName =
+  "flex w-9 shrink-0 flex-col items-center justify-center gap-0.5";
+
+export const editorFooterMobileCaptionClassName =
+  "w-full max-w-[2.25rem] truncate text-center text-[7px] font-normal uppercase tracking-[0.06em] leading-none text-ed-fg-muted";
+
 export function PreviewControlButton({
   ariaLabel,
   children,
   disabled = false,
   label,
+  mobileCaption,
+  mobileCaptionClassName = "text-ed-fg-muted",
   onClick,
   tooltipPlacement = "above",
 }: PreviewControlButtonProps) {
   const tooltipClassName =
     tooltipPlacement === "below"
-      ? "pointer-events-none absolute top-[calc(100%+5px)] left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-md bg-ed-fg px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-ed-bg opacity-0 shadow-md transition-opacity duration-150 group-hover/btn:opacity-100 group-focus-within/btn:opacity-100"
-      : "pointer-events-none absolute bottom-[calc(100%+5px)] left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-md bg-ed-fg px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-ed-bg opacity-0 shadow-md transition-opacity duration-150 group-hover/btn:opacity-100 group-focus-within/btn:opacity-100";
+      ? "pointer-events-none absolute top-[calc(100%+5px)] left-1/2 z-30 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-ed-fg px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-ed-bg opacity-0 shadow-md transition-opacity duration-150 group-hover/btn:opacity-100 group-focus-within/btn:opacity-100 md:block"
+      : "pointer-events-none absolute bottom-[calc(100%+5px)] left-1/2 z-30 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-ed-fg px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-ed-bg opacity-0 shadow-md transition-opacity duration-150 group-hover/btn:opacity-100 group-focus-within/btn:opacity-100 md:block";
 
-  return (
+  const button = (
     <div className="group/btn relative">
       <button
         aria-label={ariaLabel}
@@ -54,6 +64,21 @@ export function PreviewControlButton({
       </button>
       <span aria-hidden="true" className={tooltipClassName}>
         {label}
+      </span>
+    </div>
+  );
+
+  if (!mobileCaption) {
+    return button;
+  }
+
+  return (
+    <div className={editorFooterMobileColumnClassName}>
+      {button}
+      <span
+        className={`md:hidden ${editorFooterMobileCaptionClassName} ${mobileCaptionClassName}`}
+      >
+        {mobileCaption}
       </span>
     </div>
   );
@@ -81,13 +106,15 @@ export function PreviewCanvasZoomControls({
   return (
     <div
       aria-label="Canvas zoom controls"
-      className={`pointer-events-auto flex items-center gap-1 ${className}`}
+      className={`pointer-events-auto flex items-start gap-1 ${className}`}
       role="toolbar"
     >
       <PreviewControlButton
         ariaLabel="Zoom in"
         disabled={zoomInDisabled}
         label="Zoom In"
+        mobileCaption="In"
+        mobileCaptionClassName="text-ed-fg-muted"
         onClick={onZoomIn}
         tooltipPlacement="below"
       >
@@ -97,6 +124,8 @@ export function PreviewCanvasZoomControls({
         ariaLabel="Zoom out"
         disabled={zoomOutDisabled}
         label="Zoom Out"
+        mobileCaption="Out"
+        mobileCaptionClassName="text-ed-fg-muted"
         onClick={onZoomOut}
         tooltipPlacement="below"
       >
@@ -106,6 +135,8 @@ export function PreviewCanvasZoomControls({
         ariaLabel="Reset zoom"
         disabled={resetDisabled}
         label="Reset Zoom"
+        mobileCaption="Reset"
+        mobileCaptionClassName="text-ed-fg-muted"
         onClick={onReset}
         tooltipPlacement="below"
       >

@@ -33,7 +33,7 @@ export function EditorSubToolRail({
         <div className="flex flex-row gap-0.5 md:flex-col md:gap-1">{children}</div>
       </nav>
       {mobileTrailingAccessory ? (
-        <div className="pointer-events-auto absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 md:hidden">
+        <div className="pointer-events-auto absolute right-1 top-1 z-10 flex items-start gap-0.5 md:hidden">
           {mobileTrailingAccessory}
         </div>
       ) : null}

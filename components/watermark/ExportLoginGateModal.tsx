@@ -16,6 +16,7 @@ import { LoadingIndicator } from "../LoadingIndicator";
 import { createClient } from "../../utils/supabase/client";
 import { signInWithGoogle } from "@/lib/authOAuth";
 import { DEFAULT_POST_AUTH_PATH } from "@/lib/authRedirect";
+import { scrollInputIntoViewOnMobile } from "@/lib/scrollInputIntoView";
 
 export type ExportLoginGatePhase = "auth" | "saving" | "verify-email";
 
@@ -49,16 +50,7 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const minimumPasswordLength = 8;
 
 function scrollFieldIntoView(event: FocusEvent<HTMLInputElement>) {
-  if (window.innerWidth >= 768) {
-    return;
-  }
-
-  window.requestAnimationFrame(() => {
-    event.currentTarget.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
-  });
+  scrollInputIntoViewOnMobile(event.currentTarget);
 }
 
 function useVisualViewport(open: boolean) {

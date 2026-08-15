@@ -229,7 +229,7 @@ import {
   PREVIEW_ZOOM_STEP,
   PreviewCanvasZoomControls,
   PreviewCanvasMediaControls,
-  previewControlButtonClassName,
+  PreviewControlButton,
 } from "../../../components/watermark/PreviewZoomControls";
 import {
   ResizeControlsPanel,
@@ -12679,50 +12679,50 @@ function EditorMediaActionButtons({
   onReplace,
 }: EditorMediaActionButtonsProps) {
   return (
-    <div className="flex shrink-0 items-center gap-0.5">
+    <div className="flex shrink-0 items-center gap-1 md:items-center">
       {!isPdfLoading ? (
         <>
-          <button
-            aria-label="Replace loaded media"
-            className={previewControlButtonClassName}
+          <PreviewControlButton
+            ariaLabel="Replace loaded media"
+            label="Replace file"
+            mobileCaption="Swap"
             onClick={onReplace}
-            type="button"
           >
             <RefreshCw className="h-3 w-3" strokeWidth={2.35} />
-          </button>
+          </PreviewControlButton>
 
           {mediaKind === "image" ? (
-            <button
-              aria-label="Add more images"
-              className={previewControlButtonClassName}
+            <PreviewControlButton
+              ariaLabel="Add more images"
+              label="Add images"
+              mobileCaption="Add"
               onClick={onAddMoreImages}
-              type="button"
             >
               <Images className="h-3 w-3" strokeWidth={2.35} />
-            </button>
+            </PreviewControlButton>
           ) : null}
 
           {mediaKind === "video" && onAddMoreVideos ? (
-            <button
-              aria-label="Add more videos"
-              className={previewControlButtonClassName}
+            <PreviewControlButton
+              ariaLabel="Add more videos"
+              label="Add videos"
+              mobileCaption="Add"
               onClick={onAddMoreVideos}
-              type="button"
             >
               <Video className="h-3 w-3" strokeWidth={2.35} />
-            </button>
+            </PreviewControlButton>
           ) : null}
         </>
       ) : null}
 
-      <button
-        aria-label="Remove loaded media"
-        className={previewControlButtonClassName}
+      <PreviewControlButton
+        ariaLabel="Remove loaded media"
+        label="Delete file"
+        mobileCaption="Delete"
         onClick={onRemove}
-        type="button"
       >
         <Trash2 className="h-3 w-3" strokeWidth={2.35} />
-      </button>
+      </PreviewControlButton>
     </div>
   );
 }
