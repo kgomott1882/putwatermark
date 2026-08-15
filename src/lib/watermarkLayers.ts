@@ -98,14 +98,14 @@ const defaultFontFamily =
   'Arial, Helvetica, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
 export const DEFAULT_TEXT_LAYER_FONT_FAMILY = DEFAULT_WATERMARK_FONT_FAMILY;
-export const DEFAULT_TEXT_LAYER_FONT_SIZE_SCALE = 25;
+export const DEFAULT_TEXT_LAYER_FONT_SIZE_SCALE = 50;
 export const DEFAULT_TEXT_LAYER_OPACITY = 55;
 export const DEFAULT_TEXT_LAYER_FONT_WEIGHT: TextWatermarkFontWeight = 700;
 
-/** Default anchor for single text watermarks (top-left of the media frame). */
+/** Default anchor for single text watermarks (center of the media frame). */
 export const DEFAULT_SINGLE_TEXT_WATERMARK_POSITION: CustomPosition = {
-  xPercent: 0.08,
-  yPercent: 0.08,
+  xPercent: 0.5,
+  yPercent: 0.5,
 };
 
 export type TextWatermarkModeDefaults = {
@@ -125,7 +125,7 @@ export const SINGLE_TEXT_WATERMARK_DEFAULTS: TextWatermarkModeDefaults = {
   fontWeight: DEFAULT_TEXT_LAYER_FONT_WEIGHT,
   opacity: DEFAULT_TEXT_LAYER_OPACITY,
   textColor: DEFAULT_TEXT_WATERMARK_COLOR,
-  watermarkPosition: "top-left",
+  watermarkPosition: "center",
 };
 
 export const TILE_TEXT_WATERMARK_DEFAULTS: TextWatermarkModeDefaults = {

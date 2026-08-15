@@ -136,7 +136,7 @@ function ModeToggle({
   type: "text" | "logo";
 }) {
   return (
-    <div className="editor-segment-track grid min-h-[24px] grid-cols-2 gap-0.5">
+    <div className="editor-segment-track grid min-h-[24px] w-full grid-cols-2 gap-0.5">
       {(
         [
           { label: "Single", value: "single" },
@@ -366,7 +366,7 @@ function InlineSlider({
   value: number;
 }) {
   return (
-    <div className="flex min-h-[22px] min-w-0 items-center gap-1">
+    <div className="flex min-h-[22px] min-w-0 items-center gap-1 max-md:py-1">
       <label
         className="w-8 shrink-0 text-[8px] font-bold uppercase leading-none tracking-[0.04em] text-ed-fg"
         htmlFor={id}
@@ -374,7 +374,7 @@ function InlineSlider({
         {label}
       </label>
       <input
-        className="editor-range min-w-0 flex-1"
+        className="editor-range min-w-0 flex-1 max-md:py-1"
         id={id}
         max={max}
         min={min}
@@ -411,14 +411,15 @@ export function WatermarkMobileBar(props: WatermarkMobileBarProps) {
     props.onDoneTyping?.();
   }
 
-  const mobileFieldClassName = `editor-field-sm ${MOBILE_INPUT_NO_ZOOM_CLASS} h-7 min-w-0 flex-1 rounded-sm px-1.5 py-0 max-md:text-[16px] md:h-[22px] md:px-1 md:text-[9px]`;
+  const mobileTextInputClassName = `editor-field-sm ${MOBILE_INPUT_NO_ZOOM_CLASS} h-7 min-w-0 flex-1 rounded-sm px-1.5 py-0 max-md:text-[16px] md:h-[22px] md:px-1 md:text-[9px]`;
+  const mobileSelectClassName = `editor-field-sm ${MOBILE_INPUT_NO_ZOOM_CLASS} h-6 min-w-0 flex-1 rounded-sm px-1.5 py-0 max-md:text-[16px] max-md:leading-none md:h-[22px] md:px-1 md:text-[9px]`;
 
   const mediaControl =
     props.type === "text" ? (
       <div className="flex min-w-0 flex-1 items-center gap-0.5">
         <input
           ref={textInputRef}
-          className={mobileFieldClassName}
+          className={mobileTextInputClassName}
           enterKeyHint="done"
           inputMode="text"
           onChange={(event) => props.onTextChange(event.target.value)}
@@ -465,7 +466,7 @@ export function WatermarkMobileBar(props: WatermarkMobileBarProps) {
     );
 
   return (
-    <div className="space-y-0.5 px-0.5 pb-0.5 pt-0">
+    <div className="space-y-0.5 px-0.5 pb-0.5 pt-0 max-md:space-y-1">
       <div className="flex items-center gap-0.5">
         <LayerTabs
           activeLayerId={props.activeLayerId}
@@ -480,19 +481,19 @@ export function WatermarkMobileBar(props: WatermarkMobileBarProps) {
         {mediaControl}
       </div>
 
-      <div className="grid grid-cols-2 items-center gap-0.5">
-        <ModeToggle
-          mode={props.mode}
-          onModeChange={props.onModeChange}
-          type={props.type}
-        />
+      <div className="flex items-end gap-0.5">
+        <div className="min-w-0 flex-1">
+          <ModeToggle
+            mode={props.mode}
+            onModeChange={props.onModeChange}
+            type={props.type}
+          />
+        </div>
         {props.mode === "tile" && props.tileQuickTemplates ? (
-          <div className="flex min-w-0 items-end justify-end overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex shrink-0 items-end justify-end overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {props.tileQuickTemplates}
           </div>
-        ) : (
-          <div aria-hidden className="min-w-0" />
-        )}
+        ) : null}
       </div>
 
       <div className="grid grid-cols-2 gap-1">
@@ -566,7 +567,7 @@ export function WatermarkMobileBar(props: WatermarkMobileBarProps) {
       {props.type === "text" ? (
         <div className="flex items-center gap-0.5">
           <select
-            className={mobileFieldClassName}
+            className={mobileSelectClassName}
             onChange={(event) => props.onFontFamilyChange(event.target.value)}
             value={
               props.layer.fontFamily ??

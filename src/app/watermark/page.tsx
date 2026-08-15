@@ -1217,7 +1217,7 @@ export default function WatermarkPage() {
     useState<LogoWatermarkTemplateId | null>(null);
   const [watermarkMode, setWatermarkMode] = useState<WatermarkMode>("single");
   const [watermarkPosition, setWatermarkPosition] =
-    useState<WatermarkPosition>("top-left");
+    useState<WatermarkPosition>(initialTextLayer.watermarkPosition);
   const [customPosition, setCustomPosition] = useState<CustomPosition | null>(
     initialTextLayer.customPosition
       ? { ...initialTextLayer.customPosition }
@@ -5767,7 +5767,7 @@ export default function WatermarkPage() {
       !activeTextLayer.text.trim()
     ) {
       patch.customPosition = null;
-      patch.watermarkPosition = "top-left";
+      patch.watermarkPosition = "center";
     }
 
     updateTextLayer(activeTextLayerId, patch);
