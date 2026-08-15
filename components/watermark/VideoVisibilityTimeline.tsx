@@ -17,6 +17,9 @@ import { useVideoTimelineThumbnails } from "./useVideoTimelineThumbnails";
 
 type DragTarget = "playhead" | "start" | "end";
 
+const TIMELINE_EDGE_INSET_X = "px-4 sm:px-5 md:px-10";
+const TIMELINE_EDGE_INSET_MX = "mx-4 sm:mx-5 md:mx-10";
+
 type TimelineVariant = "trim" | "visibility";
 
 type VideoVisibilityTimelineProps = {
@@ -335,13 +338,314 @@ export function VideoVisibilityTimeline({
     ? "border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
     : "ring-1 ring-inset ring-signal/40 border border-signal/60";
 
+  const timelineBody = (
+    <>
+      {isDocked ? (
+        <div className="relative mb-0.5 h-3 md:mb-2 md:h-6">
+          {rulerMarks.map((mark) => (
+            <span
+              className="absolute top-0 -translate-x-1/2 text-[7px] font-medium tabular-nums text-white/55 md:text-[10px]"
+              key={mark}
+              style={{ left: `${timelinePercent(mark, timelineDurationSeconds)}%` }}
+            >
+              {mark}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      <div
+        className={trackShellClass}
+        onPointerDown={handleTrackPointerDown}
+        ref={trackRef}
+      >
+        <div className="absolute inset-0 cursor-pointer">
+          {status === "loading" ? (
+            <TimelineSkeleton count={8} />
+          ) : thumbnails.length > 0 ? (
+            <div className="absolute inset-0 flex">
+              {thumbnails.map((thumbnail, index) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  alt=""
+                  className="h-full flex-1 bg-black/80 object-contain"
+                  draggable={false}
+                  key={`${thumbnail.timeSeconds}-${index}`}
+                  src={thumbnail.dataUrl}
+                />
+              ))}
+            </div>
+          ) : (
+            <div
+              className={`absolute inset-0 ${
+                isDocked
+                  ? "bg-gradient-to-r from-white/5 via-white/10 to-white/5"
+                  : "bg-gradient-to-r from-ed-bg-card via-ed-bg to-ed-bg-card"
+              }`}
+            />
+          )}
+
+          {!isDocked && rangeHighlight ? (
+            <>
+              <div
+                className="pointer-events-none absolute inset-y-0 left-0 bg-ed-fg/25"
+                style={{ width: `${rangeHighlight.leftPercent}%` }}
+              />
+              <div
+                className="pointer-events-none absolute inset-y-0 bg-signal/20 ring-1 ring-inset ring-signal/40"
+                style={{
+                  left: `${rangeHighlight.leftPercent}%`,
+                  width: `${rangeHighlight.widthPercent}%`,
+                }}
+              />
+              <div
+                className="pointer-events-none absolute inset-y-0 right-0 bg-ed-fg/25"
+                style={{
+                  width: `${Math.max(0, 100 - rangeHighlight.leftPercent - rangeHighlight.widthPercent)}%`,
+                }}
+              />
+            </>
+          ) : null}
+
+          {isDocked ? (
+            <>
+              {!focusOnTrimSelection ? (
+                <div className="pointer-events-none absolute inset-0 bg-black/35" />
+              ) : null}
+              {hasRange && rangeHighlight && !focusOnTrimSelection ? (
+                <div
+                  className={`pointer-events-none absolute inset-y-1.5 z-10 rounded-sm ${rangeBorderClass}`}
+                  style={{
+                    left: `${rangeHighlight.leftPercent}%`,
+                    width: `${rangeHighlight.widthPercent}%`,
+                  }}
+                />
+              ) : null}
+              {!hasRange ? (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center max-md:hidden">
+                  <span className="rounded-full bg-black/55 px-3 py-1 text-[11px] font-medium text-white/80">
+                    {isTrim
+                      ? "Drag the handles to set what to keep"
+                      : "Drag the handles to set when this layer appears"}
+                  </span>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+
+        {!isDocked ? (
+          <button
+            aria-label={`Playhead at ${formatVideoTimeInput(currentTimeSeconds)}`}
+            aria-valuemax={durationSeconds}
+            aria-valuemin={0}
+            aria-valuenow={Math.round(currentTimeSeconds)}
+            className="absolute inset-y-0 z-20 w-3 -translate-x-1/2 cursor-ew-resize"
+            data-timeline-handle="playhead"
+            onPointerDown={(event) =>
+              beginDrag(event, "playhead", currentTimeSeconds)
+            }
+            style={{ left: `${playheadPercent}%` }}
+            type="button"
+          >
+            <span className="absolute inset-y-1 left-1/2 w-0.5 -translate-x-1/2 rounded-full bg-ed-fg shadow-sm" />
+            <span className="absolute left-1/2 top-0.5 h-2 w-2 -translate-x-1/2 rotate-45 border border-ed-fg bg-ed-bg shadow-sm" />
+          </button>
+        ) : null}
+
+        {showTrimHandles ? (
+          <>
+            <button
+              aria-label={
+                visibleFromSeconds === undefined
+                  ? "Set trim start"
+                  : `Trim starts at ${formatVideoTimeInput(visibleFromSeconds)}`
+              }
+              aria-valuemax={durationSeconds}
+              aria-valuemin={0}
+              aria-valuenow={
+                visibleFromSeconds === undefined
+                  ? undefined
+                  : Math.round(visibleFromSeconds)
+              }
+              className={`absolute z-30 -translate-x-1/2 cursor-ew-resize ${
+                isDocked
+                  ? "inset-y-1.5 w-2 rounded-l-sm bg-white shadow-md"
+                  : `inset-y-2 w-3 rounded-sm border-2 bg-ed-bg shadow-md ${
+                      visibleFromSeconds === undefined
+                        ? "border-ed-fg/35 opacity-80"
+                        : "border-signal"
+                    }`
+              }`}
+              data-timeline-handle="start"
+              onPointerDown={(event) =>
+                beginDrag(event, "start", visibleFromSeconds)
+              }
+              role="slider"
+              style={{ left: `${startHandlePercent}%` }}
+              type="button"
+            />
+
+            <button
+              aria-label={
+                visibleUntilSeconds === undefined
+                  ? "Set trim end"
+                  : `Trim ends at ${formatVideoTimeInput(visibleUntilSeconds)}`
+              }
+              aria-valuemax={durationSeconds}
+              aria-valuemin={0}
+              aria-valuenow={
+                visibleUntilSeconds === undefined
+                  ? undefined
+                  : Math.round(visibleUntilSeconds)
+              }
+              className={`absolute z-30 -translate-x-1/2 cursor-ew-resize ${
+                isDocked
+                  ? "inset-y-1.5 w-2 rounded-r-sm bg-white shadow-md"
+                  : `inset-y-2 w-3 rounded-sm border-2 bg-ed-bg shadow-md ${
+                      visibleUntilSeconds === undefined
+                        ? "border-ed-fg/35 opacity-80"
+                        : "border-signal"
+                    }`
+              }`}
+              data-timeline-handle="end"
+              onPointerDown={(event) =>
+                beginDrag(event, "end", visibleUntilSeconds)
+              }
+              role="slider"
+              style={{ left: `${endHandlePercent}%` }}
+              type="button"
+            />
+          </>
+        ) : null}
+
+        {!isTrim ? (
+          <>
+            <button
+              aria-label={
+                visibleFromSeconds === undefined
+                  ? "Set visibility start"
+                  : `Visibility starts at ${formatVideoTimeInput(visibleFromSeconds)}`
+              }
+              aria-valuemax={durationSeconds}
+              aria-valuemin={0}
+              aria-valuenow={
+                visibleFromSeconds === undefined
+                  ? undefined
+                  : Math.round(visibleFromSeconds)
+              }
+              className={`absolute z-30 -translate-x-1/2 cursor-ew-resize ${
+                isDocked
+                  ? "inset-y-1.5 w-2 rounded-l-sm bg-white shadow-md"
+                  : `inset-y-2 w-3 rounded-sm border-2 bg-ed-bg shadow-md ${
+                      visibleFromSeconds === undefined
+                        ? "border-ed-fg/35 opacity-80"
+                        : "border-signal"
+                    }`
+              }`}
+              data-timeline-handle="start"
+              onPointerDown={(event) =>
+                beginDrag(event, "start", visibleFromSeconds)
+              }
+              role="slider"
+              style={{ left: `${startHandlePercent}%` }}
+              type="button"
+            />
+
+            <button
+              aria-label={
+                visibleUntilSeconds === undefined
+                  ? "Set visibility end"
+                  : `Visibility ends at ${formatVideoTimeInput(visibleUntilSeconds)}`
+              }
+              aria-valuemax={durationSeconds}
+              aria-valuemin={0}
+              aria-valuenow={
+                visibleUntilSeconds === undefined
+                  ? undefined
+                  : Math.round(visibleUntilSeconds)
+              }
+              className={`absolute z-30 -translate-x-1/2 cursor-ew-resize ${
+                isDocked
+                  ? "inset-y-1.5 w-2 rounded-r-sm bg-white shadow-md"
+                  : `inset-y-2 w-3 rounded-sm border-2 bg-ed-bg shadow-md ${
+                      visibleUntilSeconds === undefined
+                        ? "border-ed-fg/35 opacity-80"
+                        : "border-signal"
+                    }`
+              }`}
+              data-timeline-handle="end"
+              onPointerDown={(event) =>
+                beginDrag(event, "end", visibleUntilSeconds)
+              }
+              role="slider"
+              style={{ left: `${endHandlePercent}%` }}
+              type="button"
+            />
+          </>
+        ) : null}
+
+        {isDocked && hasRange && rangeHighlight && !focusOnTrimSelection ? (
+          <div
+            className="pointer-events-none absolute -top-4 z-20 hidden -translate-x-1/2 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white md:block"
+            style={{
+              left: `${rangeHighlight.leftPercent + rangeHighlight.widthPercent / 2}%`,
+            }}
+          >
+            {isTrim
+              ? formatTimelineClock(exportDurationSeconds ?? 0)
+              : layerLabel}
+          </div>
+        ) : null}
+      </div>
+
+      {isDocked ? (
+        <button
+          aria-label={`Playhead at ${formatVideoTimeInput(currentTimeSeconds)}`}
+          className="absolute bottom-1 top-1 z-30 w-3 -translate-x-1/2 cursor-ew-resize md:bottom-3 md:top-3 md:w-4"
+          data-timeline-handle="playhead"
+          onPointerDown={(event) =>
+            beginDrag(event, "playhead", currentTimeSeconds)
+          }
+          style={{ left: `${playheadPercent}%` }}
+          type="button"
+        >
+          <span className="absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 rounded-full border-2 border-white bg-ed-fg shadow-md" />
+          <span
+            className={`absolute bottom-0 left-1/2 top-3 w-px -translate-x-1/2 ${playheadLineClass}`}
+          />
+        </button>
+      ) : null}
+
+      {!isDocked ? (
+        <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-semibold tabular-nums text-ed-fg-muted">
+          <span>0:00</span>
+          <span className="text-ed-fg">
+            {formatVideoTimeInput(currentTimeSeconds)} /{" "}
+            {formatVideoTimeInput(durationSeconds)}
+          </span>
+          <span>{formatVideoTimeInput(durationSeconds)}</span>
+        </div>
+      ) : null}
+
+      {status === "error" ? (
+        <p
+          className={`mt-2 hidden text-[11px] leading-4 md:block ${
+            isDocked ? "text-white/60" : "text-ed-fg-muted"
+          }`}
+        >
+          Preview frames could not be generated. Dragging still works on the
+          timeline track.
+        </p>
+      ) : null}
+    </>
+  );
+
   return (
     <div className={rootClass}>
       {isDocked ? (
         <div
-          className={`flex shrink-0 items-center justify-between gap-1.5 border-white/10 px-2 py-1 md:gap-3 md:px-4 md:py-2.5 ${
-            isSide ? "border-b" : "border-b"
-          }`}
+          className={`flex shrink-0 items-center justify-between gap-1.5 border-b border-white/10 py-1 md:gap-3 md:py-2.5 ${TIMELINE_EDGE_INSET_X}`}
         >
           <div className="min-w-0">
             <p className="truncate text-[8px] font-bold uppercase tracking-[0.1em] text-white/70 md:text-[11px] md:tracking-[0.14em]">
@@ -404,314 +708,25 @@ export function VideoVisibilityTimeline({
       <div
         className={
           isSide
-            ? "relative flex min-h-0 flex-1 flex-col justify-end px-4 py-3"
+            ? `relative flex min-h-0 flex-1 flex-col justify-end py-3 ${TIMELINE_EDGE_INSET_X}`
             : isDock
-              ? "relative min-h-0 flex-1 px-2 py-0.5 max-md:overflow-hidden md:px-4 md:py-3"
+              ? "relative min-h-0 flex-1 py-0.5 max-md:overflow-hidden md:py-3"
               : undefined
         }
-        onPointerCancel={endDrag}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endDrag}
-        ref={interactionRef}
       >
-        {isDocked ? (
-          <div className="relative mb-0.5 h-3 md:mb-2 md:h-6">
-            {rulerMarks.map((mark) => (
-              <span
-                className="absolute top-0 -translate-x-1/2 text-[7px] font-medium tabular-nums text-white/55 md:text-[10px]"
-                key={mark}
-                style={{ left: `${timelinePercent(mark, timelineDurationSeconds)}%` }}
-              >
-                {mark}
-              </span>
-            ))}
-          </div>
-        ) : null}
-
         <div
-          className={trackShellClass}
-          onPointerDown={handleTrackPointerDown}
-          ref={trackRef}
+          className={
+            isDocked
+              ? `relative min-w-0 ${TIMELINE_EDGE_INSET_MX}`
+              : undefined
+          }
+          onPointerCancel={endDrag}
+          onPointerMove={handlePointerMove}
+          onPointerUp={endDrag}
+          ref={interactionRef}
         >
-          <div className="absolute inset-0 cursor-pointer">
-            {status === "loading" ? (
-              <TimelineSkeleton count={8} />
-            ) : thumbnails.length > 0 ? (
-              <div className="absolute inset-0 flex">
-                {thumbnails.map((thumbnail, index) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    alt=""
-                    className="h-full flex-1 bg-black/80 object-contain"
-                    draggable={false}
-                    key={`${thumbnail.timeSeconds}-${index}`}
-                    src={thumbnail.dataUrl}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div
-                className={`absolute inset-0 ${
-                  isDocked
-                    ? "bg-gradient-to-r from-white/5 via-white/10 to-white/5"
-                    : "bg-gradient-to-r from-ed-bg-card via-ed-bg to-ed-bg-card"
-                }`}
-              />
-            )}
-
-            {!isDocked && rangeHighlight ? (
-              <>
-                <div
-                  className="pointer-events-none absolute inset-y-0 left-0 bg-ed-fg/25"
-                  style={{ width: `${rangeHighlight.leftPercent}%` }}
-                />
-                <div
-                  className="pointer-events-none absolute inset-y-0 bg-signal/20 ring-1 ring-inset ring-signal/40"
-                  style={{
-                    left: `${rangeHighlight.leftPercent}%`,
-                    width: `${rangeHighlight.widthPercent}%`,
-                  }}
-                />
-                <div
-                  className="pointer-events-none absolute inset-y-0 right-0 bg-ed-fg/25"
-                  style={{
-                    width: `${Math.max(0, 100 - rangeHighlight.leftPercent - rangeHighlight.widthPercent)}%`,
-                  }}
-                />
-              </>
-            ) : null}
-
-            {isDocked ? (
-              <>
-                {!focusOnTrimSelection ? (
-                  <div className="pointer-events-none absolute inset-0 bg-black/35" />
-                ) : null}
-                {hasRange && rangeHighlight && !focusOnTrimSelection ? (
-                  <div
-                    className={`pointer-events-none absolute inset-y-1.5 z-10 rounded-sm ${rangeBorderClass}`}
-                    style={{
-                      left: `${rangeHighlight.leftPercent}%`,
-                      width: `${rangeHighlight.widthPercent}%`,
-                    }}
-                  />
-                ) : null}
-                {!hasRange ? (
-                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center max-md:hidden">
-                    <span className="rounded-full bg-black/55 px-3 py-1 text-[11px] font-medium text-white/80">
-                      {isTrim
-                        ? "Drag the handles to set what to keep"
-                        : "Drag the handles to set when this layer appears"}
-                    </span>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-          </div>
-
-          {!isDocked ? (
-            <button
-              aria-label={`Playhead at ${formatVideoTimeInput(currentTimeSeconds)}`}
-              aria-valuemax={durationSeconds}
-              aria-valuemin={0}
-              aria-valuenow={Math.round(currentTimeSeconds)}
-              className="absolute inset-y-0 z-20 w-3 -translate-x-1/2 cursor-ew-resize"
-              data-timeline-handle="playhead"
-              onPointerDown={(event) =>
-                beginDrag(event, "playhead", currentTimeSeconds)
-              }
-              style={{ left: `${playheadPercent}%` }}
-              type="button"
-            >
-              <span className="absolute inset-y-1 left-1/2 w-0.5 -translate-x-1/2 rounded-full bg-ed-fg shadow-sm" />
-              <span className="absolute left-1/2 top-0.5 h-2 w-2 -translate-x-1/2 rotate-45 border border-ed-fg bg-ed-bg shadow-sm" />
-            </button>
-          ) : null}
-
-          {showTrimHandles ? (
-            <>
-              <button
-                aria-label={
-                  visibleFromSeconds === undefined
-                    ? "Set trim start"
-                    : `Trim starts at ${formatVideoTimeInput(visibleFromSeconds)}`
-                }
-                aria-valuemax={durationSeconds}
-                aria-valuemin={0}
-                aria-valuenow={
-                  visibleFromSeconds === undefined
-                    ? undefined
-                    : Math.round(visibleFromSeconds)
-                }
-                className={`absolute z-30 -translate-x-1/2 cursor-ew-resize ${
-                  isDocked
-                    ? "inset-y-1.5 w-2 rounded-l-sm bg-white shadow-md"
-                    : `inset-y-2 w-3 rounded-sm border-2 bg-ed-bg shadow-md ${
-                        visibleFromSeconds === undefined
-                          ? "border-ed-fg/35 opacity-80"
-                          : "border-signal"
-                      }`
-                }`}
-                data-timeline-handle="start"
-                onPointerDown={(event) =>
-                  beginDrag(event, "start", visibleFromSeconds)
-                }
-                role="slider"
-                style={{ left: `${startHandlePercent}%` }}
-                type="button"
-              />
-
-              <button
-                aria-label={
-                  visibleUntilSeconds === undefined
-                    ? "Set trim end"
-                    : `Trim ends at ${formatVideoTimeInput(visibleUntilSeconds)}`
-                }
-                aria-valuemax={durationSeconds}
-                aria-valuemin={0}
-                aria-valuenow={
-                  visibleUntilSeconds === undefined
-                    ? undefined
-                    : Math.round(visibleUntilSeconds)
-                }
-                className={`absolute z-30 -translate-x-1/2 cursor-ew-resize ${
-                  isDocked
-                    ? "inset-y-1.5 w-2 rounded-r-sm bg-white shadow-md"
-                    : `inset-y-2 w-3 rounded-sm border-2 bg-ed-bg shadow-md ${
-                        visibleUntilSeconds === undefined
-                          ? "border-ed-fg/35 opacity-80"
-                          : "border-signal"
-                      }`
-                }`}
-                data-timeline-handle="end"
-                onPointerDown={(event) =>
-                  beginDrag(event, "end", visibleUntilSeconds)
-                }
-                role="slider"
-                style={{ left: `${endHandlePercent}%` }}
-                type="button"
-              />
-            </>
-          ) : null}
-
-          {!isTrim ? (
-            <>
-              <button
-                aria-label={
-                  visibleFromSeconds === undefined
-                    ? "Set visibility start"
-                    : `Visibility starts at ${formatVideoTimeInput(visibleFromSeconds)}`
-                }
-                aria-valuemax={durationSeconds}
-                aria-valuemin={0}
-                aria-valuenow={
-                  visibleFromSeconds === undefined
-                    ? undefined
-                    : Math.round(visibleFromSeconds)
-                }
-                className={`absolute z-30 -translate-x-1/2 cursor-ew-resize ${
-                  isDocked
-                    ? "inset-y-1.5 w-2 rounded-l-sm bg-white shadow-md"
-                    : `inset-y-2 w-3 rounded-sm border-2 bg-ed-bg shadow-md ${
-                        visibleFromSeconds === undefined
-                          ? "border-ed-fg/35 opacity-80"
-                          : "border-signal"
-                      }`
-                }`}
-                data-timeline-handle="start"
-                onPointerDown={(event) =>
-                  beginDrag(event, "start", visibleFromSeconds)
-                }
-                role="slider"
-                style={{ left: `${startHandlePercent}%` }}
-                type="button"
-              />
-
-              <button
-                aria-label={
-                  visibleUntilSeconds === undefined
-                    ? "Set visibility end"
-                    : `Visibility ends at ${formatVideoTimeInput(visibleUntilSeconds)}`
-                }
-                aria-valuemax={durationSeconds}
-                aria-valuemin={0}
-                aria-valuenow={
-                  visibleUntilSeconds === undefined
-                    ? undefined
-                    : Math.round(visibleUntilSeconds)
-                }
-                className={`absolute z-30 -translate-x-1/2 cursor-ew-resize ${
-                  isDocked
-                    ? "inset-y-1.5 w-2 rounded-r-sm bg-white shadow-md"
-                    : `inset-y-2 w-3 rounded-sm border-2 bg-ed-bg shadow-md ${
-                        visibleUntilSeconds === undefined
-                          ? "border-ed-fg/35 opacity-80"
-                          : "border-signal"
-                      }`
-                }`}
-                data-timeline-handle="end"
-                onPointerDown={(event) =>
-                  beginDrag(event, "end", visibleUntilSeconds)
-                }
-                role="slider"
-                style={{ left: `${endHandlePercent}%` }}
-                type="button"
-              />
-            </>
-          ) : null}
-
-          {isDocked && hasRange && rangeHighlight && !focusOnTrimSelection ? (
-            <div
-              className="pointer-events-none absolute -top-4 z-20 hidden -translate-x-1/2 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white md:block"
-              style={{
-                left: `${rangeHighlight.leftPercent + rangeHighlight.widthPercent / 2}%`,
-              }}
-            >
-              {isTrim
-                ? formatTimelineClock(exportDurationSeconds ?? 0)
-                : layerLabel}
-            </div>
-          ) : null}
+          {timelineBody}
         </div>
-
-        {isDocked ? (
-          <button
-            aria-label={`Playhead at ${formatVideoTimeInput(currentTimeSeconds)}`}
-            className="absolute bottom-1 top-1 z-30 w-3 -translate-x-1/2 cursor-ew-resize md:bottom-3 md:top-3 md:w-4"
-            data-timeline-handle="playhead"
-            onPointerDown={(event) =>
-              beginDrag(event, "playhead", currentTimeSeconds)
-            }
-            style={{ left: `${playheadPercent}%` }}
-            type="button"
-          >
-            <span className="absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 rounded-full border-2 border-white bg-ed-fg shadow-md" />
-            <span
-              className={`absolute bottom-0 left-1/2 top-3 w-px -translate-x-1/2 ${playheadLineClass}`}
-            />
-          </button>
-        ) : null}
-
-        {!isDocked ? (
-          <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-semibold tabular-nums text-ed-fg-muted">
-            <span>0:00</span>
-            <span className="text-ed-fg">
-              {formatVideoTimeInput(currentTimeSeconds)} /{" "}
-              {formatVideoTimeInput(durationSeconds)}
-            </span>
-            <span>{formatVideoTimeInput(durationSeconds)}</span>
-          </div>
-        ) : null}
-
-        {status === "error" ? (
-          <p
-            className={`mt-2 hidden text-[11px] leading-4 md:block ${
-              isDocked ? "text-white/60" : "text-ed-fg-muted"
-            }`}
-          >
-            Preview frames could not be generated. Dragging still works on the
-            timeline track.
-          </p>
-        ) : null}
       </div>
     </div>
   );

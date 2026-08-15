@@ -115,18 +115,8 @@ export async function downloadStorageObjectToFile(
   objectPath: string,
   destPath: string,
 ) {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase.storage
-    .from(WATERMARK_TEMP_BUCKET)
-    .createSignedUrl(objectPath, 60 * 60);
-
-  if (error || !data?.signedUrl) {
-    throw new ServerVideoProcessingError(
-      "Could not read the uploaded video from storage.",
-    );
-  }
-
-  const response = await fetch(data.signedUrl);
+  const signedUrl = await createStorageSignedUrl(objectPath);
+  const response = await fetch(signedUrl);
 
   if (!response.ok || !response.body) {
     throw new ServerVideoProcessingError(
@@ -138,6 +128,21 @@ export async function downloadStorageObjectToFile(
     Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
     createWriteStream(destPath),
   );
+}
+
+export async function createStorageSignedUrl(objectPath: string, expiresIn = 60 * 60) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.storage
+    .from(WATERMARK_TEMP_BUCKET)
+    .createSignedUrl(objectPath, expiresIn);
+
+  if (error || !data?.signedUrl) {
+    throw new ServerVideoProcessingError(
+      "Could not read the uploaded video from storage.",
+    );
+  }
+
+  return data.signedUrl;
 }
 
 export async function uploadFileToStorage(
@@ -357,22 +362,12 @@ export async function trimVideoFile({
   }
 
   await runFfmpeg(
-    [
-      "-y",
-      "-ss",
-      startSeconds.toFixed(3),
-      "-i",
-      inputPath,
-      "-t",
-      durationSeconds.toFixed(3),
-      "-c",
-      "copy",
-      "-avoid_negative_ts",
-      "make_zero",
-      "-movflags",
-      "+faststart",
+    buildTrimFfmpegArgs({
+      durationSeconds,
+      inputSource: inputPath,
       outputPath,
-    ],
+      startSeconds,
+    }),
     signal,
   );
 
@@ -383,6 +378,77 @@ export async function trimVideoFile({
       "Shortened video was empty. Please try again.",
     );
   }
+}
+
+export async function trimVideoFileFromUrl({
+  durationSeconds,
+  inputUrl,
+  outputPath,
+  signal,
+  startSeconds = 0,
+}: {
+  durationSeconds: number;
+  inputUrl: string;
+  outputPath: string;
+  signal?: AbortSignal;
+  startSeconds?: number;
+}) {
+  if (signal?.aborted) {
+    throw new ServerVideoProcessingCancelledError();
+  }
+
+  if (durationSeconds <= 0) {
+    throw new ServerVideoProcessingError("Choose a valid shorten range.");
+  }
+
+  await runFfmpeg(
+    buildTrimFfmpegArgs({
+      durationSeconds,
+      inputSource: inputUrl,
+      outputPath,
+      startSeconds,
+    }),
+    signal,
+  );
+
+  const outputStats = await stat(outputPath);
+
+  if (!outputStats.size) {
+    throw new ServerVideoProcessingError(
+      "Shortened video was empty. Please try again.",
+    );
+  }
+}
+
+function buildTrimFfmpegArgs({
+  durationSeconds,
+  inputSource,
+  outputPath,
+  startSeconds,
+}: {
+  durationSeconds: number;
+  inputSource: string;
+  outputPath: string;
+  startSeconds: number;
+}) {
+  return [
+    "-y",
+    "-protocol_whitelist",
+    "file,http,https,tcp,tls",
+    "-ss",
+    startSeconds.toFixed(3),
+    "-i",
+    inputSource,
+    "-t",
+    durationSeconds.toFixed(3),
+    "-c",
+    "copy",
+    "-avoid_negative_ts",
+    "make_zero",
+    "-movflags",
+    "+faststart",
+    outputPath,
+  ];
 }
 
 export async function processVideoWithOverlayFromFiles({

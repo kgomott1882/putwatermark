@@ -17,6 +17,8 @@ export type EditorSubToolButtonProps = {
   onClick: () => void;
 };
 
+const SUB_TOOL_RAIL_EDGE_INSET_X = "px-4 sm:px-5 md:px-2.5";
+
 export function EditorSubToolRail({
   ariaLabel,
   children,
@@ -26,14 +28,14 @@ export function EditorSubToolRail({
     <div className="relative">
       <nav
         aria-label={ariaLabel}
-        className={`flex min-w-0 w-full shrink-0 flex-row gap-0.5 overflow-x-auto overscroll-x-contain bg-ed-panel px-1 py-1 [-ms-overflow-style:none] [scrollbar-width:none] md:w-[5rem] md:flex-col md:gap-1 md:overflow-x-visible md:overflow-y-auto md:border-b-0 md:border-r md:px-1.5 md:py-2 [&::-webkit-scrollbar]:hidden ${
+        className={`flex min-w-0 w-full shrink-0 flex-row gap-0.5 overflow-x-auto overscroll-x-contain bg-ed-panel py-1 [-ms-overflow-style:none] [scrollbar-width:none] md:w-[5rem] md:flex-col md:gap-1 md:overflow-x-visible md:overflow-y-auto md:border-b-0 md:border-r md:py-2 [&::-webkit-scrollbar]:hidden ${SUB_TOOL_RAIL_EDGE_INSET_X} ${
           mobileTrailingAccessory ? "max-md:pr-[5.75rem]" : ""
         }`}
       >
         <div className="flex flex-row gap-0.5 md:flex-col md:gap-1">{children}</div>
       </nav>
       {mobileTrailingAccessory ? (
-        <div className="pointer-events-auto absolute right-1 top-1 z-10 flex items-start gap-0.5 md:hidden">
+        <div className="pointer-events-auto absolute right-4 top-1 z-10 flex items-start gap-0.5 sm:right-5 md:hidden">
           {mobileTrailingAccessory}
         </div>
       ) : null}
@@ -72,7 +74,9 @@ export function EditorSubToolButton({
         {icon}
       </span>
       <span className="whitespace-nowrap text-center md:hidden">{compactLabel}</span>
-      <span className="hidden whitespace-nowrap text-center md:inline">{label}</span>
+      <span className="hidden w-full max-w-[4.25rem] text-balance text-center text-[9px] leading-[1.15] md:inline">
+        {label}
+      </span>
     </button>
   );
 }

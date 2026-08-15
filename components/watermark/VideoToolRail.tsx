@@ -76,7 +76,7 @@ export function VideoToolRail({
         />
         {activeTool === "trim" && showReshortenOnTrim && onReshortenVideo ? (
           <button
-            className="w-full rounded-lg border border-signal/50 bg-signal px-1.5 py-1.5 text-[9px] font-bold leading-tight text-white shadow-sm transition hover:bg-signal/90"
+            className="w-full rounded-lg border border-signal/50 bg-signal px-1.5 py-1.5 text-[9px] font-bold leading-tight text-white shadow-sm transition hover:bg-signal/90 md:hidden"
             onClick={onReshortenVideo}
             type="button"
           >

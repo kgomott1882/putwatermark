@@ -18,6 +18,7 @@ type UploadVideoWithTusInput = {
   inputFileName: string;
   jobId: string;
   onProgress: (progress: number) => void;
+  progressRange?: { from: number; to: number };
   shouldCancel: () => boolean;
   tusEndpoint: string;
   uploadContentType: string;
@@ -82,6 +83,7 @@ export async function uploadVideoWithTus({
   inputFileName,
   jobId,
   onProgress,
+  progressRange,
   shouldCancel,
   tusEndpoint,
   uploadContentType,
@@ -89,6 +91,8 @@ export async function uploadVideoWithTus({
   uploadToken,
   videoBlob,
 }: UploadVideoWithTusInput) {
+  const progressFrom = progressRange?.from ?? 0;
+  const progressTo = progressRange?.to ?? 40;
   const fingerprintKey = getVideoUploadFingerprint(inputFileName, fileSizeBytes);
   const uploadFile = blobToUploadFile(videoBlob, inputFileName, uploadContentType);
 
@@ -174,7 +178,10 @@ export async function uploadVideoWithTus({
         },
         onProgress: (bytesUploaded, bytesTotal) => {
           if (bytesTotal > 0) {
-            onProgress(Math.round((bytesUploaded / bytesTotal) * 40));
+            const ratio = bytesUploaded / bytesTotal;
+            onProgress(
+              Math.round(progressFrom + ratio * (progressTo - progressFrom)),
+            );
           }
         },
         onSuccess: () => {

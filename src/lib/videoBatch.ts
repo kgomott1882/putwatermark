@@ -13,6 +13,16 @@ export function createVideoBatchId() {
   return `vid-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+export type VideoMetadataLoadOptions = {
+  preload?: HTMLVideoElement["preload"];
+  primeFirstFrame?: boolean;
+};
+
+export const FAST_VIDEO_METADATA_LOAD_OPTIONS: VideoMetadataLoadOptions = {
+  preload: "metadata",
+  primeFirstFrame: false,
+};
+
 async function primeVideoFirstFrame(video: HTMLVideoElement) {
   if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
     try {
@@ -59,22 +69,30 @@ async function primeVideoFirstFrame(video: HTMLVideoElement) {
   }
 }
 
-export function loadVideoMetadata(objectUrl: string) {
+export function loadVideoMetadata(
+  objectUrl: string,
+  options: VideoMetadataLoadOptions = {},
+) {
+  const primeFirstFrame = options.primeFirstFrame ?? true;
+  const preload = options.preload ?? (primeFirstFrame ? "auto" : "metadata");
+
   return new Promise<{
     duration: number;
     height: number;
     width: number;
   }>((resolve, reject) => {
     const video = document.createElement("video");
-    video.preload = "auto";
+    video.preload = preload;
     video.muted = true;
     video.playsInline = true;
 
     const finalize = async () => {
-      try {
-        await primeVideoFirstFrame(video);
-      } catch {
-        // Metadata is still usable even if the first frame could not be primed.
+      if (primeFirstFrame) {
+        try {
+          await primeVideoFirstFrame(video);
+        } catch {
+          // Metadata is still usable even if the first frame could not be primed.
+        }
       }
 
       resolve({
@@ -151,9 +169,10 @@ export async function createBatchVideoEntryFromFile(
   file: File,
   id = createVideoBatchId(),
   fallbackDimensions?: { height: number; width: number },
+  metadataOptions?: VideoMetadataLoadOptions,
 ): Promise<BatchVideoEntry> {
   const objectUrl = URL.createObjectURL(file);
-  const metadata = await loadVideoMetadata(objectUrl);
+  const metadata = await loadVideoMetadata(objectUrl, metadataOptions);
   const width =
     metadata.width > 0
       ? metadata.width

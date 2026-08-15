@@ -44,6 +44,7 @@ type UploadUrlRequest = {
   fileSizeBytes: number;
   height: number;
   resumeJobId?: string;
+  storageObjectName?: string;
   width: number;
 };
 
@@ -122,6 +123,7 @@ export async function createServerVideoUploadTarget({
   fileSizeBytes,
   height,
   resumeJobId,
+  storageObjectName,
   width,
 }: UploadUrlRequest) {
   if (
@@ -140,7 +142,9 @@ export async function createServerVideoUploadTarget({
     resumeJobId && /^[0-9a-f-]{36}$/i.test(resumeJobId)
       ? resumeJobId
       : crypto.randomUUID();
-  const videoPath = `jobs/${jobId}/input.${extension}`;
+  const videoPath = storageObjectName
+    ? `jobs/${jobId}/${storageObjectName}`
+    : `jobs/${jobId}/input.${extension}`;
   const supabase = createAdminClient();
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 

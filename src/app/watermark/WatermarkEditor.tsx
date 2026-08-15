@@ -19,6 +19,10 @@ import {
   type ServerVideoExportStage,
 } from "../../lib/serverVideoExportClient";
 import {
+  mergeVideosOnServer,
+  trimVideoOnServer,
+} from "../../lib/serverVideoEditClient";
+import {
   applyBlurStrokes,
   areBlurStrokesEqual,
   cloneBlurStrokes,
@@ -71,7 +75,6 @@ import {
 } from "../../lib/anonymousExportDraftSession";
 import type { AnonymousExportDraftState } from "../../lib/anonymousExportDraftState";
 import type { ExportFileMeta } from "../../lib/exportCost";
-import { getVideoServerCostEstimate } from "../../lib/exportCost";
 import { buildFillManifestDocument } from "../../lib/fillManifest";
 import {
   getPdfBillingMode,
@@ -228,7 +231,6 @@ import {
   PREVIEW_ZOOM_MIN,
   PREVIEW_ZOOM_STEP,
   PreviewCanvasZoomControls,
-  PreviewCanvasMediaControls,
   PreviewControlButton,
 } from "../../../components/watermark/PreviewZoomControls";
 import {
@@ -300,7 +302,6 @@ import {
   ExportLoginGateModal,
   type ExportLoginGatePhase,
 } from "../../../components/watermark/ExportLoginGateModal";
-import { VideoServerProcessingPanel } from "../../../components/watermark/VideoServerProcessingPanel";
 import { EditorExitConfirmModal } from "../../../components/watermark/EditorExitConfirmModal";
 import {
   EditorFormatUploadModal,
@@ -384,6 +385,7 @@ import {
   type BatchVideoEntry,
   createBatchVideoEntryFromFile,
   createVideoBatchId,
+  FAST_VIDEO_METADATA_LOAD_OPTIONS,
   revokeBatchVideoObjectUrls,
 } from "../../lib/videoBatch";
 import {
@@ -1087,6 +1089,13 @@ export default function WatermarkEditor() {
     null,
   );
   const [isVideoEditProcessing, setIsVideoEditProcessing] = useState(false);
+  const [videoEditProcessingDetail, setVideoEditProcessingDetail] = useState<
+    string | null
+  >(null);
+  const [videoEditProcessingProgress, setVideoEditProcessingProgress] = useState<
+    number | null
+  >(null);
+  const [isVideoPreparing, setIsVideoPreparing] = useState(false);
   const [videoShortenHistoryTick, setVideoShortenHistoryTick] = useState(0);
   const [mediaKind, setMediaKind] = useState<MediaKind | null>(null);
   const [pdfPageCount, setPdfPageCount] = useState(0);
@@ -1899,6 +1908,8 @@ export default function WatermarkEditor() {
     pushVideoShortenUndoSnapshot();
 
     setIsVideoEditProcessing(true);
+    setVideoEditProcessingDetail(null);
+    setVideoEditProcessingProgress(0);
     setUploadError("");
     setExportNotice("");
 
@@ -1912,39 +1923,40 @@ export default function WatermarkEditor() {
           activeEntry.height,
         )
       ) {
+        setVideoEditProcessingDetail("Shortening video…");
         trimmedBlob = await trimVideoBlob({
           endSeconds: range.endSeconds,
           fileName: activeEntry.fileName,
+          onProgress: (progress) => {
+            setVideoEditProcessingProgress(Math.round(progress));
+          },
           startSeconds: range.startSeconds,
           videoBlob: activeEntry.file,
         });
-      } else {
-        const response = await fetch("/api/watermark/video/edit", {
-          body: JSON.stringify({
-            action: "trim",
-            endSeconds: range.endSeconds,
-            fileName: activeEntry.fileName,
-            startSeconds: range.startSeconds,
-            videoBase64: await blobToBase64(activeEntry.file),
-          }),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
+      } else if (
+        isAnyVideoExportEligible(
+          activeEntry.duration,
+          activeEntry.width,
+          activeEntry.height,
+          activeEntry.fileSize,
+        )
+      ) {
+        trimmedBlob = await trimVideoOnServer({
+          duration: activeEntry.duration,
+          endSeconds: range.endSeconds,
+          fileName: activeEntry.fileName,
+          fileSizeBytes: activeEntry.fileSize,
+          height: activeEntry.height,
+          onDetailChange: setVideoEditProcessingDetail,
+          onProgress: (progress) => {
+            setVideoEditProcessingProgress(Math.round(progress));
+          },
+          startSeconds: range.startSeconds,
+          videoBlob: activeEntry.file,
+          width: activeEntry.width,
         });
-        const payload = (await response.json()) as {
-          error?: string;
-          fileName?: string;
-          videoBase64?: string;
-        };
-
-        if (!response.ok) {
-          throw new Error(payload.error ?? "Video shorten failed.");
-        }
-
-        trimmedBlob = base64ToVideoFile(
-          payload.videoBase64!,
-          payload.fileName ??
-            activeEntry.fileName.replace(/(\.[^.]+)?$/, "-shortened.mp4"),
-        );
+      } else {
+        throw new Error(getVideoExportRejectionMessage());
       }
 
       shiftVideoEditorTimingsAfterTrim(range.startSeconds, range.endSeconds);
@@ -1981,6 +1993,8 @@ export default function WatermarkEditor() {
       );
     } finally {
       setIsVideoEditProcessing(false);
+      setVideoEditProcessingDetail(null);
+      setVideoEditProcessingProgress(null);
     }
   }
 
@@ -4051,6 +4065,74 @@ export default function WatermarkEditor() {
     initializeVideoBlurState(entry.duration);
   }
 
+  async function createBatchVideoEntryFromLoadedPreview(): Promise<BatchVideoEntry | null> {
+    if (mediaKind !== "video" || !videoUrl || !videoSize || !fileName) {
+      return null;
+    }
+
+    const existing =
+      videoBatch.find((entry) => entry.id === activeBatchVideoId) ??
+      videoBatch.find((entry) => entry.objectUrl === videoUrl);
+
+    if (existing) {
+      return existing;
+    }
+
+    const blob = await fetch(videoUrl).then((response) => response.blob());
+    const file = new File([blob], fileName, {
+      type: blob.type || "video/mp4",
+    });
+    const entry = await createBatchVideoEntryFromFile(
+      file,
+      activeBatchVideoId ?? createVideoBatchId(),
+      {
+        height: videoSize.height,
+        width: videoSize.width,
+      },
+      FAST_VIDEO_METADATA_LOAD_OPTIONS,
+    );
+
+    if (entry.objectUrl !== videoUrl) {
+      URL.revokeObjectURL(entry.objectUrl);
+    }
+
+    return {
+      ...entry,
+      duration: videoDuration > 0 ? videoDuration : entry.duration,
+      fileSize: videoFileSize > 0 ? videoFileSize : entry.fileSize,
+      objectUrl: videoUrl,
+    };
+  }
+
+  async function ensureLoadedVideoInMergeBatch() {
+    if (mediaKind !== "video" || !videoUrl || !videoSize || !fileName) {
+      return;
+    }
+
+    if (
+      videoBatch.some(
+        (entry) =>
+          entry.objectUrl === videoUrl || entry.id === activeBatchVideoId,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const entry = await createBatchVideoEntryFromLoadedPreview();
+
+      if (entry) {
+        setVideoBatch([entry]);
+
+        if (!activeBatchVideoId) {
+          setActiveBatchVideoId(entry.id);
+        }
+      }
+    } catch {
+      // Ignore merge bootstrap errors; append will surface a message if needed.
+    }
+  }
+
   async function appendVideoBatchFiles(files: File[]) {
     const videoFiles = files.filter(isVideoFile);
 
@@ -4059,55 +4141,74 @@ export default function WatermarkEditor() {
       return;
     }
 
-    if (mediaKind !== "video" || videoBatch.length === 0) {
+    if (mediaKind !== "video" || !videoUrl) {
       setUploadError("Load a video before adding more.");
       return;
     }
 
     setUploadError("");
+    setIsVideoPreparing(true);
+    const mergeSessionActive = activeVideoTool === "merge";
 
     try {
+      let baseBatch = videoBatch;
+
+      if (baseBatch.length === 0) {
+        const bootstrappedEntry = await createBatchVideoEntryFromLoadedPreview();
+
+        if (!bootstrappedEntry) {
+          setUploadError("Load a video before adding more.");
+          return;
+        }
+
+        baseBatch = [bootstrappedEntry];
+      }
+
       const loadedEntries = await Promise.all(
-        videoFiles.map((file) => createBatchVideoEntryFromFile(file)),
+        videoFiles.map((file) =>
+          createBatchVideoEntryFromFile(
+            file,
+            createVideoBatchId(),
+            undefined,
+            FAST_VIDEO_METADATA_LOAD_OPTIONS,
+          ),
+        ),
       );
-      const nextBatch = [...videoBatch, ...loadedEntries];
+      const nextBatch = [...baseBatch, ...loadedEntries];
+
       setMediaKind("video");
       clearImageBatch();
       clearPdfState();
       setImage(null);
       setVideoBatch(nextBatch);
-      applyActiveBatchVideoEntry(loadedEntries[loadedEntries.length - 1]!);
-      finishMediaLoad("video");
+
+      if (mergeSessionActive) {
+        const previewEntry =
+          baseBatch.find((entry) => entry.id === activeBatchVideoId) ??
+          baseBatch[0] ??
+          loadedEntries[0]!;
+
+        applyActiveBatchVideoEntry(previewEntry);
+        setActiveEditorPanel("video");
+        setActiveVideoTool("merge");
+        expandMobileControls();
+        setExportNotice(
+          loadedEntries.length === 1
+            ? "Video added to merge queue."
+            : `${loadedEntries.length} videos added to merge queue.`,
+        );
+      } else {
+        applyActiveBatchVideoEntry(loadedEntries[loadedEntries.length - 1]!);
+      }
     } catch (error) {
       setUploadError(
         error instanceof Error
           ? error.message
           : "We could not load those videos. Please try again.",
       );
+    } finally {
+      setIsVideoPreparing(false);
     }
-  }
-
-  async function blobToBase64(blob: Blob) {
-    const buffer = await blob.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    let binary = "";
-
-    for (let index = 0; index < bytes.length; index += 1) {
-      binary += String.fromCharCode(bytes[index]!);
-    }
-
-    return btoa(binary);
-  }
-
-  function base64ToVideoFile(base64: string, fileName: string) {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-
-    for (let index = 0; index < binary.length; index += 1) {
-      bytes[index] = binary.charCodeAt(index);
-    }
-
-    return new File([bytes], fileName, { type: "video/mp4" });
   }
 
   async function mergeVideoBatchClips() {
@@ -4117,6 +4218,8 @@ export default function WatermarkEditor() {
     }
 
     setIsVideoEditProcessing(true);
+    setVideoEditProcessingDetail(null);
+    setVideoEditProcessingProgress(0);
     setUploadError("");
     setExportNotice("");
 
@@ -4124,43 +4227,44 @@ export default function WatermarkEditor() {
       const canUseClient = videoBatch.every((entry) =>
         isClientVideoExportEligible(entry.duration, entry.width, entry.height),
       );
+      const canUseServer = videoBatch.every((entry) =>
+        isAnyVideoExportEligible(
+          entry.duration,
+          entry.width,
+          entry.height,
+          entry.fileSize,
+        ),
+      );
       let mergedBlob: Blob;
 
       if (canUseClient) {
+        setVideoEditProcessingDetail("Merging videos…");
         mergedBlob = await mergeVideoBlobs({
+          onProgress: (progress) => {
+            setVideoEditProcessingProgress(Math.round(progress));
+          },
           videos: videoBatch.map((entry) => ({
             blob: entry.file,
             fileName: entry.fileName,
           })),
         });
-      } else {
-        const response = await fetch("/api/watermark/video/edit", {
-          body: JSON.stringify({
-            action: "merge",
-            videos: await Promise.all(
-              videoBatch.map(async (entry) => ({
-                fileName: entry.fileName,
-                videoBase64: await blobToBase64(entry.file),
-              })),
-            ),
-          }),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
+      } else if (canUseServer) {
+        mergedBlob = await mergeVideosOnServer({
+          onDetailChange: setVideoEditProcessingDetail,
+          onProgress: (progress) => {
+            setVideoEditProcessingProgress(Math.round(progress));
+          },
+          videos: videoBatch.map((entry) => ({
+            duration: entry.duration,
+            file: entry.file,
+            fileName: entry.fileName,
+            fileSizeBytes: entry.fileSize,
+            height: entry.height,
+            width: entry.width,
+          })),
         });
-        const payload = (await response.json()) as {
-          error?: string;
-          fileName?: string;
-          videoBase64?: string;
-        };
-
-        if (!response.ok) {
-          throw new Error(payload.error ?? "Video merge failed.");
-        }
-
-        mergedBlob = base64ToVideoFile(
-          payload.videoBase64!,
-          payload.fileName ?? "merged-video.mp4",
-        );
+      } else {
+        throw new Error(getVideoExportRejectionMessage());
       }
 
       revokeBatchVideoObjectUrls(videoBatch);
@@ -4180,6 +4284,8 @@ export default function WatermarkEditor() {
       );
     } finally {
       setIsVideoEditProcessing(false);
+      setVideoEditProcessingDetail(null);
+      setVideoEditProcessingProgress(null);
     }
   }
 
@@ -7469,6 +7575,15 @@ export default function WatermarkEditor() {
     }
 
     if (videoFiles.length) {
+      if (
+        mediaKind === "video" &&
+        videoUrl &&
+        (activeVideoTool === "merge" || videoBatch.length >= 2)
+      ) {
+        void appendVideoBatchFiles(videoFiles);
+        return;
+      }
+
       loadVideoFile(videoFiles[0]);
       return;
     }
@@ -8636,6 +8751,11 @@ export default function WatermarkEditor() {
       }
     }
 
+    if (tool === "merge") {
+      setFormatUploadPrompt(null);
+      void ensureLoadedVideoInMergeBatch();
+    }
+
     if (options?.expandMobile !== false && tool !== "watermark") {
       expandMobileControls();
     }
@@ -9220,6 +9340,7 @@ export default function WatermarkEditor() {
     }
 
     setUploadError("");
+    setIsVideoPreparing(true);
 
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
@@ -9233,7 +9354,12 @@ export default function WatermarkEditor() {
     clearPdfState();
 
     try {
-      const entry = await createBatchVideoEntryFromFile(file);
+      const entry = await createBatchVideoEntryFromFile(
+        file,
+        createVideoBatchId(),
+        undefined,
+        FAST_VIDEO_METADATA_LOAD_OPTIONS,
+      );
       objectUrlRef.current = entry.objectUrl;
       setMediaKind("video");
       setImage(null);
@@ -9253,6 +9379,8 @@ export default function WatermarkEditor() {
           ? error.message
           : "We could not load that video. Please try another file.",
       );
+    } finally {
+      setIsVideoPreparing(false);
     }
   }
 
@@ -9848,23 +9976,6 @@ export default function WatermarkEditor() {
         : "Reload the video before exporting."
       : undefined;
   const exportDisabledReason = videoExportDisabledReason;
-  const videoServerCostEstimate =
-    mediaKind === "video" && videoSize && videoFileSize > 0
-      ? getVideoServerCostEstimate(getVideoExportFileMeta())
-      : null;
-  const currentVideoExportRoute =
-    mediaKind === "video" && videoSize
-      ? getVideoExportRoute(
-          exportVideoDuration,
-          videoSize.width,
-          videoSize.height,
-          videoFileSize > 0 ? videoFileSize : Number.MAX_SAFE_INTEGER,
-        )
-      : "reject";
-  const showVideoServerProcessingPanel =
-    mediaKind === "video" &&
-    videoServerCostEstimate !== null &&
-    isServerSideVideoExportRoute(currentVideoExportRoute);
   const exportButtonLabel =
     mediaKind === "video"
       ? isExporting
@@ -10575,6 +10686,13 @@ export default function WatermarkEditor() {
                   (isBatchImageMode && files.every(isImageFile))
                 ) {
                   void appendImageBatchFiles(files);
+                } else if (
+                  mediaKind === "video" &&
+                  videoUrl &&
+                  files.every(isVideoFile) &&
+                  (activeVideoTool === "merge" || isBatchVideoMode)
+                ) {
+                  void appendVideoBatchFiles(files);
                 } else {
                   loadMediaFiles(files);
                 }
@@ -10896,10 +11014,6 @@ export default function WatermarkEditor() {
                   }}
                   pages={pdfPages}
                 />
-              ) : null}
-
-              {showVideoServerProcessingPanel && videoServerCostEstimate ? (
-                <VideoServerProcessingPanel estimate={videoServerCostEstimate} />
               ) : null}
 
               {isExporting && isExportPreparing ? (
@@ -11823,15 +11937,31 @@ export default function WatermarkEditor() {
                     Choose video
                   </button>
                 </EditorCard>
-              ) : activeVideoTool === "overview" ? (
-                <VideoOverviewPanel
-                  durationSeconds={videoDuration}
-                  fileName={fileName}
-                  fileSizeBytes={videoFileSize}
-                  height={videoSize?.height}
-                  width={videoSize?.width}
-                />
-              ) : activeVideoTool === "caption" ? (
+              ) : (
+                <>
+                  {hasMedia && activeVideoTool !== "watermark" ? (
+                    <div className="hidden justify-end rounded-lg border border-ed-border bg-ed-bg-card px-2 py-1.5 md:flex">
+                      <EditorMediaActionButtons
+                        captionMode="always"
+                        isPdfLoading={false}
+                        mediaKind={mediaKind}
+                        onAddMoreImages={openAddMoreImagesPicker}
+                        onAddMoreVideos={openAddMoreVideosPicker}
+                        onRemove={removeLoadedMedia}
+                        onReplace={openReplaceMediaPicker}
+                      />
+                    </div>
+                  ) : null}
+
+                  {activeVideoTool === "overview" ? (
+                    <VideoOverviewPanel
+                      durationSeconds={videoDuration}
+                      fileName={fileName}
+                      fileSizeBytes={videoFileSize}
+                      height={videoSize?.height}
+                      width={videoSize?.width}
+                    />
+                  ) : activeVideoTool === "caption" ? (
                 <>
                   <VideoCaptionPanel
                     activeLayerId={activeVideoCaptionLayerId}
@@ -11862,8 +11992,8 @@ export default function WatermarkEditor() {
                     videoDurationSeconds={videoDuration}
                   />
                 </>
-              ) : activeVideoTool === "trim" ? (
-                <VideoTrimPanel
+                  ) : activeVideoTool === "trim" ? (
+                    <VideoTrimPanel
                   canRedoVideoShorten={canRedoVideoShorten}
                   canRestoreOriginal={canRestoreOriginalVideo}
                   canUndoVideoShorten={canUndoVideoShorten}
@@ -11914,6 +12044,8 @@ export default function WatermarkEditor() {
                   }}
                 />
               ) : null}
+                </>
+              )}
             </div>
           ) : null}
 
@@ -11936,8 +12068,15 @@ export default function WatermarkEditor() {
             <ProcessingOverlay label="Restoring your saved work…" />
           ) : null}
 
+          {isVideoPreparing ? (
+            <ProcessingOverlay label="Preparing video…" />
+          ) : null}
+
           {isVideoEditProcessing ? (
-            <ProcessingOverlay label="Processing video…" />
+            <ProcessingOverlay
+              label={videoEditProcessingDetail ?? "Processing video…"}
+              progress={videoEditProcessingProgress}
+            />
           ) : null}
 
           {isPdfMergeProcessing ? (
@@ -12213,17 +12352,6 @@ export default function WatermarkEditor() {
                     resetDisabled={previewZoomResetDisabled}
                     zoomInDisabled={previewZoomInDisabled}
                     zoomOutDisabled={previewZoomOutDisabled}
-                  />
-                  <PreviewCanvasMediaControls
-                    className={`pointer-events-auto absolute left-2 max-md:hidden md:bottom-6 md:left-6 ${
-                      showMobileBottomDock
-                        ? "bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))]"
-                        : "bottom-14"
-                    }`}
-                    mediaKind={mediaKind}
-                    onAddMoreVideos={openAddMoreVideosPicker}
-                    onRemove={handlePreviewMediaRemove}
-                    onReplace={openReplaceMediaPicker}
                   />
                 </div>
               ) : null}

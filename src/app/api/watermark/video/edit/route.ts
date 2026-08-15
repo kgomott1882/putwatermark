@@ -1,83 +1,83 @@
 import { NextResponse } from "next/server";
 import {
-  mergeServerVideos,
+  mergeServerVideosFromStorage,
   ServerVideoEditError,
-  trimServerVideo,
-} from "../../../../../lib/serverVideoEdit";
-import {
   ServerVideoProcessingCancelledError,
-  ServerVideoProcessingError,
-} from "../../../../../lib/serverVideoProcessor";
+  trimServerVideoFromStorage,
+} from "../../../../../lib/serverVideoEditRoute";
+import { ServerVideoProcessingError } from "../../../../../lib/serverVideoExportRoute";
+import { isServerVideoExportConfigured } from "../../../../../../utils/supabase/admin";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-type MergePayload = {
+type StorageMergePayload = {
   action: "merge";
-  videos: Array<{ fileName: string; videoBase64: string }>;
+  jobId: string;
+  videos: Array<{ fileName: string; videoPath: string }>;
 };
 
-type TrimPayload = {
+type StorageTrimPayload = {
   action: "trim";
   endSeconds: number;
   fileName: string;
+  jobId: string;
   startSeconds: number;
-  videoBase64: string;
+  videoPath: string;
 };
 
-function decodeBase64Video(value: string) {
-  const buffer = Buffer.from(value, "base64");
-
-  if (!buffer.byteLength) {
-    throw new ServerVideoEditError("Uploaded video payload was empty.");
+export async function POST(request: Request) {
+  if (!isServerVideoExportConfigured()) {
+    return NextResponse.json(
+      {
+        error:
+          "Server video processing is not configured. Try a shorter clip under one minute for browser processing.",
+      },
+      { status: 503 },
+    );
   }
 
-  return buffer;
-}
-
-export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as MergePayload | TrimPayload;
+    const body = (await request.json()) as StorageMergePayload | StorageTrimPayload;
 
     if (body.action === "merge") {
-      if (!Array.isArray(body.videos) || body.videos.length < 2) {
+      if (
+        typeof body.jobId !== "string" ||
+        !Array.isArray(body.videos) ||
+        body.videos.length < 2
+      ) {
         return NextResponse.json(
-          { error: "Provide at least two videos to merge." },
+          { error: "Provide at least two uploaded videos to merge." },
           { status: 400 },
         );
       }
 
-      const videos = body.videos.map((entry, index) => {
+      for (const [index, video] of body.videos.entries()) {
         if (
-          typeof entry?.fileName !== "string" ||
-          typeof entry?.videoBase64 !== "string"
+          typeof video?.fileName !== "string" ||
+          typeof video?.videoPath !== "string"
         ) {
-          throw new ServerVideoEditError(
-            `Video ${index + 1} is missing file data.`,
+          return NextResponse.json(
+            { error: `Video ${index + 1} is missing upload data.` },
+            { status: 400 },
           );
         }
+      }
 
-        return {
-          bytes: decodeBase64Video(entry.videoBase64),
-          fileName: entry.fileName,
-        };
-      });
-
-      const mergedBytes = await mergeServerVideos({
+      const merged = await mergeServerVideosFromStorage({
+        jobId: body.jobId,
         signal: request.signal,
-        videos,
+        videos: body.videos,
       });
 
-      return NextResponse.json({
-        fileName: "merged-video.mp4",
-        videoBase64: mergedBytes.toString("base64"),
-      });
+      return NextResponse.json(merged);
     }
 
     if (body.action === "trim") {
       if (
+        typeof body.jobId !== "string" ||
+        typeof body.videoPath !== "string" ||
         typeof body.fileName !== "string" ||
-        typeof body.videoBase64 !== "string" ||
         typeof body.startSeconds !== "number" ||
         typeof body.endSeconds !== "number"
       ) {
@@ -87,21 +87,22 @@ export async function POST(request: Request) {
         );
       }
 
-      const trimmedBytes = await trimServerVideo({
+      const trimmed = await trimServerVideoFromStorage({
         endSeconds: body.endSeconds,
         fileName: body.fileName,
+        jobId: body.jobId,
         signal: request.signal,
         startSeconds: body.startSeconds,
-        videoBytes: decodeBase64Video(body.videoBase64),
+        videoPath: body.videoPath,
       });
 
-      return NextResponse.json({
-        fileName: body.fileName.replace(/(\.[^.]+)?$/, "-shortened.mp4"),
-        videoBase64: trimmedBytes.toString("base64"),
-      });
+      return NextResponse.json(trimmed);
     }
 
-    return NextResponse.json({ error: "Unsupported video edit action." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Unsupported video edit action." },
+      { status: 400 },
+    );
   } catch (error) {
     if (error instanceof ServerVideoProcessingCancelledError) {
       return NextResponse.json({ error: error.message }, { status: 499 });
