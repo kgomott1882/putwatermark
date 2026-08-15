@@ -17,7 +17,7 @@ const FORCED_WATERMARK_TEXT_COLOR = "#ffffff";
 const FORCED_WATERMARK_TEXT_STROKE = "rgba(0, 0, 0, 0.5)";
 const FORCED_WATERMARK_ICON_LIGHT_HALO = "rgba(255, 255, 255, 0.85)";
 const FORCED_WATERMARK_ICON_DARK_EDGE = "rgba(0, 0, 0, 0.55)";
-const FONT_SIZE_SCALE = 200;
+const FONT_SIZE_SCALE = 400;
 
 function drawWhiteIcon(context, logoImage, x, y, width, height) {
   const maskCanvas = createCanvas(Math.max(1, Math.ceil(width)), Math.max(1, Math.ceil(height)));

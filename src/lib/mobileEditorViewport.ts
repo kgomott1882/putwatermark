@@ -1,6 +1,14 @@
 /** iOS Safari auto-zooms focused inputs when computed font-size is below 16px. */
 export const MOBILE_INPUT_NO_ZOOM_CLASS = "editor-mobile-input-no-zoom";
 
+export function isMobileEditorViewport() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.matchMedia("(max-width: 767px)").matches;
+}
+
 export function resetMobileEditorViewportZoom() {
   if (typeof window === "undefined" || window.innerWidth >= 768) {
     return;

@@ -167,3 +167,50 @@ export function getVideoExportDisabledReason(
 export function getServerVideoUploadLimitDescription() {
   return `up to ${SERVER_VIDEO_MAX_FILE_MB}MB or ${SERVER_VIDEO_MAX_DURATION_MINUTES} minutes (${LONG_VIDEO_MAX_DURATION_MINUTES} minutes max for longer videos up to ${LONG_VIDEO_MAX_FILE_MB}MB)`;
 }
+
+export function isMobileVideoExportDevice() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  if (window.matchMedia("(max-width: 767px)").matches) {
+    return true;
+  }
+
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
+    return true;
+  }
+
+  const deviceMemory = (navigator as Navigator & { deviceMemory?: number })
+    .deviceMemory;
+
+  return typeof deviceMemory === "number" && deviceMemory <= 4;
+}
+
+export function resolveVideoExportRoute(
+  duration: number,
+  width: number,
+  height: number,
+  fileSizeBytes: number,
+): VideoExportRoute {
+  const baseRoute = getVideoExportRoute(
+    duration,
+    width,
+    height,
+    fileSizeBytes,
+  );
+
+  if (baseRoute !== "client" || !isMobileVideoExportDevice()) {
+    return baseRoute;
+  }
+
+  if (isServerVideoExportEligible(duration, width, height, fileSizeBytes)) {
+    return "server";
+  }
+
+  if (isLongServerVideoExportEligible(duration, width, height, fileSizeBytes)) {
+    return "long-server";
+  }
+
+  return baseRoute;
+}

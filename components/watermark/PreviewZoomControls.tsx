@@ -29,10 +29,10 @@ type PreviewControlButtonProps = {
 };
 
 export const previewControlButtonClassName =
-  "flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-b from-[#ef6b6b] to-[#c41e3a] text-white shadow-[0_2px_8px_rgba(196,30,58,0.3)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45";
+  "flex h-11 w-11 items-center justify-center rounded-md bg-gradient-to-b from-[#ef6b6b] to-[#c41e3a] text-white shadow-[0_2px_8px_rgba(196,30,58,0.3)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45 md:h-7 md:w-7";
 
 export const editorFooterMobileColumnClassName =
-  "flex w-9 shrink-0 flex-col items-center justify-center gap-0.5";
+  "flex w-11 shrink-0 flex-col items-center justify-center gap-0.5 md:w-9";
 
 export const editorFooterMobileCaptionClassName =
   "w-full max-w-[2.25rem] truncate text-center text-[7px] font-normal uppercase tracking-[0.06em] leading-none text-ed-fg-muted";

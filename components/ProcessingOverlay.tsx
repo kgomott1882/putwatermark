@@ -14,7 +14,7 @@ export function ProcessingOverlay({
   return (
     <div
       aria-live="polite"
-      className={`absolute inset-0 z-30 flex items-center justify-center bg-ed-fg/45 backdrop-blur-[2px] ${className}`}
+      className={`pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-ed-fg/45 backdrop-blur-[2px] ${className}`}
       role="status"
     >
       <LoadingIndicator

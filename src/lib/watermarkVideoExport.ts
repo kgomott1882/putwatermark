@@ -786,8 +786,10 @@ export {
   getVideoExportRoute,
   isAnyVideoExportEligible,
   isClientVideoExportEligible,
+  isMobileVideoExportDevice,
   isServerSideVideoExportRoute,
   isServerVideoExportEligible,
+  resolveVideoExportRoute,
 } from "./videoExportLimits";
 
 import { isClientVideoExportEligible } from "./videoExportLimits";

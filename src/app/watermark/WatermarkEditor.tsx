@@ -9,8 +9,10 @@ import {
   getVideoExportRejectionMessage,
   getVideoExportRoute,
   isAnyVideoExportEligible,
+  isMobileVideoExportDevice,
   isServerSideVideoExportRoute,
   loadFfmpeg,
+  resolveVideoExportRoute,
   type VideoOverlayPass,
 } from "../../lib/watermarkVideoExport";
 import {
@@ -125,6 +127,7 @@ import {
   getExportFileType,
   hasForcedWatermarkOverlay,
   loadForcedTileLogoImage,
+  paintForcedExportEdgeUpsellText,
   uploadFillManifestForExportAuthorization,
   uploadPdfForExportAuthorization,
   uploadSignaturePlacementManifestForExportAuthorization,
@@ -422,7 +425,7 @@ import {
   useState,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { resetMobileEditorViewportZoom } from "../../lib/mobileEditorViewport";
+import { resetMobileEditorViewportZoom, isMobileEditorViewport } from "../../lib/mobileEditorViewport";
 import { useMobileEditorNavigationGuard } from "../../lib/useMobileEditorNavigationGuard";
 
 const imageExportMimeType = "image/jpeg";
@@ -1014,6 +1017,8 @@ export default function WatermarkEditor() {
   const filePickerIntentRef = useRef<"append" | "replace">("replace");
   const logoInputRef = useRef<HTMLInputElement>(null);
   const previewPanelRef = useRef<HTMLDivElement>(null);
+  const mobileShellRef = useRef<HTMLDivElement>(null);
+  const mobileFooterRef = useRef<HTMLElement>(null);
   const objectUrlRef = useRef<string | null>(null);
   const logoObjectUrlRef = useRef<string | null>(null);
   const textBoundsRef = useRef<TextBounds | null>(null);
@@ -1096,6 +1101,9 @@ export default function WatermarkEditor() {
     number | null
   >(null);
   const [isVideoPreparing, setIsVideoPreparing] = useState(false);
+  const [videoPreviewPreload, setVideoPreviewPreload] = useState<
+    "auto" | "metadata"
+  >("metadata");
   const [videoShortenHistoryTick, setVideoShortenHistoryTick] = useState(0);
   const [mediaKind, setMediaKind] = useState<MediaKind | null>(null);
   const [pdfPageCount, setPdfPageCount] = useState(0);
@@ -3837,6 +3845,21 @@ export default function WatermarkEditor() {
   }
 
   function openReplaceMediaPicker() {
+    if (mediaKind === "video") {
+      formatVideoInputRef.current?.click();
+      return;
+    }
+
+    if (mediaKind === "image") {
+      formatPhotosInputRef.current?.click();
+      return;
+    }
+
+    if (mediaKind === "pdf") {
+      formatPdfInputRef.current?.click();
+      return;
+    }
+
     openFilePicker();
   }
 
@@ -7250,7 +7273,7 @@ export default function WatermarkEditor() {
 
       setExportProgress(3);
       const effectiveFileSize = videoFileSize || videoBlob.size;
-      const exportRoute = getVideoExportRoute(
+      const exportRoute = resolveVideoExportRoute(
         exportVideoDuration,
         videoSize.width,
         videoSize.height,
@@ -7443,6 +7466,16 @@ export default function WatermarkEditor() {
         primaryOverlayPngByteLength: overlayPngBytes.byteLength,
         settings: summarizeWatermarkSettingsForExportLog(watermarkSettings),
       });
+
+      if (exportRoute === "client" && isMobileVideoExportDevice()) {
+        const video = videoElementRef.current;
+
+        if (video) {
+          video.pause();
+          video.removeAttribute("src");
+          video.load();
+        }
+      }
 
       const reportVideoEncodeProgress = (progress: number) => {
         setExportProgress(Math.min(99, Math.round(8 + progress * 0.92)));
@@ -9712,6 +9745,35 @@ export default function WatermarkEditor() {
       isPdfLoading ||
       (mediaKind === "pdf" && pdfPageCount > 0),
   );
+
+  useEffect(() => {
+    setVideoPreviewPreload(isMobileEditorViewport() ? "metadata" : "auto");
+  }, []);
+
+  useEffect(() => {
+    const shell = mobileShellRef.current;
+    const footer = mobileFooterRef.current;
+
+    if (!shell || !footer) {
+      return;
+    }
+
+    const syncFooterHeight = () => {
+      shell.style.setProperty(
+        "--editor-mobile-footer-height",
+        `${footer.offsetHeight}px`,
+      );
+    };
+
+    syncFooterHeight();
+    const observer = new ResizeObserver(syncFooterHeight);
+    observer.observe(footer);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasMedia]);
+
   const hasPreviewContent =
     !isPdfLoading &&
     Boolean(
@@ -10012,6 +10074,8 @@ export default function WatermarkEditor() {
       : mediaKind === "pdf"
         ? pdfPageCount === 0
         : !image);
+  const isMediaActionBusy =
+    isVideoPreparing || isVideoEditProcessing || isExporting;
   const canvasCursor =
     activeImageTool === "crop" ||
     activeImageTool === "resize" ||
@@ -10645,7 +10709,10 @@ export default function WatermarkEditor() {
   ) : null;
 
   return (
-    <div className="editor-mobile-shell fixed inset-0 flex w-full flex-col overflow-hidden pt-[env(safe-area-inset-top,0px)] max-md:pb-[calc(var(--editor-mobile-footer-height,3.25rem)+env(safe-area-inset-bottom,0px))] md:relative md:inset-auto md:h-[100svh] md:max-h-none md:pb-0 md:pt-0">
+    <div
+      className="editor-mobile-shell fixed inset-0 flex w-full flex-col overflow-hidden pt-[env(safe-area-inset-top,0px)] max-md:pb-[calc(var(--editor-mobile-footer-height,3.25rem)+env(safe-area-inset-bottom,0px))] md:relative md:inset-auto md:h-[100svh] md:max-h-none md:pb-0 md:pt-0"
+      ref={mobileShellRef}
+    >
       {authChecked && isAuthenticated ? (
         <div className="hidden shrink-0 md:block">
           <SiteNavClient
@@ -10660,6 +10727,144 @@ export default function WatermarkEditor() {
       ) : null}
       <main className="editor-theme relative flex min-h-0 flex-1 w-full flex-col overflow-hidden">
       <WatermarkFontLoader />
+      <div aria-hidden="true" className="sr-only">
+      <input
+        accept={acceptedMediaInputTypes}
+        multiple
+        onChange={(event) => {
+          const files = Array.from(event.target.files ?? []);
+
+          if (files.length) {
+            if (
+              filePickerIntentRef.current === "append" ||
+              (isBatchImageMode && files.every(isImageFile))
+            ) {
+              void appendImageBatchFiles(files);
+            } else if (
+              mediaKind === "video" &&
+              videoUrl &&
+              files.every(isVideoFile) &&
+              (activeVideoTool === "merge" || isBatchVideoMode)
+            ) {
+              void appendVideoBatchFiles(files);
+            } else {
+              loadMediaFiles(files);
+            }
+          }
+
+          filePickerIntentRef.current = "replace";
+          event.target.value = "";
+        }}
+        ref={fileInputRef}
+        tabIndex={-1}
+        type="file"
+      />
+      <input
+        accept={acceptedImageInputTypes}
+        multiple
+        onChange={(event) => {
+          handleFormatUploadFiles(
+            Array.from(event.target.files ?? []),
+            "photos",
+          );
+          event.target.value = "";
+        }}
+        ref={formatPhotosInputRef}
+        tabIndex={-1}
+        type="file"
+      />
+      <input
+        accept={acceptedPdfInputTypes}
+        onChange={(event) => {
+          const file = event.target.files?.item(0);
+
+          if (file) {
+            handleFormatUploadFiles([file], "pdfDocs");
+          }
+
+          event.target.value = "";
+        }}
+        ref={formatPdfInputRef}
+        tabIndex={-1}
+        type="file"
+      />
+      <input
+        accept={acceptedVideoInputTypes}
+        onChange={(event) => {
+          const file = event.target.files?.item(0);
+
+          if (file) {
+            handleFormatUploadFiles([file], "video");
+          }
+
+          event.target.value = "";
+        }}
+        ref={formatVideoInputRef}
+        tabIndex={-1}
+        type="file"
+      />
+      <input
+        accept="image/jpeg,image/png,image/webp"
+        multiple
+        onChange={(event) => {
+          const files = Array.from(event.target.files ?? []);
+
+          if (files.length) {
+            void appendImageBatchFiles(files);
+          }
+
+          event.target.value = "";
+        }}
+        ref={appendImagesInputRef}
+        tabIndex={-1}
+        type="file"
+      />
+      <input
+        accept="video/mp4,video/quicktime,video/webm,.mov,.mp4,.webm"
+        multiple
+        onChange={(event) => {
+          const files = Array.from(event.target.files ?? []);
+
+          if (files.length) {
+            void appendVideoBatchFiles(files);
+          }
+
+          event.target.value = "";
+        }}
+        ref={appendVideosInputRef}
+        tabIndex={-1}
+        type="file"
+      />
+      <input
+        accept={acceptedPdfInputTypes}
+        multiple
+        onChange={(event) => {
+          const files = Array.from(event.target.files ?? []);
+
+          if (files.length) {
+            void appendPdfMergeBatchFiles(files);
+          }
+
+          event.target.value = "";
+        }}
+        ref={appendPdfsInputRef}
+        tabIndex={-1}
+        type="file"
+      />
+      <input
+        accept="image/png,image/jpeg,image/webp"
+        onChange={(event) => {
+          const file = event.target.files?.item(0);
+
+          if (file) {
+            loadLogoFile(file);
+          }
+        }}
+        ref={logoInputRef}
+        tabIndex={-1}
+        type="file"
+      />
+      </div>
       <motion.div
         className="flex min-h-0 flex-1 flex-col md:grid md:grid-cols-[auto_minmax(0,1fr)]"
         initial={false}
@@ -10673,143 +10878,6 @@ export default function WatermarkEditor() {
             showMobileBottomDock ? "" : "max-md:hidden"
           }`}
         >
-          <input
-            accept={acceptedMediaInputTypes}
-            className="hidden"
-            multiple
-            onChange={(event) => {
-              const files = Array.from(event.target.files ?? []);
-
-              if (files.length) {
-                if (
-                  filePickerIntentRef.current === "append" ||
-                  (isBatchImageMode && files.every(isImageFile))
-                ) {
-                  void appendImageBatchFiles(files);
-                } else if (
-                  mediaKind === "video" &&
-                  videoUrl &&
-                  files.every(isVideoFile) &&
-                  (activeVideoTool === "merge" || isBatchVideoMode)
-                ) {
-                  void appendVideoBatchFiles(files);
-                } else {
-                  loadMediaFiles(files);
-                }
-              }
-
-              filePickerIntentRef.current = "replace";
-              event.target.value = "";
-            }}
-            ref={fileInputRef}
-            type="file"
-          />
-          <input
-            accept={acceptedImageInputTypes}
-            className="hidden"
-            multiple
-            onChange={(event) => {
-              handleFormatUploadFiles(
-                Array.from(event.target.files ?? []),
-                "photos",
-              );
-              event.target.value = "";
-            }}
-            ref={formatPhotosInputRef}
-            type="file"
-          />
-          <input
-            accept={acceptedPdfInputTypes}
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.item(0);
-
-              if (file) {
-                handleFormatUploadFiles([file], "pdfDocs");
-              }
-
-              event.target.value = "";
-            }}
-            ref={formatPdfInputRef}
-            type="file"
-          />
-          <input
-            accept={acceptedVideoInputTypes}
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.item(0);
-
-              if (file) {
-                handleFormatUploadFiles([file], "video");
-              }
-
-              event.target.value = "";
-            }}
-            ref={formatVideoInputRef}
-            type="file"
-          />
-          <input
-            accept="image/jpeg,image/png,image/webp"
-            className="hidden"
-            multiple
-            onChange={(event) => {
-              const files = Array.from(event.target.files ?? []);
-
-              if (files.length) {
-                void appendImageBatchFiles(files);
-              }
-
-              event.target.value = "";
-            }}
-            ref={appendImagesInputRef}
-            type="file"
-          />
-          <input
-            accept="video/mp4,video/quicktime,video/webm,.mov,.mp4,.webm"
-            className="hidden"
-            multiple
-            onChange={(event) => {
-              const files = Array.from(event.target.files ?? []);
-
-              if (files.length) {
-                void appendVideoBatchFiles(files);
-              }
-
-              event.target.value = "";
-            }}
-            ref={appendVideosInputRef}
-            type="file"
-          />
-          <input
-            accept={acceptedPdfInputTypes}
-            className="hidden"
-            multiple
-            onChange={(event) => {
-              const files = Array.from(event.target.files ?? []);
-
-              if (files.length) {
-                void appendPdfMergeBatchFiles(files);
-              }
-
-              event.target.value = "";
-            }}
-            ref={appendPdfsInputRef}
-            type="file"
-          />
-          <input
-            accept="image/png,image/jpeg,image/webp"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.item(0);
-
-              if (file) {
-                loadLogoFile(file);
-              }
-            }}
-            ref={logoInputRef}
-            type="file"
-          />
-
           <div className="hidden md:contents">
             <ToolIconRail
               activePanel={highlightedEditorPanel}
@@ -12283,7 +12351,7 @@ export default function WatermarkEditor() {
                       controls={false}
                       key={videoUrl}
                       playsInline
-                      preload="auto"
+                      preload={videoPreviewPreload}
                       ref={videoElementRef}
                       src={videoUrl}
                     />
@@ -12295,7 +12363,7 @@ export default function WatermarkEditor() {
                         disablePictureInPicture
                         key={videoUrl}
                         playsInline
-                        preload="auto"
+                        preload={videoPreviewPreload}
                         ref={videoElementRef}
                         src={videoUrl}
                       />
@@ -12417,10 +12485,12 @@ export default function WatermarkEditor() {
         exportDisabled={isExportDisabled}
         exportLabel={exportButtonLabel}
         exportTitle={exportDisabledReason}
+        footerRef={mobileFooterRef}
         isExporting={isExporting}
         mediaActions={
           hasMedia ? (
             <EditorMediaActionButtons
+              disabled={isMediaActionBusy}
               isPdfLoading={isPdfLoading}
               mediaKind={mediaKind}
               onAddMoreImages={openAddMoreImagesPicker}
@@ -12966,6 +13036,7 @@ function PdfPageStrip({
 
 type EditorMediaActionButtonsProps = {
   captionMode?: "always" | "mobile";
+  disabled?: boolean;
   isPdfLoading: boolean;
   mediaKind: MediaKind | null;
   onAddMoreImages: () => void;
@@ -12976,6 +13047,7 @@ type EditorMediaActionButtonsProps = {
 
 function EditorMediaActionButtons({
   captionMode = "mobile",
+  disabled = false,
   isPdfLoading,
   mediaKind,
   onAddMoreImages,
@@ -12995,6 +13067,7 @@ function EditorMediaActionButtons({
         <>
           <PreviewControlButton
             ariaLabel="Replace loaded media"
+            disabled={disabled}
             label="Replace file"
             onClick={onReplace}
             {...captionProps("Swap")}
@@ -13005,6 +13078,7 @@ function EditorMediaActionButtons({
           {mediaKind === "image" ? (
             <PreviewControlButton
               ariaLabel="Add more images"
+              disabled={disabled}
               label="Add images"
               onClick={onAddMoreImages}
               {...captionProps("Add")}
@@ -13016,6 +13090,7 @@ function EditorMediaActionButtons({
           {mediaKind === "video" && onAddMoreVideos ? (
             <PreviewControlButton
               ariaLabel="Add more videos"
+              disabled={disabled}
               label="Add videos"
               onClick={onAddMoreVideos}
               {...captionProps("Add")}
@@ -13028,6 +13103,7 @@ function EditorMediaActionButtons({
 
       <PreviewControlButton
         ariaLabel="Remove loaded media"
+        disabled={disabled}
         label="Delete file"
         onClick={onRemove}
         {...captionProps("Delete")}
@@ -13887,80 +13963,87 @@ function paintForcedExportStampLayer({
 
   const logoImage = forcedOverlayLayer.logoImage;
 
-  if (!logoImage || logoImage.naturalWidth <= 0 || logoImage.naturalHeight <= 0) {
+  if (logoImage && logoImage.naturalWidth > 0 && logoImage.naturalHeight > 0) {
+    const resolvePosition = (position: CustomPosition) => {
+      if (resolveCustomPosition) {
+        return resolveCustomPosition(position);
+      }
+
+      return {
+        textAlign: "center" as CanvasTextAlign,
+        textBaseline: "middle" as CanvasTextBaseline,
+        x: position.xPercent * canvasWidth,
+        y: position.yPercent * canvasHeight,
+      };
+    };
+
+    const drawable = getDrawableWatermark({
+      context,
+      displayScale,
+      fontFamily: defaultWatermarkFontFamily,
+      fontSizeScale: forcedOverlayLayer.fontSizeScale,
+      fontWeight: DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
+      imageWidth,
+      logoImage,
+      textColor: DEFAULT_TEXT_WATERMARK_COLOR,
+      textShadowEnabled: DEFAULT_TEXT_SHADOW_ENABLED,
+      watermarkReferenceWidth,
+      watermarkText: "",
+      watermarkType: "logo",
+    });
+
+    if (drawable) {
+      const alpha = forcedOverlayLayer.opacity / 100;
+      const { x, y, textAlign, textBaseline } = forcedOverlayLayer.customPosition
+        ? resolvePosition(forcedOverlayLayer.customPosition)
+        : getWatermarkCoordinates({
+            fontSize: drawable.height,
+            imageHeight,
+            imageWidth,
+            imageX,
+            imageY,
+            padding: Math.max(24, drawable.height * 0.9),
+            position: forcedOverlayLayer.watermarkPosition,
+          });
+
+      context.save();
+      drawWatermarkDrawable({
+        alpha,
+        context,
+        drawable,
+        textAlign,
+        textBaseline,
+        x,
+        y,
+      });
+      context.restore();
+
+      logRealVideoExport("STEP 11x/15: forced stamp painted onto overlay canvas", {
+        drawableHeight: drawable.height,
+        drawableWidth: drawable.width,
+        forcedLayerId: forcedOverlayLayer.id,
+        naturalHeight: logoImage.naturalHeight,
+        naturalWidth: logoImage.naturalWidth,
+        x,
+        y,
+      });
+    } else {
+      logRealVideoExport("STEP 11x/15: forced stamp SKIPPED — drawable unavailable");
+    }
+  } else {
     logRealVideoExport("STEP 11x/15: forced stamp SKIPPED — logo image not ready", {
       naturalHeight: logoImage?.naturalHeight ?? null,
       naturalWidth: logoImage?.naturalWidth ?? null,
     });
-    return;
   }
 
-  const resolvePosition = (position: CustomPosition) => {
-    if (resolveCustomPosition) {
-      return resolveCustomPosition(position);
-    }
-
-    return {
-      textAlign: "center" as CanvasTextAlign,
-      textBaseline: "middle" as CanvasTextBaseline,
-      x: position.xPercent * canvasWidth,
-      y: position.yPercent * canvasHeight,
-    };
-  };
-
-  const drawable = getDrawableWatermark({
+  paintForcedExportEdgeUpsellText({
     context,
     displayScale,
-    fontFamily: defaultWatermarkFontFamily,
-    fontSizeScale: forcedOverlayLayer.fontSizeScale,
-    fontWeight: DEFAULT_TEXT_WATERMARK_FONT_WEIGHT,
+    imageHeight,
     imageWidth,
-    logoImage,
-    textColor: DEFAULT_TEXT_WATERMARK_COLOR,
-    textShadowEnabled: DEFAULT_TEXT_SHADOW_ENABLED,
-    watermarkReferenceWidth,
-    watermarkText: "",
-    watermarkType: "logo",
-  });
-
-  if (!drawable) {
-    logRealVideoExport("STEP 11x/15: forced stamp SKIPPED — drawable unavailable");
-    return;
-  }
-
-  const alpha = forcedOverlayLayer.opacity / 100;
-  const { x, y, textAlign, textBaseline } = forcedOverlayLayer.customPosition
-    ? resolvePosition(forcedOverlayLayer.customPosition)
-    : getWatermarkCoordinates({
-        fontSize: drawable.height,
-        imageHeight,
-        imageWidth,
-        imageX,
-        imageY,
-        padding: Math.max(24, drawable.height * 0.9),
-        position: forcedOverlayLayer.watermarkPosition,
-      });
-
-  context.save();
-  drawWatermarkDrawable({
-    alpha,
-    context,
-    drawable,
-    textAlign,
-    textBaseline,
-    x,
-    y,
-  });
-  context.restore();
-
-  logRealVideoExport("STEP 11x/15: forced stamp painted onto overlay canvas", {
-    drawableHeight: drawable.height,
-    drawableWidth: drawable.width,
-    forcedLayerId: forcedOverlayLayer.id,
-    naturalHeight: logoImage.naturalHeight,
-    naturalWidth: logoImage.naturalWidth,
-    x,
-    y,
+    imageX,
+    imageY,
   });
 }
 

@@ -24,9 +24,12 @@ export const FORCED_TILE_SITE_TEXT = "PutWatermark.com";
 
 export const FORCED_TILE_LAYER_ID = "forced-export-tile";
 
-/** ~36% of content width at export (was ~34% at 190, ~27% at 150). Deliberately prominent. */
+export const FORCED_EXPORT_EDGE_UPSELL_TEXT =
+  "Buy credits to remove watermark.";
+
+/** ~72% of content width at export (2× prior prominence at scale 400). */
 export const FORCED_TILE_SETTINGS = {
-  fontSizeScale: 200,
+  fontSizeScale: 400,
   logoFileName: "Put Watermark - Forced Center Stamp.png",
   tileAngle: 0,
   tileDensity: "medium",
@@ -382,6 +385,114 @@ function drawForcedTilePatternUnit(
   context.shadowBlur = paint.shadowBlur;
   context.strokeText(drawable.text, x, y);
   context.fillText(drawable.text, x, y);
+  context.restore();
+}
+
+function resolveForcedExportEdgeUpsellFontSize(
+  context: CanvasRenderingContext2D,
+  imageWidth: number,
+  imageHeight: number,
+  displayScale: number,
+) {
+  const shortSide = Math.min(imageWidth, imageHeight);
+  let fontSize =
+    Math.max(9, Math.min(16, shortSide * 0.024)) * Math.max(displayScale, 1);
+  const maxWidth = imageWidth * 0.9;
+
+  context.font = `600 ${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+
+  while (
+    fontSize > 7 * Math.max(displayScale, 1) &&
+    context.measureText(FORCED_EXPORT_EDGE_UPSELL_TEXT).width > maxWidth
+  ) {
+    fontSize *= 0.92;
+    context.font = `600 ${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  }
+
+  return fontSize;
+}
+
+/** Upsell copy along all four edges of forced-export frames. */
+export function paintForcedExportEdgeUpsellText({
+  context,
+  displayScale = 1,
+  imageHeight,
+  imageWidth,
+  imageX,
+  imageY,
+}: {
+  context: CanvasRenderingContext2D;
+  displayScale?: number;
+  imageHeight: number;
+  imageWidth: number;
+  imageX: number;
+  imageY: number;
+}) {
+  if (imageWidth <= 0 || imageHeight <= 0) {
+    return;
+  }
+
+  const fontSize = resolveForcedExportEdgeUpsellFontSize(
+    context,
+    imageWidth,
+    imageHeight,
+    displayScale,
+  );
+  const padding = Math.max(8, fontSize * 0.65);
+  const text = FORCED_EXPORT_EDGE_UPSELL_TEXT;
+
+  context.save();
+  context.beginPath();
+  context.rect(imageX, imageY, imageWidth, imageHeight);
+  context.clip();
+  applyHighQualityCanvasDefaults(context);
+  context.font = `600 ${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  context.fillStyle = "rgba(255, 255, 255, 0.94)";
+  context.strokeStyle = "rgba(0, 0, 0, 0.58)";
+  context.lineWidth = Math.max(1, fontSize / 9);
+  context.lineJoin = "round";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+
+  context.strokeText(
+    text,
+    imageX + imageWidth / 2,
+    imageY + padding + fontSize / 2,
+  );
+  context.fillText(
+    text,
+    imageX + imageWidth / 2,
+    imageY + padding + fontSize / 2,
+  );
+
+  context.strokeText(
+    text,
+    imageX + imageWidth / 2,
+    imageY + imageHeight - padding - fontSize / 2,
+  );
+  context.fillText(
+    text,
+    imageX + imageWidth / 2,
+    imageY + imageHeight - padding - fontSize / 2,
+  );
+
+  context.save();
+  context.translate(imageX + padding + fontSize / 2, imageY + imageHeight / 2);
+  context.rotate(-Math.PI / 2);
+  context.strokeText(text, 0, 0);
+  context.fillText(text, 0, 0);
+  context.restore();
+
+  context.save();
+  context.translate(
+    imageX + imageWidth - padding - fontSize / 2,
+    imageY + imageHeight / 2,
+  );
+  context.rotate(Math.PI / 2);
+  context.strokeText(text, 0, 0);
+  context.fillText(text, 0, 0);
+  context.restore();
+
   context.restore();
 }
 

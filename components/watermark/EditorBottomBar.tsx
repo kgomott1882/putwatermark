@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -23,6 +23,7 @@ type EditorBottomBarProps = {
   className?: string;
   exportDisabled?: boolean;
   exportLabel: string;
+  footerRef?: Ref<HTMLElement>;
   isExporting?: boolean;
   exportTitle?: string;
   mediaActions?: ReactNode;
@@ -53,7 +54,7 @@ type EditorFooterMobileActionProps = {
 
 function footerMobileIconClassName(variant: FooterMobileActionVariant) {
   const base =
-    "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition disabled:cursor-not-allowed disabled:opacity-45";
+    "flex h-11 w-11 shrink-0 items-center justify-center rounded-md transition disabled:cursor-not-allowed disabled:opacity-45 md:h-7 md:w-7";
 
   switch (variant) {
     case "signal":
@@ -109,6 +110,7 @@ export function EditorBottomBar({
   className = "",
   exportDisabled,
   exportLabel,
+  footerRef,
   isExporting = false,
   exportTitle,
   mediaActions,
@@ -126,7 +128,8 @@ export function EditorBottomBar({
 }: EditorBottomBarProps) {
   return (
     <footer
-      className={`flex shrink-0 items-center justify-between gap-1.5 border-t border-ed-border bg-ed-panel px-1.5 py-1.5 sm:gap-3 sm:px-3 sm:py-2 max-md:grid max-md:grid-cols-[auto_1fr_auto] max-md:items-center max-md:gap-x-1.5 max-md:px-2 max-md:py-1.5 ${className}`}
+      className={`flex shrink-0 items-center justify-between gap-1.5 border-t border-ed-border bg-ed-panel px-1.5 py-1.5 sm:gap-3 sm:px-3 sm:py-2 max-md:grid max-md:grid-cols-[auto_minmax(0,1fr)_auto] max-md:items-center max-md:gap-x-1.5 max-md:px-2 max-md:py-1.5 ${className}`}
+      ref={footerRef}
     >
       <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
         <EditorFooterMobileAction
@@ -158,15 +161,15 @@ export function EditorBottomBar({
         ) : null}
       </div>
 
-      <div className="pointer-events-none flex min-w-0 items-center justify-center gap-1 md:flex-1">
+      <div className="flex min-w-0 items-center justify-center gap-1 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] md:flex-1 [&::-webkit-scrollbar]:hidden">
         {mediaActions ? (
-          <div className="pointer-events-auto flex shrink-0 items-center gap-1 md:hidden">
+          <div className="flex shrink-0 items-center gap-1 md:hidden">
             {mediaActions}
           </div>
         ) : null}
         {showHistoryControls ? (
           <>
-            <div className="pointer-events-auto flex shrink-0 items-center gap-1 md:hidden">
+            <div className="flex shrink-0 items-center gap-1 md:hidden">
               <EditorFooterMobileAction
                 ariaLabel="Undo"
                 caption="Undo"
@@ -186,7 +189,7 @@ export function EditorBottomBar({
             </div>
             <button
               aria-label="Undo"
-              className="pointer-events-auto hidden items-center gap-1 rounded-lg px-1.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-ed-fg transition hover:bg-ed-fg/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:text-ed-fg-muted sm:inline-flex sm:gap-1.5 sm:px-2 sm:py-2 sm:text-[11px] sm:tracking-[0.1em] md:px-3"
+              className="hidden items-center gap-1 rounded-lg px-1.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-ed-fg transition hover:bg-ed-fg/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:text-ed-fg-muted sm:inline-flex sm:gap-1.5 sm:px-2 sm:py-2 sm:text-[11px] sm:tracking-[0.1em] md:px-3"
               disabled={!canUndo}
               onClick={onUndo}
               type="button"
@@ -196,7 +199,7 @@ export function EditorBottomBar({
             </button>
             <button
               aria-label="Redo"
-              className="pointer-events-auto hidden items-center gap-1 rounded-lg px-1.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-ed-fg transition hover:bg-ed-fg/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:text-ed-fg-muted sm:inline-flex sm:gap-1.5 sm:px-2 sm:py-2 sm:text-[11px] sm:tracking-[0.1em] md:px-3"
+              className="hidden items-center gap-1 rounded-lg px-1.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-ed-fg transition hover:bg-ed-fg/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:text-ed-fg-muted sm:inline-flex sm:gap-1.5 sm:px-2 sm:py-2 sm:text-[11px] sm:tracking-[0.1em] md:px-3"
               disabled={!canRedo}
               onClick={onRedo}
               type="button"

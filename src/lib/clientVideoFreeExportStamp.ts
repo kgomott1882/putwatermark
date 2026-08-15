@@ -1,11 +1,14 @@
 import { applyHighQualityCanvasDefaults } from "./imageWatermarkExport";
-import { paintForcedExportTilePattern } from "./forcedTileExport";
+import {
+  paintForcedExportEdgeUpsellText,
+  paintForcedExportTilePattern,
+} from "./forcedTileExport";
 
 /** Static pre-rendered stamp for free client-side video exports (see scripts/generate-forced-export-stamp.mjs). */
 export const CLIENT_VIDEO_FREE_EXPORT_STAMP_PATH = "/forced-export-stamp.png";
 
-/** Matches photo/PDF forced stamp prominence (~36% of content width at scale 200). */
-export const CLIENT_VIDEO_FREE_EXPORT_STAMP_FONT_SIZE_SCALE = 200;
+/** Matches photo/PDF forced stamp prominence (~72% of content width at scale 400). */
+export const CLIENT_VIDEO_FREE_EXPORT_STAMP_FONT_SIZE_SCALE = 400;
 
 export const CLIENT_VIDEO_FREE_EXPORT_STAMP_OPACITY = 0.44;
 
@@ -87,4 +90,12 @@ export async function paintClientVideoFreeExportStamp(
     drawableHeight,
   );
   context.restore();
+
+  paintForcedExportEdgeUpsellText({
+    context,
+    imageHeight: contentHeight,
+    imageWidth: contentWidth,
+    imageX: 0,
+    imageY: 0,
+  });
 }
