@@ -524,6 +524,7 @@ type TextBounds = {
 
 type BatchImageEntry = {
   blurStrokes: BlurStroke[];
+  file?: File;
   fileName: string;
   id: string;
   image: HTMLImageElement;
@@ -1020,6 +1021,7 @@ export default function WatermarkEditor() {
   const mobileShellRef = useRef<HTMLDivElement>(null);
   const mobileFooterRef = useRef<HTMLElement>(null);
   const objectUrlRef = useRef<string | null>(null);
+  const activeImageFileRef = useRef<File | null>(null);
   const imageBatchRef = useRef<BatchImageEntry[]>([]);
   const logoObjectUrlRef = useRef<string | null>(null);
   const textBoundsRef = useRef<TextBounds | null>(null);
@@ -3469,31 +3471,74 @@ export default function WatermarkEditor() {
       return;
     }
 
-    const context = canvas.getContext("2d");
+    let cancelled = false;
 
-    if (!context) {
-      return;
-    }
+    void (async () => {
+      if (mediaKind === "image" && image) {
+        if (typeof image.decode === "function") {
+          try {
+            await image.decode();
+          } catch {
+            const objectUrl = objectUrlRef.current;
 
-    applyHighQualityCanvasDefaults(context);
+            if (objectUrl) {
+              try {
+                const reloaded = await loadImageElementFromObjectUrl(objectUrl);
 
-    const logicalWidth = canvasSize.width;
-    const logicalHeight = canvasSize.height;
-    const pixelRatio = canvasSize.pixelRatio || 1;
+                if (cancelled || reloaded === image) {
+                  return;
+                }
 
-    canvas.width = Math.max(1, Math.floor(logicalWidth * pixelRatio));
-    canvas.height = Math.max(1, Math.floor(logicalHeight * pixelRatio));
-    canvas.style.width = `${logicalWidth}px`;
-    canvas.style.height = `${logicalHeight}px`;
-    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-    context.clearRect(0, 0, logicalWidth, logicalHeight);
-    context.fillStyle = "#DCDCDD";
-    context.fillRect(0, 0, logicalWidth, logicalHeight);
+                setImage(reloaded);
 
-    if (!image) {
-      imageFrameRef.current = null;
-      return;
-    }
+                if (activeBatchImageId) {
+                  setImageBatch((batch) =>
+                    batch.map((entry) =>
+                      entry.id === activeBatchImageId
+                        ? { ...entry, image: reloaded }
+                        : entry,
+                    ),
+                  );
+                }
+
+                return;
+              } catch {
+                // Continue and attempt to paint with the current element.
+              }
+            }
+          }
+        }
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      const context = canvas.getContext("2d");
+
+      if (!context) {
+        return;
+      }
+
+      applyHighQualityCanvasDefaults(context);
+
+      const logicalWidth = canvasSize.width;
+      const logicalHeight = canvasSize.height;
+      const pixelRatio = canvasSize.pixelRatio || 1;
+
+      canvas.width = Math.max(1, Math.floor(logicalWidth * pixelRatio));
+      canvas.height = Math.max(1, Math.floor(logicalHeight * pixelRatio));
+      canvas.style.width = `${logicalWidth}px`;
+      canvas.style.height = `${logicalHeight}px`;
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      context.clearRect(0, 0, logicalWidth, logicalHeight);
+      context.fillStyle = "#DCDCDD";
+      context.fillRect(0, 0, logicalWidth, logicalHeight);
+
+      if (!image) {
+        imageFrameRef.current = null;
+        return;
+      }
 
     const referenceSize = uploadedImageSize ?? {
       height: image.naturalHeight,
@@ -3716,6 +3761,11 @@ export default function WatermarkEditor() {
       resizeHeight,
       resizeWidth,
     });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   });
 
   useEffect(() => {
@@ -4358,6 +4408,7 @@ export default function WatermarkEditor() {
   ): BatchImageEntry {
     return {
       blurStrokes: [],
+      file,
       fileName: file.name,
       id,
       image: imageElement,
@@ -4390,6 +4441,86 @@ export default function WatermarkEditor() {
       };
       nextImage.src = objectUrl;
     });
+  }
+
+  function isImageElementDrawable(image: HTMLImageElement | null | undefined) {
+    return Boolean(
+      image &&
+        image.complete &&
+        image.naturalWidth > 0 &&
+        image.naturalHeight > 0,
+    );
+  }
+
+  async function loadImageElementFromObjectUrl(objectUrl: string) {
+    const nextImage = new Image();
+
+    await new Promise<void>((resolve, reject) => {
+      nextImage.onload = () => resolve();
+      nextImage.onerror = () =>
+        reject(new Error("We could not load that image. Please try another file."));
+      nextImage.src = objectUrl;
+    });
+
+    if (typeof nextImage.decode === "function") {
+      try {
+        await nextImage.decode();
+      } catch {
+        // Some mobile browsers report decode errors even when the image loaded.
+      }
+    }
+
+    if (!isImageElementDrawable(nextImage)) {
+      throw new Error("We could not load that image. Please try another file.");
+    }
+
+    return nextImage;
+  }
+
+  async function ensureBatchEntryDrawable(entry: BatchImageEntry) {
+    if (isImageElementDrawable(entry.image)) {
+      if (typeof entry.image.decode === "function") {
+        try {
+          await entry.image.decode();
+          if (isImageElementDrawable(entry.image)) {
+            return entry;
+          }
+        } catch {
+          // Reload from the still-valid blob URL below.
+        }
+      } else {
+        return entry;
+      }
+    }
+
+    if (entry.file) {
+      try {
+        const loaded = await loadImageElementFromFile(entry.file);
+        if (
+          loaded.objectUrl !== entry.objectUrl &&
+          loaded.objectUrl !== objectUrlRef.current
+        ) {
+          URL.revokeObjectURL(loaded.objectUrl);
+        }
+
+        return {
+          ...entry,
+          image: loaded.image,
+        };
+      } catch {
+        // Fall back to the existing blob URL.
+      }
+    }
+
+    const image = await loadImageElementFromObjectUrl(entry.objectUrl);
+    return {
+      ...entry,
+      image,
+    };
+  }
+
+  async function ensureBatchEntriesDrawable(entries: BatchImageEntry[]) {
+    return Promise.all(entries.map((entry) => ensureBatchEntryDrawable(entry)));
   }
 
   function persistActiveBatchEntry(
@@ -4435,16 +4566,29 @@ export default function WatermarkEditor() {
     });
   }
 
-  function applyActiveBatchEntry(entry: BatchImageEntry) {
-    objectUrlRef.current = entry.objectUrl;
-    setActiveBatchImageId(entry.id);
-    setImage(entry.image);
-    setFileName(entry.fileName);
-    setUploadedImageSize(entry.uploadedImageSize);
-    setResizeWidth(entry.resizeWidth);
-    setResizeHeight(entry.resizeHeight);
-    setRotationAngle(entry.rotationAngle);
-    setBlurStrokes(cloneBlurStrokes(entry.blurStrokes));
+  async function applyActiveBatchEntry(entry: BatchImageEntry) {
+    let resolvedEntry = entry;
+
+    try {
+      resolvedEntry = await ensureBatchEntryDrawable(entry);
+      if (resolvedEntry.image !== entry.image) {
+        setImageBatch((batch) =>
+          batch.map((item) => (item.id === entry.id ? resolvedEntry : item)),
+        );
+      }
+    } catch {
+      // Keep going with the current entry; the preview heal effect may retry.
+    }
+
+    objectUrlRef.current = resolvedEntry.objectUrl;
+    setActiveBatchImageId(resolvedEntry.id);
+    setImage(resolvedEntry.image);
+    setFileName(resolvedEntry.fileName);
+    setUploadedImageSize(resolvedEntry.uploadedImageSize);
+    setResizeWidth(resolvedEntry.resizeWidth);
+    setResizeHeight(resolvedEntry.resizeHeight);
+    setRotationAngle(resolvedEntry.rotationAngle);
+    setBlurStrokes(cloneBlurStrokes(resolvedEntry.blurStrokes));
     setResizeWarning("");
     setActiveImageTool(null);
     setCropRect(null);
@@ -5261,7 +5405,7 @@ export default function WatermarkEditor() {
     }
 
     setImageBatch(nextBatch);
-    applyActiveBatchEntry(nextEntry);
+    void applyActiveBatchEntry(nextEntry);
   }
 
   function removeBatchImage(id: string) {
@@ -5301,7 +5445,7 @@ export default function WatermarkEditor() {
     setImageBatch(remainingBatch);
 
     if (id === activeBatchImageId) {
-      applyActiveBatchEntry(remainingBatch[0]);
+      void applyActiveBatchEntry(remainingBatch[0]!);
       return;
     }
   }
@@ -5539,6 +5683,7 @@ export default function WatermarkEditor() {
       ) {
         const currentEntry: BatchImageEntry = {
           blurStrokes: cloneBlurStrokes(blurStrokes),
+          file: activeImageFileRef.current ?? undefined,
           fileName,
           id: createBatchImageId(),
           image,
@@ -5704,13 +5849,30 @@ export default function WatermarkEditor() {
       applyAuthorizeNotice(auth);
       setIsExportPreparing(false);
 
+      const drawableBatch = await ensureBatchEntriesDrawable(nextBatch);
+      const batchChanged = drawableBatch.some(
+        (entry, index) => entry.image !== nextBatch[index]?.image,
+      );
+
+      if (batchChanged) {
+        setImageBatch(drawableBatch);
+        const activeEntry =
+          drawableBatch.find((entry) => entry.id === activeBatchImageId) ??
+          drawableBatch[0];
+
+        if (activeEntry) {
+          objectUrlRef.current = activeEntry.objectUrl;
+          setImage(activeEntry.image);
+        }
+      }
+
       const zip = new JSZip();
       const usedNames = new Set<string>();
 
-      for (const [index, entry] of nextBatch.entries()) {
+      for (const [index, entry] of drawableBatch.entries()) {
         setBatchExportProgress({
           current: index + 1,
-          total: nextBatch.length,
+          total: drawableBatch.length,
         });
 
         const blob = await exportImageToBlob(
@@ -5734,7 +5896,7 @@ export default function WatermarkEditor() {
 
       const zipBlob = await zip.generateAsync({ type: "blob" });
       downloadBlob(zipBlob, "watermarked-images.zip");
-      setImageBatch(nextBatch);
+      setImageBatch(drawableBatch);
       setIsExporting(false);
       setIsExportPreparing(false);
       setBatchExportProgress(null);
@@ -6973,9 +7135,39 @@ export default function WatermarkEditor() {
       applyAuthorizeNotice(auth);
       setIsExportPreparing(false);
 
+      let exportImage = image;
+
+      if (objectUrlRef.current) {
+        try {
+          exportImage = (
+            await ensureBatchEntryDrawable({
+              blurStrokes,
+              file: activeImageFileRef.current ?? undefined,
+              fileName,
+              id: activeBatchImageId ?? "single-image",
+              image,
+              objectUrl: objectUrlRef.current,
+              resizeHeight,
+              resizeWidth,
+              rotationAngle,
+              uploadedImageSize: uploadedImageSize ?? {
+                height: image.naturalHeight,
+                width: image.naturalWidth,
+              },
+            })
+          ).image;
+
+          if (exportImage !== image) {
+            setImage(exportImage);
+          }
+        } catch {
+          // Continue with the current image element.
+        }
+      }
+
       const blob = await exportImageToBlob(
         await getExportRenderInputForAuth(
-          image,
+          exportImage,
           resizeWidth,
           resizeHeight,
           rotationAngle,
@@ -8941,6 +9133,7 @@ export default function WatermarkEditor() {
       objectUrlRef.current = null;
     }
 
+    activeImageFileRef.current = null;
     clearImageBatch();
     clearVideoBatch();
     clearPdfMergeBatch();
@@ -9300,7 +9493,8 @@ export default function WatermarkEditor() {
             entry.id === sessionRestoreRef.current?.activeBatchImageId,
         ) ?? loadedEntries[0];
 
-      applyActiveBatchEntry(initialEntry);
+      activeImageFileRef.current = initialEntry?.file ?? imageFiles[0] ?? null;
+      void applyActiveBatchEntry(initialEntry!);
       finishMediaLoad("image");
     } catch (error) {
       setUploadError(
@@ -9334,6 +9528,7 @@ export default function WatermarkEditor() {
     const nextImage = new Image();
 
     objectUrlRef.current = objectUrl;
+    activeImageFileRef.current = file;
     nextImage.onload = () => {
       const entry = createBatchImageEntry(file, nextImage, objectUrl);
 

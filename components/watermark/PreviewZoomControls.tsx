@@ -125,9 +125,9 @@ export function PreviewCanvasZoomControls({
     >
       <PreviewControlButton
         ariaLabel="Zoom in"
+        caption="Zoom+"
         disabled={zoomInDisabled}
         label="Zoom In"
-        mobileCaption="Zoom+"
         onClick={onZoomIn}
         tooltipPlacement="below"
       >
@@ -135,9 +135,9 @@ export function PreviewCanvasZoomControls({
       </PreviewControlButton>
       <PreviewControlButton
         ariaLabel="Zoom out"
+        caption="Zoom-"
         disabled={zoomOutDisabled}
         label="Zoom Out"
-        mobileCaption="Zoom-"
         onClick={onZoomOut}
         tooltipPlacement="below"
       >
@@ -145,9 +145,9 @@ export function PreviewCanvasZoomControls({
       </PreviewControlButton>
       <PreviewControlButton
         ariaLabel="Reset zoom"
+        caption="Reset"
         disabled={resetDisabled}
         label="Reset Zoom"
-        mobileCaption="Reset"
         onClick={onReset}
         tooltipPlacement="below"
       >
