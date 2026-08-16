@@ -171,6 +171,12 @@ import {
   isVideoFile,
   validateMediaFiles,
 } from "../../lib/mediaFiles";
+import {
+  closePreviewImageBitmap,
+  closePreviewImageBitmapCache,
+  getCanvasImageSourceSize,
+  loadPreviewImageBitmap,
+} from "../../lib/batchPreviewBitmap";
 import { consumeEditorHandoffFiles } from "../../lib/editorFileHandoff";
 import {
   blobToStoredSessionFile,
@@ -1023,6 +1029,10 @@ export default function WatermarkEditor() {
   const objectUrlRef = useRef<string | null>(null);
   const activeImageFileRef = useRef<File | null>(null);
   const imageBatchRef = useRef<BatchImageEntry[]>([]);
+  const batchPreviewBitmapCacheRef = useRef<Map<string, ImageBitmap>>(new Map());
+  const previewBitmapRef = useRef<ImageBitmap | null>(null);
+  const previewDomImageRef = useRef<HTMLImageElement | null>(null);
+  const previewBitmapLoadGenerationRef = useRef(0);
   const logoObjectUrlRef = useRef<string | null>(null);
   const textBoundsRef = useRef<TextBounds | null>(null);
   const layerBoundsRef = useRef<Map<string, TextBounds>>(new Map());
@@ -1303,6 +1313,10 @@ export default function WatermarkEditor() {
   const [lastPdfCompressResult, setLastPdfCompressResult] =
     useState<PdfCompressStats | null>(null);
   const [previewZoomPercent, setPreviewZoomPercent] = useState(PREVIEW_ZOOM_DEFAULT);
+  const [activePreviewObjectUrl, setActivePreviewObjectUrl] = useState<string | null>(
+    null,
+  );
+  const [previewPaintGeneration, setPreviewPaintGeneration] = useState(0);
   const [mobileControlsExpanded, setMobileControlsExpanded] = useState(false);
 
   useEffect(() => {
@@ -2724,7 +2738,7 @@ export default function WatermarkEditor() {
   }
 
   async function getExportRenderInputForAuth(
-    imageElement: HTMLImageElement,
+    imageSource: CanvasImageSource,
     entryResizeWidth: number,
     entryResizeHeight: number,
     entryRotationAngle: number,
@@ -2734,7 +2748,7 @@ export default function WatermarkEditor() {
     entryReferenceImageSize?: CanvasSize,
   ) {
     const input = getWatermarkExportInput(
-      imageElement,
+      imageSource,
       entryResizeWidth,
       entryResizeHeight,
       entryRotationAngle,
@@ -3406,6 +3420,9 @@ export default function WatermarkEditor() {
       }
 
       revokeBatchObjectUrls(imageBatchRef.current);
+      closePreviewImageBitmap(previewBitmapRef.current);
+      previewBitmapRef.current = null;
+      closePreviewImageBitmapCache(batchPreviewBitmapCacheRef.current);
 
       if (objectUrlRef.current) {
         URL.revokeObjectURL(objectUrlRef.current);
@@ -3474,42 +3491,6 @@ export default function WatermarkEditor() {
     let cancelled = false;
 
     void (async () => {
-      if (mediaKind === "image" && image) {
-        if (typeof image.decode === "function") {
-          try {
-            await image.decode();
-          } catch {
-            const objectUrl = objectUrlRef.current;
-
-            if (objectUrl) {
-              try {
-                const reloaded = await loadImageElementFromObjectUrl(objectUrl);
-
-                if (cancelled || reloaded === image) {
-                  return;
-                }
-
-                setImage(reloaded);
-
-                if (activeBatchImageId) {
-                  setImageBatch((batch) =>
-                    batch.map((entry) =>
-                      entry.id === activeBatchImageId
-                        ? { ...entry, image: reloaded }
-                        : entry,
-                    ),
-                  );
-                }
-
-                return;
-              } catch {
-                // Continue and attempt to paint with the current element.
-              }
-            }
-          }
-        }
-      }
-
       if (cancelled) {
         return;
       }
@@ -3535,28 +3516,28 @@ export default function WatermarkEditor() {
       context.fillStyle = "#DCDCDD";
       context.fillRect(0, 0, logicalWidth, logicalHeight);
 
-      if (!image) {
+      const previewSource = getActivePreviewImageSource();
+
+      if (!previewSource) {
         imageFrameRef.current = null;
         return;
       }
 
-    const referenceSize = uploadedImageSize ?? {
-      height: image.naturalHeight,
-      width: image.naturalWidth,
-    };
-    const previewImageWidth =
-      activeImageTool === "resize" && resizeWidth > 0
-        ? resizeWidth
-        : image.naturalWidth;
-    const previewImageHeight =
-      activeImageTool === "resize" && resizeHeight > 0
-        ? resizeHeight
-        : image.naturalHeight;
-    const rotatedPreviewBounds = getRotatedBounds(
-      previewImageWidth,
-      previewImageHeight,
-      rotationAngle,
-    );
+      const intrinsicSize = getPreviewIntrinsicSize(previewSource);
+      const referenceSize = uploadedImageSize ?? intrinsicSize;
+      const previewImageWidth =
+        activeImageTool === "resize" && resizeWidth > 0
+          ? resizeWidth
+          : intrinsicSize.width;
+      const previewImageHeight =
+        activeImageTool === "resize" && resizeHeight > 0
+          ? resizeHeight
+          : intrinsicSize.height;
+      const rotatedPreviewBounds = getRotatedBounds(
+        previewImageWidth,
+        previewImageHeight,
+        rotationAngle,
+      );
     const baseFitScale = Math.min(
       previewBaseSize.width /
         Math.max(referenceSize.width, rotatedPreviewBounds.width),
@@ -3587,27 +3568,27 @@ export default function WatermarkEditor() {
     effectedCanvas.height = previewImageHeight;
     const effectedContext = effectedCanvas.getContext("2d");
 
-    if (effectedContext) {
-      if (activeImageTool === "resize") {
-        drawResizeTargetImage(
-          effectedContext,
-          image,
-          previewImageWidth,
-          previewImageHeight,
-          resizeScaleMode,
-          getImageEffectSettings(),
-        );
-      } else {
-        drawBaseImageWithEffect(
-          effectedContext,
-          image,
-          0,
-          0,
-          previewImageWidth,
-          previewImageHeight,
-          getImageEffectSettings(),
-        );
-      }
+      if (effectedContext) {
+        if (activeImageTool === "resize") {
+          drawResizeTargetImage(
+            effectedContext,
+            previewSource,
+            previewImageWidth,
+            previewImageHeight,
+            resizeScaleMode,
+            getImageEffectSettings(),
+          );
+        } else {
+          drawBaseImageWithEffect(
+            effectedContext,
+            previewSource,
+            0,
+            0,
+            previewImageWidth,
+            previewImageHeight,
+            getImageEffectSettings(),
+          );
+        }
       context.drawImage(
         effectedCanvas,
         -sourceImageWidth / 2,
@@ -3628,7 +3609,7 @@ export default function WatermarkEditor() {
     } else {
       drawBaseImageWithEffect(
         context,
-        image,
+        previewSource,
         -sourceImageWidth / 2,
         -sourceImageHeight / 2,
         sourceImageWidth,
@@ -3751,7 +3732,7 @@ export default function WatermarkEditor() {
       context,
       cropRect,
       frame: imageFrame,
-      image,
+      image: image ?? (previewSource as HTMLImageElement),
       isActive: activeImageTool === "crop",
     });
     drawResizeOverlay({
@@ -4452,75 +4433,67 @@ export default function WatermarkEditor() {
     );
   }
 
-  async function loadImageElementFromObjectUrl(objectUrl: string) {
-    const nextImage = new Image();
+  async function getOrLoadBatchPreviewBitmap(entry: BatchImageEntry) {
+    const cached = batchPreviewBitmapCacheRef.current.get(entry.id);
 
-    await new Promise<void>((resolve, reject) => {
-      nextImage.onload = () => resolve();
-      nextImage.onerror = () =>
-        reject(new Error("We could not load that image. Please try another file."));
-      nextImage.src = objectUrl;
+    if (cached) {
+      return cached;
+    }
+
+    const bitmap = await loadPreviewImageBitmap({
+      file: entry.file,
+      objectUrl: entry.objectUrl,
     });
-
-    if (typeof nextImage.decode === "function") {
-      try {
-        await nextImage.decode();
-      } catch {
-        // Some mobile browsers report decode errors even when the image loaded.
-      }
-    }
-
-    if (!isImageElementDrawable(nextImage)) {
-      throw new Error("We could not load that image. Please try another file.");
-    }
-
-    return nextImage;
+    batchPreviewBitmapCacheRef.current.set(entry.id, bitmap);
+    return bitmap;
   }
 
-  async function ensureBatchEntryDrawable(entry: BatchImageEntry) {
-    if (isImageElementDrawable(entry.image)) {
-      if (typeof entry.image.decode === "function") {
-        try {
-          await entry.image.decode();
-          if (isImageElementDrawable(entry.image)) {
-            return entry;
-          }
-        } catch {
-          // Reload from the still-valid blob URL below.
-        }
-      } else {
-        return entry;
-      }
-    }
-
-    if (entry.file) {
-      try {
-        const loaded = await loadImageElementFromFile(entry.file);
-        if (
-          loaded.objectUrl !== entry.objectUrl &&
-          loaded.objectUrl !== objectUrlRef.current
-        ) {
-          URL.revokeObjectURL(loaded.objectUrl);
-        }
-
-        return {
-          ...entry,
-          image: loaded.image,
-        };
-      } catch {
-        // Fall back to the existing blob URL.
-      }
-    }
-
-    const image = await loadImageElementFromObjectUrl(entry.objectUrl);
-    return {
-      ...entry,
-      image,
-    };
+  async function preloadBatchPreviewBitmaps(entries: BatchImageEntry[]) {
+    await Promise.all(
+      entries.map((entry) =>
+        getOrLoadBatchPreviewBitmap(entry).catch(() => null),
+      ),
+    );
   }
 
-  async function ensureBatchEntriesDrawable(entries: BatchImageEntry[]) {
-    return Promise.all(entries.map((entry) => ensureBatchEntryDrawable(entry)));
+  function setActivePreviewBitmap(entry: BatchImageEntry, bitmap: ImageBitmap) {
+    previewBitmapRef.current = bitmap;
+    setActivePreviewObjectUrl(entry.objectUrl);
+    setPreviewPaintGeneration((generation) => generation + 1);
+  }
+
+  function getActivePreviewImageSource(): CanvasImageSource | null {
+    if (previewBitmapRef.current) {
+      return previewBitmapRef.current;
+    }
+
+    const domImage = previewDomImageRef.current;
+
+    if (
+      domImage &&
+      domImage.complete &&
+      domImage.naturalWidth > 0 &&
+      domImage.naturalHeight > 0
+    ) {
+      return domImage;
+    }
+
+    if (isImageElementDrawable(image)) {
+      return image;
+    }
+
+    return null;
+  }
+
+  function getPreviewIntrinsicSize(source: CanvasImageSource | null) {
+    if (!source) {
+      return uploadedImageSize ?? { height: 0, width: 0 };
+    }
+
+    return getCanvasImageSourceSize(
+      source,
+      uploadedImageSize ?? undefined,
+    );
   }
 
   function persistActiveBatchEntry(
@@ -4536,7 +4509,6 @@ export default function WatermarkEditor() {
         ? {
             ...entry,
             blurStrokes: cloneBlurStrokes(blurStrokes),
-            image,
             resizeHeight,
             resizeWidth,
             rotationAngle,
@@ -4567,32 +4539,38 @@ export default function WatermarkEditor() {
   }
 
   async function applyActiveBatchEntry(entry: BatchImageEntry) {
-    let resolvedEntry = entry;
-
-    try {
-      resolvedEntry = await ensureBatchEntryDrawable(entry);
-      if (resolvedEntry.image !== entry.image) {
-        setImageBatch((batch) =>
-          batch.map((item) => (item.id === entry.id ? resolvedEntry : item)),
-        );
-      }
-    } catch {
-      // Keep going with the current entry; the preview heal effect may retry.
-    }
-
-    objectUrlRef.current = resolvedEntry.objectUrl;
-    setActiveBatchImageId(resolvedEntry.id);
-    setImage(resolvedEntry.image);
-    setFileName(resolvedEntry.fileName);
-    setUploadedImageSize(resolvedEntry.uploadedImageSize);
-    setResizeWidth(resolvedEntry.resizeWidth);
-    setResizeHeight(resolvedEntry.resizeHeight);
-    setRotationAngle(resolvedEntry.rotationAngle);
-    setBlurStrokes(cloneBlurStrokes(resolvedEntry.blurStrokes));
+    objectUrlRef.current = entry.objectUrl;
+    setActivePreviewObjectUrl(entry.objectUrl);
+    setActiveBatchImageId(entry.id);
+    setImage(entry.image);
+    setFileName(entry.fileName);
+    setUploadedImageSize(entry.uploadedImageSize);
+    setResizeWidth(entry.resizeWidth);
+    setResizeHeight(entry.resizeHeight);
+    setRotationAngle(entry.rotationAngle);
+    setBlurStrokes(cloneBlurStrokes(entry.blurStrokes));
     setResizeWarning("");
     setActiveImageTool(null);
     setCropRect(null);
     setIsWatermarkHovering(false);
+
+    const generation = previewBitmapLoadGenerationRef.current + 1;
+    previewBitmapLoadGenerationRef.current = generation;
+
+    try {
+      const bitmap = await getOrLoadBatchPreviewBitmap(entry);
+
+      if (generation !== previewBitmapLoadGenerationRef.current) {
+        return;
+      }
+
+      setActivePreviewBitmap(entry, bitmap);
+    } catch {
+      if (generation === previewBitmapLoadGenerationRef.current) {
+        previewBitmapRef.current = null;
+        setPreviewPaintGeneration((value) => value + 1);
+      }
+    }
   }
 
   function clearPdfState() {
@@ -5716,7 +5694,7 @@ export default function WatermarkEditor() {
   }
 
   function getWatermarkExportInput(
-    imageElement: HTMLImageElement,
+    imageSource: CanvasImageSource,
     entryResizeWidth: number,
     entryResizeHeight: number,
     entryRotationAngle: number,
@@ -5731,16 +5709,13 @@ export default function WatermarkEditor() {
       customPosition,
       fontFamily,
       fontSizeScale,
-      image: imageElement,
+      image: imageSource,
       imageEffectSettings: getImageEffectSettings(),
       logoImage,
       logoLayers,
       previewCanvasSize: previewBaseSize,
       referenceImageSize: entryReferenceImageSize ??
-        uploadedImageSize ?? {
-          height: imageElement.naturalHeight,
-          width: imageElement.naturalWidth,
-        },
+        uploadedImageSize ?? getCanvasImageSourceSize(imageSource),
       resizeHeight: entryResizeHeight,
       resizeWidth: entryResizeWidth,
       rotationAngle: entryRotationAngle,
@@ -5849,27 +5824,27 @@ export default function WatermarkEditor() {
       applyAuthorizeNotice(auth);
       setIsExportPreparing(false);
 
-      const drawableBatch = await ensureBatchEntriesDrawable(nextBatch);
-      const batchChanged = drawableBatch.some(
-        (entry, index) => entry.image !== nextBatch[index]?.image,
+      const drawableBatch = await Promise.all(
+        nextBatch.map(async (entry) => {
+          const bitmap = await getOrLoadBatchPreviewBitmap(entry);
+          return { bitmap, entry };
+        }),
       );
 
-      if (batchChanged) {
-        setImageBatch(drawableBatch);
-        const activeEntry =
-          drawableBatch.find((entry) => entry.id === activeBatchImageId) ??
-          drawableBatch[0];
+      const activeRenderedEntry = drawableBatch.find(
+        ({ entry }) => entry.id === activeBatchImageId,
+      );
 
-        if (activeEntry) {
-          objectUrlRef.current = activeEntry.objectUrl;
-          setImage(activeEntry.image);
-        }
+      if (activeRenderedEntry) {
+        previewBitmapRef.current = activeRenderedEntry.bitmap;
+        setActivePreviewObjectUrl(activeRenderedEntry.entry.objectUrl);
+        setPreviewPaintGeneration((generation) => generation + 1);
       }
 
       const zip = new JSZip();
       const usedNames = new Set<string>();
 
-      for (const [index, entry] of drawableBatch.entries()) {
+      for (const [index, { bitmap, entry }] of drawableBatch.entries()) {
         setBatchExportProgress({
           current: index + 1,
           total: drawableBatch.length,
@@ -5877,7 +5852,7 @@ export default function WatermarkEditor() {
 
         const blob = await exportImageToBlob(
           await getExportRenderInputForAuth(
-            entry.image,
+            bitmap,
             entry.resizeWidth,
             entry.resizeHeight,
             entry.rotationAngle,
@@ -5896,7 +5871,7 @@ export default function WatermarkEditor() {
 
       const zipBlob = await zip.generateAsync({ type: "blob" });
       downloadBlob(zipBlob, "watermarked-images.zip");
-      setImageBatch(drawableBatch);
+      setImageBatch(nextBatch);
       setIsExporting(false);
       setIsExportPreparing(false);
       setBatchExportProgress(null);
@@ -7135,31 +7110,22 @@ export default function WatermarkEditor() {
       applyAuthorizeNotice(auth);
       setIsExportPreparing(false);
 
-      let exportImage = image;
+      let exportImageSource: CanvasImageSource = image;
 
       if (objectUrlRef.current) {
         try {
-          exportImage = (
-            await ensureBatchEntryDrawable({
-              blurStrokes,
-              file: activeImageFileRef.current ?? undefined,
-              fileName,
-              id: activeBatchImageId ?? "single-image",
-              image,
-              objectUrl: objectUrlRef.current,
-              resizeHeight,
-              resizeWidth,
-              rotationAngle,
-              uploadedImageSize: uploadedImageSize ?? {
-                height: image.naturalHeight,
-                width: image.naturalWidth,
-              },
-            })
-          ).image;
-
-          if (exportImage !== image) {
-            setImage(exportImage);
-          }
+          exportImageSource = await getOrLoadBatchPreviewBitmap({
+            blurStrokes,
+            file: activeImageFileRef.current ?? undefined,
+            fileName,
+            id: activeBatchImageId ?? "single-image",
+            image,
+            objectUrl: objectUrlRef.current,
+            resizeHeight,
+            resizeWidth,
+            rotationAngle,
+            uploadedImageSize: uploadedImageSize ?? getCanvasImageSourceSize(image),
+          });
         } catch {
           // Continue with the current image element.
         }
@@ -7167,7 +7133,7 @@ export default function WatermarkEditor() {
 
       const blob = await exportImageToBlob(
         await getExportRenderInputForAuth(
-          exportImage,
+          exportImageSource,
           resizeWidth,
           resizeHeight,
           rotationAngle,
@@ -9134,6 +9100,10 @@ export default function WatermarkEditor() {
     }
 
     activeImageFileRef.current = null;
+    closePreviewImageBitmap(previewBitmapRef.current);
+    previewBitmapRef.current = null;
+    closePreviewImageBitmapCache(batchPreviewBitmapCacheRef.current);
+    setActivePreviewObjectUrl(null);
     clearImageBatch();
     clearVideoBatch();
     clearPdfMergeBatch();
@@ -9485,6 +9455,7 @@ export default function WatermarkEditor() {
       setVideoSize(null);
       setVideoFileSize(0);
       setImageBatch(loadedEntries);
+      void preloadBatchPreviewBitmaps(loadedEntries);
 
       const initialEntry =
         loadedEntries.find(
@@ -9536,6 +9507,14 @@ export default function WatermarkEditor() {
       setImageBatch([entry]);
       setActiveBatchImageId(entry.id);
       setImage(nextImage);
+      setActivePreviewObjectUrl(objectUrl);
+      void getOrLoadBatchPreviewBitmap(entry)
+        .then((bitmap) => {
+          setActivePreviewBitmap(entry, bitmap);
+        })
+        .catch(() => {
+          setPreviewPaintGeneration((generation) => generation + 1);
+        });
       setVideoUrl("");
       setVideoDuration(0);
       setVideoSize(null);
@@ -12459,6 +12438,21 @@ export default function WatermarkEditor() {
                     width: canvasSize.width,
                   }}
                 >
+            {activePreviewObjectUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                alt=""
+                aria-hidden
+                className="sr-only"
+                crossOrigin="anonymous"
+                decoding="async"
+                onLoad={() =>
+                  setPreviewPaintGeneration((generation) => generation + 1)
+                }
+                ref={previewDomImageRef}
+                src={activePreviewObjectUrl}
+              />
+            ) : null}
             {(mediaKind === "image" || mediaKind === "pdf") && image ? (
               <canvas
                 className={`block h-full w-full touch-none shadow-lg ${
@@ -13070,10 +13064,15 @@ function ImageBatchStrip({
 
   return (
     <div className="rounded-lg border border-ed-border bg-ed-bg-card p-1.5 md:p-2">
-      <div className="mb-1 flex items-center justify-between gap-2 md:mb-2">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ed-fg md:text-[11px] md:tracking-[0.16em]">
-          Batch images
-        </p>
+      <div className="mb-1 flex items-start justify-between gap-2 md:mb-2">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ed-fg md:text-[11px] md:tracking-[0.16em]">
+            Batch images
+          </p>
+          <p className="mt-0.5 text-[9px] leading-snug text-ed-fg-muted md:text-[10px]">
+            Make sure all image previews look good before exporting.
+          </p>
+        </div>
         <div className="flex items-center gap-1.5">
           {onAddMore ? (
             <button
@@ -13745,7 +13744,7 @@ type ExportRenderInput = {
   customPosition: CustomPosition | null;
   fontFamily: string;
   fontSizeScale: number;
-  image: HTMLImageElement;
+  image: CanvasImageSource;
   imageEffectSettings: ImageEffectSettings;
   logoImage: HTMLImageElement | null;
   logoLayers: LogoWatermarkLayer[];
@@ -15354,10 +15353,11 @@ function renderExportCanvas({
   watermarkText,
   watermarkType,
 }: ExportRenderInput) {
+  const intrinsicSize = getCanvasImageSourceSize(image, referenceImageSize);
   const sourceWidth =
-    useResizePreview && resizeWidth > 0 ? resizeWidth : image.naturalWidth;
+    useResizePreview && resizeWidth > 0 ? resizeWidth : intrinsicSize.width;
   const sourceHeight =
-    useResizePreview && resizeHeight > 0 ? resizeHeight : image.naturalHeight;
+    useResizePreview && resizeHeight > 0 ? resizeHeight : intrinsicSize.height;
   const outputBounds = getRotatedBounds(sourceWidth, sourceHeight, rotationAngle);
   const logicalWidth = Math.max(1, Math.ceil(outputBounds.width));
   const logicalHeight = Math.max(1, Math.ceil(outputBounds.height));
@@ -16474,7 +16474,7 @@ function drawImageWithResizeMode(
 
 function drawResizeTargetImage(
   context: CanvasRenderingContext2D,
-  image: HTMLImageElement,
+  image: CanvasImageSource,
   targetWidth: number,
   targetHeight: number,
   mode: ResizeScaleMode,
@@ -16485,9 +16485,13 @@ function drawResizeTargetImage(
     return;
   }
 
+  const sourceSize = getCanvasImageSourceSize(image, {
+    height: targetHeight,
+    width: targetWidth,
+  });
   const tempCanvas = document.createElement("canvas");
-  tempCanvas.width = image.naturalWidth;
-  tempCanvas.height = image.naturalHeight;
+  tempCanvas.width = sourceSize.width;
+  tempCanvas.height = sourceSize.height;
   const tempContext = tempCanvas.getContext("2d");
 
   if (!tempContext) {
