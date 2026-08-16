@@ -29,13 +29,13 @@ type PreviewControlButtonProps = {
 };
 
 export const previewControlButtonClassName =
-  "flex h-11 w-11 items-center justify-center rounded-md bg-gradient-to-b from-[#ef6b6b] to-[#c41e3a] text-white shadow-[0_2px_8px_rgba(196,30,58,0.3)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45 md:h-7 md:w-7";
+  "flex h-8 w-8 items-center justify-center rounded-md bg-gradient-to-b from-[#ef6b6b] to-[#c41e3a] text-white shadow-[0_2px_8px_rgba(196,30,58,0.3)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45 md:h-7 md:w-7";
 
 export const editorFooterMobileColumnClassName =
-  "flex w-11 shrink-0 flex-col items-center justify-center gap-0.5 md:w-9";
+  "flex w-8 shrink-0 flex-col items-center justify-center gap-0.5 md:w-9";
 
 export const editorFooterMobileCaptionClassName =
-  "w-full max-w-[2.25rem] truncate text-center text-[7px] font-normal uppercase tracking-[0.06em] leading-none text-ed-fg-muted";
+  "w-full max-w-[2rem] truncate text-center text-[7px] font-normal uppercase tracking-[0.06em] leading-none text-ed-fg-muted";
 
 export function PreviewControlButton({
   ariaLabel,
@@ -49,7 +49,7 @@ export function PreviewControlButton({
   onClick,
   tooltipPlacement = "above",
 }: PreviewControlButtonProps) {
-  const showTooltip = !caption;
+  const showTooltip = !caption && !mobileCaption;
   const tooltipClassName =
     tooltipPlacement === "below"
       ? "pointer-events-none absolute top-[calc(100%+5px)] left-1/2 z-30 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-ed-fg px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-ed-bg opacity-0 shadow-md transition-opacity duration-150 group-hover/btn:opacity-100 group-focus-within/btn:opacity-100 md:block"
@@ -120,15 +120,14 @@ export function PreviewCanvasZoomControls({
   return (
     <div
       aria-label="Canvas zoom controls"
-      className={`pointer-events-auto flex items-start gap-1 ${className}`}
+      className={`pointer-events-auto flex items-start gap-0.5 ${className}`}
       role="toolbar"
     >
       <PreviewControlButton
         ariaLabel="Zoom in"
-        caption="In"
-        captionClassName="text-ed-fg"
         disabled={zoomInDisabled}
         label="Zoom In"
+        mobileCaption="Zoom+"
         onClick={onZoomIn}
         tooltipPlacement="below"
       >
@@ -136,10 +135,9 @@ export function PreviewCanvasZoomControls({
       </PreviewControlButton>
       <PreviewControlButton
         ariaLabel="Zoom out"
-        caption="Out"
-        captionClassName="text-ed-fg"
         disabled={zoomOutDisabled}
         label="Zoom Out"
+        mobileCaption="Zoom-"
         onClick={onZoomOut}
         tooltipPlacement="below"
       >
@@ -147,10 +145,9 @@ export function PreviewCanvasZoomControls({
       </PreviewControlButton>
       <PreviewControlButton
         ariaLabel="Reset zoom"
-        caption="Reset"
-        captionClassName="text-ed-fg"
         disabled={resetDisabled}
         label="Reset Zoom"
+        mobileCaption="Reset"
         onClick={onReset}
         tooltipPlacement="below"
       >

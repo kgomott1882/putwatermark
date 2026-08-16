@@ -1020,6 +1020,7 @@ export default function WatermarkEditor() {
   const mobileShellRef = useRef<HTMLDivElement>(null);
   const mobileFooterRef = useRef<HTMLElement>(null);
   const objectUrlRef = useRef<string | null>(null);
+  const imageBatchRef = useRef<BatchImageEntry[]>([]);
   const logoObjectUrlRef = useRef<string | null>(null);
   const textBoundsRef = useRef<TextBounds | null>(null);
   const layerBoundsRef = useRef<Map<string, TextBounds>>(new Map());
@@ -3402,6 +3403,8 @@ export default function WatermarkEditor() {
         pdfDocRef.current = null;
       }
 
+      revokeBatchObjectUrls(imageBatchRef.current);
+
       if (objectUrlRef.current) {
         URL.revokeObjectURL(objectUrlRef.current);
       }
@@ -3416,15 +3419,7 @@ export default function WatermarkEditor() {
     };
   }, []);
 
-  useEffect(() => {
-    return () => {
-      for (const entry of imageBatch) {
-        if (entry.objectUrl !== objectUrlRef.current) {
-          URL.revokeObjectURL(entry.objectUrl);
-        }
-      }
-    };
-  }, [imageBatch]);
+  imageBatchRef.current = imageBatch;
 
   useEffect(() => {
     const snapshot = getWatermarkSettingsSnapshot();
@@ -5740,6 +5735,9 @@ export default function WatermarkEditor() {
       const zipBlob = await zip.generateAsync({ type: "blob" });
       downloadBlob(zipBlob, "watermarked-images.zip");
       setImageBatch(nextBatch);
+      setIsExporting(false);
+      setIsExportPreparing(false);
+      setBatchExportProgress(null);
 
       if (isCleanExportTier(auth.tier)) {
         try {
@@ -6671,15 +6669,17 @@ export default function WatermarkEditor() {
                   {
                     fileName,
                     id: activeBatchImageId ?? "single-image",
+                    image,
                     objectUrl: objectUrlRef.current,
                   },
                 ]
               : [];
 
         for (const entry of entries) {
-          const blob = await fetch(entry.objectUrl).then((response) =>
-            response.blob(),
-          );
+          const blob =
+            "image" in entry && entry.image
+              ? await imageElementToBlob(entry.image)
+              : await fetch(entry.objectUrl).then((response) => response.blob());
 
           files.push(
             await blobToStoredSessionFile(
@@ -13062,7 +13062,7 @@ function EditorMediaActionButtons({
   }
 
   return (
-    <div className="flex shrink-0 items-start gap-1 md:items-start">
+    <div className="flex shrink-0 items-start gap-0.5 md:items-start md:gap-1">
       {!isPdfLoading ? (
         <>
           <PreviewControlButton
@@ -13157,6 +13157,42 @@ function imageElementToDataUrl(image: HTMLImageElement): Promise<string> {
 
   context.drawImage(image, 0, 0);
   return Promise.resolve(canvas.toDataURL("image/png"));
+}
+
+function imageElementToBlob(
+  image: HTMLImageElement,
+  mimeType = "image/jpeg",
+): Promise<Blob> {
+  if (image.src.startsWith("data:")) {
+    return fetch(image.src).then((response) => response.blob());
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return Promise.reject(new Error("We could not read that image."));
+  }
+
+  context.drawImage(image, 0, 0);
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          resolve(blob);
+          return;
+        }
+
+        reject(new Error("We could not read that image."));
+      },
+      mimeType,
+      0.92,
+    );
+  });
 }
 
 function getCanvasLogicalSize(canvas: HTMLCanvasElement) {

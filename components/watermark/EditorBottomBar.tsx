@@ -54,7 +54,7 @@ type EditorFooterMobileActionProps = {
 
 function footerMobileIconClassName(variant: FooterMobileActionVariant) {
   const base =
-    "flex h-11 w-11 shrink-0 items-center justify-center rounded-md transition disabled:cursor-not-allowed disabled:opacity-45 md:h-7 md:w-7";
+    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition disabled:cursor-not-allowed disabled:opacity-45 md:h-7 md:w-7";
 
   switch (variant) {
     case "signal":
@@ -163,13 +163,13 @@ export function EditorBottomBar({
 
       <div className="flex min-w-0 items-center justify-center gap-1 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] md:flex-1 [&::-webkit-scrollbar]:hidden">
         {mediaActions ? (
-          <div className="flex shrink-0 items-center gap-1 md:hidden">
+          <div className="flex shrink-0 items-center gap-0.5 md:hidden">
             {mediaActions}
           </div>
         ) : null}
         {showHistoryControls ? (
           <>
-            <div className="flex shrink-0 items-center gap-1 md:hidden">
+            <div className="flex shrink-0 items-center gap-0.5 md:hidden">
               <EditorFooterMobileAction
                 ariaLabel="Undo"
                 caption="Undo"
