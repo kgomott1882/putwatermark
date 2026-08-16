@@ -26,21 +26,25 @@ export function validateSignatureManifestEntry(
   }
 
   if (entry.kind === "initials") {
-    if (entry.source !== "type") {
-      return "Initials must be typed.";
+    if (entry.source === "draw") {
+      return null;
     }
 
-    const text = entry.typedText?.trim() ?? "";
+    if (entry.source === "type") {
+      const text = entry.typedText?.trim() ?? entry.label?.trim() ?? "";
 
-    if (!text) {
-      return "Initials text is required.";
+      if (!text) {
+        return "Initials text is required.";
+      }
+
+      if (text.length > INITIALS_MAX_LENGTH) {
+        return `Initials must be ${INITIALS_MAX_LENGTH} characters or fewer.`;
+      }
+
+      return null;
     }
 
-    if (text.length > INITIALS_MAX_LENGTH) {
-      return `Initials must be ${INITIALS_MAX_LENGTH} characters or fewer.`;
-    }
-
-    return null;
+    return "Initials must be drawn or typed.";
   }
 
   if (entry.source === "type") {
@@ -53,10 +57,6 @@ export function validateSignatureManifestEntry(
     if (text.length > FULL_SIGNATURE_TYPED_MAX_LENGTH) {
       return `Signature text must be ${FULL_SIGNATURE_TYPED_MAX_LENGTH} characters or fewer.`;
     }
-  }
-
-  if (entry.source === "draw" && entry.kind !== "full") {
-    return "Drawn signatures must be full signatures.";
   }
 
   return null;

@@ -1,4 +1,4 @@
-import type { VideoOverlayPass } from "./watermarkVideoExport";
+import type { VideoOverlayPass } from "./videoOverlayPasses";
 import {
   clampTimelineSeconds,
   clampVisibilityEndSeconds,

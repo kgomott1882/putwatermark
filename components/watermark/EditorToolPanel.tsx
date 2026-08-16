@@ -82,52 +82,45 @@ export function EditorToolPanel({
             </span>
           </button>
         ) : null}
+
         {toolRail && !mobileControlsCollapsed ? (
-          <div className="editor-mobile-expanded-tool-rail shrink-0 border-b border-ed-border bg-ed-panel md:hidden">
+          <div className="editor-mobile-expanded-tool-rail pointer-events-auto shrink-0 border-b border-ed-border bg-ed-panel md:hidden">
             {toolRail}
           </div>
         ) : null}
+
         {toolRail ? (
-          <div
-            className={`z-10 flex shrink-0 flex-col border-b border-ed-border bg-ed-panel md:overflow-y-auto md:border-b-0 ${
-              mobileControlsCollapsed
-                ? "max-md:min-h-[2.75rem] max-md:flex-row max-md:items-stretch max-md:border-b-0"
-                : "max-md:hidden md:flex md:flex-col"
-            }`}
-          >
-            <div
-              className={`min-w-0 flex-1 max-md:[&_nav]:border-t-0 ${
-                mobileControlsCollapsed ? "max-md:hidden" : ""
-              }`}
-            >
-              {toolRail}
-            </div>
-            {mobileControlsCollapsed && onToggleMobileControls ? (
-              <button
-                className="flex min-w-0 flex-1 items-center justify-between gap-2 border-l-0 border-emerald-200 bg-emerald-100 px-4 py-2 text-emerald-900 transition hover:bg-emerald-200/80 md:hidden"
-                onClick={onToggleMobileControls}
-                type="button"
-              >
-                <span className="min-w-0 text-left">
-                  <span className="block text-[10px] font-bold uppercase tracking-[0.12em]">
-                    Tools
-                  </span>
-                  <span className="mt-0.5 block text-[9px] font-medium normal-case leading-tight text-emerald-800/85">
-                    Tap for text, logo & settings
-                  </span>
-                </span>
-                <span
-                  aria-hidden
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-700/10 text-sm leading-none text-emerald-900"
-                >
-                  ↑
-                </span>
-              </button>
-            ) : null}
+          <div className="pointer-events-auto relative z-20 hidden shrink-0 flex-col border-b border-ed-border bg-ed-panel md:flex md:overflow-y-auto md:border-b-0 md:border-r">
+            {toolRail}
           </div>
-        ) : mobileControlsCollapsed && onToggleMobileControls ? (
+        ) : null}
+
+        {toolRail && mobileControlsCollapsed && onToggleMobileControls ? (
           <button
-            className="flex shrink-0 items-center justify-center gap-1.5 border-b border-emerald-200 bg-emerald-100 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-900 transition hover:bg-emerald-200/80 md:hidden"
+            className="pointer-events-auto flex min-h-[2.75rem] shrink-0 items-center justify-between gap-2 border-b border-emerald-200 bg-emerald-100 px-4 py-2 text-emerald-900 transition hover:bg-emerald-200/80 md:hidden"
+            onClick={onToggleMobileControls}
+            type="button"
+          >
+            <span className="min-w-0 text-left">
+              <span className="block text-[10px] font-bold uppercase tracking-[0.12em]">
+                Tools
+              </span>
+              <span className="mt-0.5 block text-[9px] font-medium normal-case leading-tight text-emerald-800/85">
+                Tap for text, logo & settings
+              </span>
+            </span>
+            <span
+              aria-hidden
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-700/10 text-sm leading-none text-emerald-900"
+            >
+              ↑
+            </span>
+          </button>
+        ) : null}
+
+        {!toolRail && mobileControlsCollapsed && onToggleMobileControls ? (
+          <button
+            className="pointer-events-auto flex shrink-0 items-center justify-center gap-1.5 border-b border-emerald-200 bg-emerald-100 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-900 transition hover:bg-emerald-200/80 md:hidden"
             onClick={onToggleMobileControls}
             type="button"
           >
@@ -137,9 +130,10 @@ export function EditorToolPanel({
             </span>
           </button>
         ) : null}
+
         <motion.div
           animate={{ opacity: 1, x: 0 }}
-          className={`min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-1 py-0.5 md:px-2.5 md:py-2 ${
+          className={`relative z-0 min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain px-1 py-0.5 md:px-2.5 md:py-2 ${
             mobileControlsCollapsed ? "max-md:hidden" : ""
           }`}
           initial={instant ? false : { opacity: 0, x: 14 }}

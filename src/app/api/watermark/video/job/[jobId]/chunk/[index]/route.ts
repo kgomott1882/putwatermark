@@ -30,13 +30,22 @@ export async function POST(request: Request, context: RouteContext) {
     const body = (await request.json()) as {
       inputFileName?: string;
       overlayBase64?: string;
+      overlayPasses?: Array<{
+        overlayBase64?: string;
+        visibleFromSeconds?: number;
+        visibleUntilSeconds?: number;
+      }>;
     };
+
+    const hasOverlayPasses =
+      Array.isArray(body.overlayPasses) && body.overlayPasses.length > 0;
+    const hasLegacyOverlay = typeof body.overlayBase64 === "string";
 
     if (
       !Number.isInteger(chunkIndex) ||
       chunkIndex < 0 ||
       typeof body.inputFileName !== "string" ||
-      typeof body.overlayBase64 !== "string"
+      (!hasOverlayPasses && !hasLegacyOverlay)
     ) {
       return NextResponse.json(
         { error: "Missing video chunk processing payload." },
@@ -50,6 +59,13 @@ export async function POST(request: Request, context: RouteContext) {
         inputFileName: body.inputFileName,
         jobId,
         overlayBase64: body.overlayBase64,
+        overlayPasses: body.overlayPasses as
+          | Array<{
+              overlayBase64: string;
+              visibleFromSeconds?: number;
+              visibleUntilSeconds?: number;
+            }>
+          | undefined,
         userId,
       },
       request.signal,

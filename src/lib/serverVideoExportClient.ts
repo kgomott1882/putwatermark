@@ -15,6 +15,7 @@ import {
   VideoExportFailedError,
   VideoExportTimeoutError,
 } from "./watermarkVideoExport";
+import type { VideoOverlayPass } from "./videoOverlayPasses";
 
 export type ServerVideoExportStage =
   | "downloading"
@@ -67,11 +68,13 @@ type SharedServerExportInput = {
   onProcessingDetailChange?: (detail: string | null) => void;
   onProgress: (progress: number) => void;
   onStageChange: (stage: ServerVideoExportStage) => void;
-  overlayPngBytes: Uint8Array;
+  overlayPasses: VideoOverlayPass[];
   shouldCancel: () => boolean;
   trimEndSeconds?: number;
   trimStartSeconds?: number;
   videoBlob: Blob;
+  videoLongServerRouted?: boolean;
+  videoServerRouted?: boolean;
   width: number;
 };
 
@@ -87,6 +90,8 @@ type ServerUploadTargetInput = Pick<
   | "onStageChange"
   | "shouldCancel"
   | "videoBlob"
+  | "videoLongServerRouted"
+  | "videoServerRouted"
   | "width"
 >;
 
@@ -168,6 +173,14 @@ function uint8ArrayToBase64(bytes: Uint8Array) {
   return btoa(binary);
 }
 
+function serializeOverlayPassesForServer(overlayPasses: VideoOverlayPass[]) {
+  return overlayPasses.map((pass) => ({
+    overlayBase64: uint8ArrayToBase64(pass.overlayPngBytes),
+    visibleFromSeconds: pass.visibleFromSeconds,
+    visibleUntilSeconds: pass.visibleUntilSeconds,
+  }));
+}
+
 function startIndeterminateProgress({
   from,
   onProgress,
@@ -207,6 +220,8 @@ async function prepareServerUploadTarget({
   onStageChange,
   shouldCancel,
   videoBlob,
+  videoLongServerRouted,
+  videoServerRouted,
   width,
 }: ServerUploadTargetInput) {
   assertNotCancelled(shouldCancel);
@@ -223,6 +238,8 @@ async function prepareServerUploadTarget({
       fileSizeBytes,
       height,
       resumeJobId,
+      videoLongServerRouted: videoLongServerRouted ?? false,
+      videoServerRouted: videoServerRouted ?? true,
       width,
     }),
     headers: {
@@ -393,7 +410,9 @@ export async function exportLongVideoOnServer(input: SharedServerExportInput) {
   };
 
   const chunkCount = splitPayload.job.chunkCount;
-  const overlayBase64 = uint8ArrayToBase64(input.overlayPngBytes);
+  const overlayPassesPayload = serializeOverlayPassesForServer(
+    input.overlayPasses,
+  );
   const chunkProgressSpan = Math.max(1, 50 / Math.max(chunkCount, 1));
 
   input.onProgress(34);
@@ -440,7 +459,7 @@ export async function exportLongVideoOnServer(input: SharedServerExportInput) {
           {
             body: JSON.stringify({
               inputFileName: input.inputFileName,
-              overlayBase64,
+              overlayPasses: overlayPassesPayload,
             }),
             headers: {
               "Content-Type": "application/json",
@@ -576,11 +595,13 @@ export async function exportVideoOnServer({
   inputFileName,
   onProgress,
   onStageChange,
-  overlayPngBytes,
+  overlayPasses,
   shouldCancel,
   trimEndSeconds,
   trimStartSeconds,
   videoBlob,
+  videoLongServerRouted,
+  videoServerRouted,
   width,
 }: ExportVideoOnServerInput) {
   const uploadTarget = await prepareServerUploadTarget({
@@ -594,6 +615,8 @@ export async function exportVideoOnServer({
     onStageChange,
     shouldCancel,
     videoBlob,
+    videoLongServerRouted,
+    videoServerRouted,
     width,
   });
 
@@ -621,13 +644,15 @@ export async function exportVideoOnServer({
           height,
           inputFileName,
           jobId: uploadTarget.jobId,
-          overlayBase64: uint8ArrayToBase64(overlayPngBytes),
+          overlayPasses: serializeOverlayPassesForServer(overlayPasses),
           trimDurationSeconds:
             trimEndSeconds !== undefined
               ? Math.max(0, trimEndSeconds - (trimStartSeconds ?? 0))
               : undefined,
           trimStartSeconds,
+          videoLongServerRouted: videoLongServerRouted ?? false,
           videoPath: uploadTarget.uploadPath,
+          videoServerRouted: videoServerRouted ?? true,
           width,
         }),
         headers: {

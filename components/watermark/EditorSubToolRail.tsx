@@ -28,7 +28,7 @@ export function EditorSubToolRail({
     <div className="relative">
       <nav
         aria-label={ariaLabel}
-        className={`flex min-w-0 w-full shrink-0 flex-row gap-0.5 overflow-x-auto overscroll-x-contain bg-ed-panel py-1 [-ms-overflow-style:none] [scrollbar-width:none] md:w-[5rem] md:flex-col md:gap-1 md:overflow-x-visible md:overflow-y-auto md:border-b-0 md:border-r md:py-2 [&::-webkit-scrollbar]:hidden ${SUB_TOOL_RAIL_EDGE_INSET_X} ${
+        className={`pointer-events-auto flex min-w-0 w-full shrink-0 flex-row gap-0.5 overflow-x-auto overscroll-x-contain bg-ed-panel py-1 [-ms-overflow-style:none] [scrollbar-width:none] md:w-[5rem] md:flex-col md:gap-1 md:overflow-x-visible md:overflow-y-auto md:border-b-0 md:border-r md:py-2 [&::-webkit-scrollbar]:hidden ${SUB_TOOL_RAIL_EDGE_INSET_X} ${
           mobileTrailingAccessory ? "max-md:pr-[4.5rem]" : ""
         }`}
       >
@@ -55,7 +55,7 @@ export function EditorSubToolButton({
 
   return (
     <button
-      className={`flex shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] leading-tight transition disabled:cursor-not-allowed md:w-full md:gap-2 md:rounded-xl md:px-1.5 md:py-3 md:text-[10px] ${
+      className={`flex shrink-0 touch-manipulation flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] leading-tight transition disabled:cursor-not-allowed md:w-full md:gap-2 md:rounded-xl md:px-1.5 md:py-3 md:text-[10px] ${
         active
           ? "editor-selected-pill"
           : disabled

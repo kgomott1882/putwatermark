@@ -48,10 +48,17 @@ type UploadUrlRequest = {
   width: number;
 };
 
+type OverlayPassPayload = {
+  overlayBase64: string;
+  visibleFromSeconds?: number;
+  visibleUntilSeconds?: number;
+};
+
 type ProcessVideoRequest = {
   inputFileName: string;
   jobId: string;
-  overlayBase64: string;
+  overlayBase64?: string;
+  overlayPasses?: OverlayPassPayload[];
   trimDurationSeconds?: number;
   trimStartSeconds?: number;
   videoPath: string;
@@ -69,7 +76,8 @@ type ProcessLongVideoChunkRequest = {
   chunkIndex: number;
   inputFileName: string;
   jobId: string;
-  overlayBase64: string;
+  overlayBase64?: string;
+  overlayPasses?: OverlayPassPayload[];
   userId: string;
 };
 
@@ -103,6 +111,43 @@ function decodeOverlayBase64(overlayBase64: string) {
   } catch {
     throw new ServerVideoProcessingError("Invalid watermark overlay PNG.");
   }
+}
+
+function decodeOverlayPassesFromRequest(body: {
+  overlayBase64?: string;
+  overlayPasses?: OverlayPassPayload[];
+}) {
+  if (Array.isArray(body.overlayPasses) && body.overlayPasses.length > 0) {
+    return body.overlayPasses.map((pass) => {
+      if (typeof pass.overlayBase64 !== "string") {
+        throw new ServerVideoProcessingError("Invalid watermark overlay PNG.");
+      }
+
+      return {
+        overlayPngBytes: decodeOverlayBase64(pass.overlayBase64),
+        visibleFromSeconds:
+          typeof pass.visibleFromSeconds === "number"
+            ? pass.visibleFromSeconds
+            : undefined,
+        visibleUntilSeconds:
+          typeof pass.visibleUntilSeconds === "number"
+            ? pass.visibleUntilSeconds
+            : undefined,
+      };
+    });
+  }
+
+  if (typeof body.overlayBase64 === "string") {
+    return [
+      {
+        overlayPngBytes: decodeOverlayBase64(body.overlayBase64),
+      },
+    ];
+  }
+
+  throw new ServerVideoProcessingError(
+    "Server video export is missing a watermark overlay.",
+  );
 }
 
 function isServerOrLongVideoUploadEligible(
@@ -209,7 +254,7 @@ export async function processServerVideoExport(
   signal?: AbortSignal,
 ) {
   const jobId = sanitizeJobId(body.jobId);
-  const overlayPngBytes = decodeOverlayBase64(body.overlayBase64);
+  const overlayPasses = decodeOverlayPassesFromRequest(body);
   const supabase = createAdminClient();
   const outputPath = `jobs/${jobId}/output.mp4`;
 
@@ -234,7 +279,7 @@ export async function processServerVideoExport(
     const outputVideoBytes = await processVideoWithOverlayInTmp({
       inputFileName: body.inputFileName,
       inputVideoBytes,
-      overlayPngBytes,
+      overlayPasses,
       signal,
       trimDurationSeconds: body.trimDurationSeconds,
       trimStartSeconds: body.trimStartSeconds ?? 0,
@@ -377,7 +422,7 @@ export async function processLongVideoExportChunk(
       inputFileName: body.inputFileName,
       inputPath: rawPath,
       outputPath: encodedPath,
-      overlayPngBytes: decodeOverlayBase64(body.overlayBase64),
+      overlayPasses: decodeOverlayPassesFromRequest(body),
       signal,
     });
     await uploadFileToStorage(chunk.encodedPath, encodedPath, "video/mp4");

@@ -41,7 +41,17 @@ export function VideoToolRail({
       ariaLabel="Video tools"
       mobileTrailingAccessory={mobileTrailingAccessory}
     >
-      <div className={hideOverviewOnMobile ? "hidden md:contents" : "contents"}>
+      {hideOverviewOnMobile ? (
+        <div className="hidden md:block">
+          <EditorSubToolButton
+            active={activeTool === "overview"}
+            disabled={toolsDisabled}
+            icon={<Clapperboard className="h-5 w-5 md:h-6 md:w-6" strokeWidth={1.75} />}
+            label="Overview"
+            onClick={() => onSelectTool("overview")}
+          />
+        </div>
+      ) : (
         <EditorSubToolButton
           active={activeTool === "overview"}
           disabled={toolsDisabled}
@@ -49,7 +59,7 @@ export function VideoToolRail({
           label="Overview"
           onClick={() => onSelectTool("overview")}
         />
-      </div>
+      )}
       <EditorSubToolButton
         active={activeTool === "watermark"}
         disabled={toolsDisabled}

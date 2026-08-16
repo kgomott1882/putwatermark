@@ -7,12 +7,17 @@ import {
   type PointerEvent,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import {
   createSignatureId,
+  DEFAULT_SIGNATURE_STROKE_WIDTH,
   loadImageFromCanvas,
+  MAX_SIGNATURE_STROKE_WIDTH,
+  MIN_SIGNATURE_STROKE_WIDTH,
+  regenerateSignatureImage,
   renderTypedSignatureCanvas,
   SIGNATURE_DRAG_MIME,
   SIGNATURE_SCRIPT_FONT,
@@ -31,12 +36,15 @@ import {
 } from "./EditorToolPanel";
 
 export type SavedSignature = {
+  baseStrokeWidth?: number;
   id: string;
   image: HTMLImageElement;
   kind: SignatureKind;
   label: string;
   previewSrc: string;
   source: "draw" | "type";
+  sourceDataUrl?: string | null;
+  strokeWidth: number;
   typedText?: string | null;
 };
 
@@ -70,6 +78,42 @@ const defaultPlacement: SignaturePlacement = {
   yPercent: 0.84,
 };
 
+function SignatureStrokeSlider({
+  id,
+  onChange,
+  value,
+}: {
+  id: string;
+  onChange: (value: number) => void;
+  value: number;
+}) {
+  return (
+    <div className="min-w-0 px-1 pb-1">
+      <div className="flex items-center justify-between gap-2">
+        <label
+          className="text-[10px] font-bold uppercase tracking-[0.08em] text-ed-fg"
+          htmlFor={id}
+        >
+          Line thickness
+        </label>
+        <span className="text-[11px] font-semibold tabular-nums text-ed-fg">
+          {value.toFixed(1)}px
+        </span>
+      </div>
+      <input
+        className="editor-range mt-1 touch-manipulation"
+        id={id}
+        max={MAX_SIGNATURE_STROKE_WIDTH}
+        min={MIN_SIGNATURE_STROKE_WIDTH}
+        onChange={(event) => onChange(Number(event.target.value))}
+        step={0.25}
+        type="range"
+        value={value}
+      />
+    </div>
+  );
+}
+
 export function SignatureControls({
   activeSignatureId,
   hasDocument,
@@ -89,6 +133,25 @@ export function SignatureControls({
   const [typedName, setTypedName] = useState("");
   const [hasDrawn, setHasDrawn] = useState(false);
   const [signatureError, setSignatureError] = useState("");
+  const [draftStrokeWidth, setDraftStrokeWidth] = useState(
+    DEFAULT_SIGNATURE_STROKE_WIDTH,
+  );
+  const [updatingSignatureId, setUpdatingSignatureId] = useState<string | null>(
+    null,
+  );
+  const strokeUpdateTimeoutRef = useRef<number | null>(null);
+  const savedSignaturesRef = useRef(savedSignatures);
+  const savedSignatureUpdateVersionRef = useRef(0);
+
+  savedSignaturesRef.current = savedSignatures;
+
+  useEffect(() => {
+    return () => {
+      if (strokeUpdateTimeoutRef.current !== null) {
+        window.clearTimeout(strokeUpdateTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const resetPad = useCallback(() => {
     const canvas = canvasRef.current;
@@ -117,12 +180,12 @@ export function SignatureControls({
     context.lineCap = "round";
     context.lineJoin = "round";
     context.strokeStyle = "#000000";
-    context.lineWidth = 2.75;
+    context.lineWidth = draftStrokeWidth;
     setHasDrawn(false);
-  }, []);
+  }, [draftStrokeWidth]);
 
   useEffect(() => {
-    if (!addingKind || addingKind !== "full" || inputMode !== "draw") {
+    if (!addingKind || inputMode !== "draw") {
       return;
     }
 
@@ -221,46 +284,47 @@ export function SignatureControls({
     let source: SignatureInputMode = inputMode;
     let typedText: string | null = null;
 
-    if (addingKind === "initials") {
-      const trimmedInitials = typedName.trim();
-
-      if (!trimmedInitials) {
-        setSignatureError("Type your initials before saving.");
-        return;
-      }
-
-      if (trimmedInitials.length > INITIALS_MAX_LENGTH) {
-        setSignatureError(`Initials must be ${INITIALS_MAX_LENGTH} characters or fewer.`);
-        return;
-      }
-
-      signatureCanvas = renderTypedSignatureCanvas(
-        trimmedInitials,
-        SIGNATURE_SCRIPT_FONT,
-      );
-      label = trimmedInitials;
-      source = "type";
-      typedText = trimmedInitials;
-    } else if (inputMode === "draw") {
+    if (inputMode === "draw") {
       const canvas = canvasRef.current;
 
       if (!canvas || !hasDrawn) {
-        setSignatureError("Draw your signature before saving.");
+        setSignatureError(
+          addingKind === "initials"
+            ? "Draw your initials before saving."
+            : "Draw your signature before saving.",
+        );
         return;
       }
 
       signatureCanvas = trimCanvasToContent(canvas);
-      label = `Signature ${savedSignatures.filter((entry) => entry.kind === "full").length + 1}`;
+      label =
+        addingKind === "initials"
+          ? String(
+              savedSignatures.filter((entry) => entry.kind === "initials").length +
+                1,
+            )
+          : `Signature ${savedSignatures.filter((entry) => entry.kind === "full").length + 1}`;
       source = "draw";
     } else {
       const trimmedName = typedName.trim();
 
       if (!trimmedName) {
-        setSignatureError("Type your signature before saving.");
+        setSignatureError(
+          addingKind === "initials"
+            ? "Type your initials before saving."
+            : "Type your signature before saving.",
+        );
         return;
       }
 
-      if (trimmedName.length > FULL_SIGNATURE_TYPED_MAX_LENGTH) {
+      if (addingKind === "initials") {
+        if (trimmedName.length > INITIALS_MAX_LENGTH) {
+          setSignatureError(
+            `Initials must be ${INITIALS_MAX_LENGTH} characters or fewer.`,
+          );
+          return;
+        }
+      } else if (trimmedName.length > FULL_SIGNATURE_TYPED_MAX_LENGTH) {
         setSignatureError(
           `Signature text must be ${FULL_SIGNATURE_TYPED_MAX_LENGTH} characters or fewer.`,
         );
@@ -270,6 +334,7 @@ export function SignatureControls({
       signatureCanvas = renderTypedSignatureCanvas(
         trimmedName,
         SIGNATURE_SCRIPT_FONT,
+        draftStrokeWidth,
       );
       label = trimmedName;
       source = "type";
@@ -300,13 +365,18 @@ export function SignatureControls({
 
     try {
       const image = await loadImageFromCanvas(signatureCanvas);
+      const sourceDataUrl =
+        signatureCanvas.toDataURL("image/png");
       const nextSignature: SavedSignature = {
+        baseStrokeWidth: draftStrokeWidth,
         id: createSignatureId(),
         image,
         kind: addingKind,
         label,
         previewSrc: image.src,
         source,
+        sourceDataUrl,
+        strokeWidth: draftStrokeWidth,
         typedText,
       };
       const nextSignatures = [...savedSignatures, nextSignature];
@@ -340,16 +410,107 @@ export function SignatureControls({
 
   function openAddSignature(kind: SignatureKind) {
     setAddingKind(kind);
-    setInputMode(kind === "initials" ? "type" : "draw");
+    setInputMode("draw");
     setTypedName("");
     setSignatureError("");
+    setDraftStrokeWidth(DEFAULT_SIGNATURE_STROKE_WIDTH);
     resetPad();
+  }
+
+  function scheduleSavedSignatureStrokeWidthUpdate(
+    signatureId: string,
+    strokeWidth: number,
+  ) {
+    onSignaturesChange(
+      savedSignaturesRef.current.map((entry) =>
+        entry.id === signatureId ? { ...entry, strokeWidth } : entry,
+      ),
+    );
+
+    if (strokeUpdateTimeoutRef.current !== null) {
+      window.clearTimeout(strokeUpdateTimeoutRef.current);
+    }
+
+    strokeUpdateTimeoutRef.current = window.setTimeout(() => {
+      void updateSavedSignatureStrokeWidth(signatureId, strokeWidth);
+    }, 150);
+  }
+
+  async function updateSavedSignatureStrokeWidth(
+    signatureId: string,
+    strokeWidth: number,
+  ) {
+    const signature = savedSignaturesRef.current.find(
+      (entry) => entry.id === signatureId,
+    );
+
+    if (!signature) {
+      return;
+    }
+
+    const updateVersion = ++savedSignatureUpdateVersionRef.current;
+
+    setUpdatingSignatureId(signatureId);
+    setSignatureError("");
+
+    try {
+      const regenerated = await regenerateSignatureImage({
+        baseStrokeWidth: signature.baseStrokeWidth ?? signature.strokeWidth,
+        kind: signature.kind,
+        label: signature.label,
+        previewSrc: signature.previewSrc,
+        source: signature.source,
+        sourceDataUrl: signature.sourceDataUrl ?? signature.previewSrc,
+        strokeWidth,
+        typedText: signature.typedText,
+      });
+
+      if (updateVersion !== savedSignatureUpdateVersionRef.current) {
+        return;
+      }
+
+      const nextSignatures = savedSignaturesRef.current.map((entry) =>
+        entry.id === signatureId
+          ? {
+              ...entry,
+              image: regenerated.image,
+              previewSrc: regenerated.previewSrc,
+              strokeWidth,
+            }
+          : entry,
+      );
+
+      onSignaturesChange(nextSignatures);
+
+      if (activeSignatureId === signatureId) {
+        onActiveSignatureChange(
+          nextSignatures.find((entry) => entry.id === signatureId) ?? null,
+        );
+      }
+    } catch {
+      setSignatureError("Could not update that signature thickness.");
+    } finally {
+      if (updateVersion === savedSignatureUpdateVersionRef.current) {
+        setUpdatingSignatureId(null);
+      }
+    }
   }
 
   const typedMaxLength =
     addingKind === "initials"
       ? INITIALS_MAX_LENGTH
       : FULL_SIGNATURE_TYPED_MAX_LENGTH;
+  const typedPreviewSrc = useMemo(() => {
+    if (!addingKind || inputMode === "draw") {
+      return null;
+    }
+
+    return renderTypedSignatureCanvas(
+      typedName.trim() || "Preview",
+      SIGNATURE_SCRIPT_FONT,
+      draftStrokeWidth,
+    ).toDataURL("image/png");
+  }, [addingKind, draftStrokeWidth, inputMode, typedName]);
 
   return (
     <div className="space-y-2">
@@ -369,6 +530,12 @@ export function SignatureControls({
         </button>
       ) : null}
 
+      {signatureError ? (
+        <p className="rounded-lg border border-ed-accent/30 bg-ed-accent/10 px-2.5 py-2 text-xs text-ed-fg">
+          {signatureError}
+        </p>
+      ) : null}
+
       {savedSignatures.length ? (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-2">
@@ -385,16 +552,18 @@ export function SignatureControls({
           <div className="flex flex-col gap-1.5">
             {savedSignatures.map((signature) => {
               const isActive = signature.id === activeSignatureId;
+              const isUpdating = updatingSignatureId === signature.id;
 
               return (
                 <div
-                  className={`group flex items-center gap-1 rounded-xl border px-1 py-1 transition shadow-sm ${
+                  className={`group flex flex-col gap-1 rounded-xl border px-1 py-1 transition shadow-sm ${
                     isActive
                       ? "border-2 border-[#e8dfd1] bg-[#faf6f0] ring-2 ring-[#e8dfd1]/50"
                       : "editor-secondary-button border-ed-border bg-ed-bg hover:border-[#e8dfd1]"
                   }`}
                   key={signature.id}
                 >
+                  <div className="flex items-center gap-1">
                   <span
                     aria-hidden
                     className="px-0.5 text-ed-fg-muted/70"
@@ -425,6 +594,7 @@ export function SignatureControls({
                         alt=""
                         className="pointer-events-none max-h-8 max-w-[3.75rem] object-contain"
                         draggable={false}
+                        key={`${signature.id}-${signature.previewSrc}`}
                         src={signature.previewSrc}
                       />
                     </span>
@@ -457,6 +627,24 @@ export function SignatureControls({
                   >
                     <X className="h-3.5 w-3.5" strokeWidth={2} />
                   </button>
+                  </div>
+
+                  {isActive ? (
+                    <SignatureStrokeSlider
+                      id={`signature-stroke-${signature.id}`}
+                      onChange={(value) => {
+                        scheduleSavedSignatureStrokeWidthUpdate(signature.id, value);
+                      }}
+                      value={
+                        signature.strokeWidth ?? DEFAULT_SIGNATURE_STROKE_WIDTH
+                      }
+                    />
+                  ) : null}
+                  {isUpdating ? (
+                    <p className="px-1 pb-1 text-[10px] text-ed-fg-muted">
+                      Updating thickness…
+                    </p>
+                  ) : null}
                 </div>
               );
             })}
@@ -471,39 +659,50 @@ export function SignatureControls({
               {addingKind === "initials" ? "Add initials" : "Add signature"}
             </p>
 
-            {addingKind === "full" ? (
-              <div className="editor-segment-track mt-2 grid grid-cols-2 gap-2">
-                <EditorSegment
-                  active={inputMode === "draw"}
-                  groupId="signature-input-mode"
-                  onClick={() => {
-                    setInputMode("draw");
-                    setSignatureError("");
-                  }}
-                >
-                  <span className="inline-flex items-center gap-1">
-                    <PenLine className="h-3.5 w-3.5" strokeWidth={2} />
-                    Draw
-                  </span>
-                </EditorSegment>
-                <EditorSegment
-                  active={inputMode === "type"}
-                  groupId="signature-input-mode"
-                  onClick={() => {
-                    setInputMode("type");
-                    setSignatureError("");
-                  }}
-                >
-                  <span className="inline-flex items-center gap-1">
-                    <Type className="h-3.5 w-3.5" strokeWidth={2} />
-                    Type
-                  </span>
-                </EditorSegment>
-              </div>
-            ) : null}
+            <div className="editor-segment-track mt-2 grid grid-cols-2 gap-2">
+              <EditorSegment
+                active={inputMode === "draw"}
+                groupId={
+                  addingKind === "initials"
+                    ? "initials-input-mode"
+                    : "signature-input-mode"
+                }
+                onClick={() => {
+                  setInputMode("draw");
+                  setSignatureError("");
+                }}
+              >
+                <span className="inline-flex items-center gap-1">
+                  <PenLine className="h-3.5 w-3.5" strokeWidth={2} />
+                  Draw
+                </span>
+              </EditorSegment>
+              <EditorSegment
+                active={inputMode === "type"}
+                groupId={
+                  addingKind === "initials"
+                    ? "initials-input-mode"
+                    : "signature-input-mode"
+                }
+                onClick={() => {
+                  setInputMode("type");
+                  setSignatureError("");
+                }}
+              >
+                <span className="inline-flex items-center gap-1">
+                  <Type className="h-3.5 w-3.5" strokeWidth={2} />
+                  Type
+                </span>
+              </EditorSegment>
+            </div>
 
-            {addingKind === "full" && inputMode === "draw" ? (
+            {inputMode === "draw" ? (
               <div className="mt-2 space-y-2">
+                <p className="text-[11px] text-ed-fg-muted">
+                  {addingKind === "initials"
+                    ? "Draw your initials with the same pad and line thickness as your signature."
+                    : "Draw your signature on the pad below."}
+                </p>
                 <div className="overflow-hidden rounded-xl border border-[#e8dfd1] bg-[#faf6f0]">
                   <canvas
                     className="block h-[7.5rem] w-full touch-none cursor-crosshair bg-[#faf6f0]"
@@ -514,6 +713,15 @@ export function SignatureControls({
                     ref={canvasRef}
                   />
                 </div>
+                <SignatureStrokeSlider
+                  id={
+                    addingKind === "initials"
+                      ? "initials-draw-stroke"
+                      : "signature-draw-stroke"
+                  }
+                  onChange={setDraftStrokeWidth}
+                  value={draftStrokeWidth}
+                />
                 <div className="flex flex-wrap gap-1.5">
                   <EditorPill active={false} onClick={resetPad}>
                     Clear
@@ -534,22 +742,29 @@ export function SignatureControls({
                   maxLength={typedMaxLength}
                   onChange={(event) => setTypedName(event.target.value)}
                   placeholder={
-                    addingKind === "initials" ? "e.g. JD" : "Type your signature"
+                    addingKind === "initials" ? "e.g. TT" : "Type your signature"
                   }
                   type="text"
                   value={typedName}
                 />
+                <SignatureStrokeSlider
+                  id={
+                    addingKind === "initials"
+                      ? "initials-type-stroke"
+                      : "signature-type-stroke"
+                  }
+                  onChange={setDraftStrokeWidth}
+                  value={draftStrokeWidth}
+                />
                 <div
                   className="flex min-h-[4.5rem] items-center justify-center overflow-hidden rounded-xl border-2 border-ed-border bg-ed-bg px-3 py-2 shadow-sm"
-                  style={{
-                    fontFamily: SIGNATURE_SCRIPT_FONT,
-                    fontSize: "2rem",
-                    lineHeight: 1.1,
-                  }}
                 >
-                  <span className="truncate text-ed-fg">
-                    {typedName.trim() || "Preview"}
-                  </span>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    alt=""
+                    className="max-h-16 max-w-full object-contain"
+                    src={typedPreviewSrc ?? undefined}
+                  />
                 </div>
               </div>
             )}
@@ -604,7 +819,7 @@ export function SignatureControls({
               Add initials
             </span>
             <span className="mt-1 block text-xs text-ed-fg-muted">
-              Type only, up to {INITIALS_MAX_LENGTH} characters.
+              Draw or type, up to {INITIALS_MAX_LENGTH} characters.
             </span>
           </button>
         </div>

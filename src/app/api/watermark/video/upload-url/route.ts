@@ -32,6 +32,8 @@ export async function POST(request: Request) {
       fileSizeBytes?: number;
       height?: number;
       resumeJobId?: string;
+      videoLongServerRouted?: boolean;
+      videoServerRouted?: boolean;
       width?: number;
     };
 
@@ -54,6 +56,8 @@ export async function POST(request: Request) {
       durationSeconds: body.duration,
       fileSizeBytes: body.fileSizeBytes,
       height: body.height,
+      videoLongServerRouted: body.videoLongServerRouted === true,
+      videoServerRouted: body.videoServerRouted === true,
       width: body.width,
     };
 

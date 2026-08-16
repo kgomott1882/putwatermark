@@ -36,11 +36,14 @@ export type StoredEditorSessionMeta = {
   pdfPageFillMap?: SerializedPdfPageFillMap;
   pdfPageSignatures?: SerializedPdfPageSignatureMap;
   savedSignatures: Array<{
+    baseStrokeWidth?: number;
     id: string;
     kind?: SignatureKind;
     label: string;
     previewSrc: string;
     source: "draw" | "type";
+    sourceDataUrl?: string | null;
+    strokeWidth?: number;
     typedText?: string | null;
   }>;
   version: 1;

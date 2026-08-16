@@ -151,7 +151,7 @@ export function getDefaultVideoCaptionSettings(): VideoCaptionSettings {
     textAlign: "center",
     textColor: "#FFFFFF",
     underline: false,
-    verticalPosition: "bottom",
+    verticalPosition: "center",
   };
 }
 
@@ -171,7 +171,9 @@ export function createInitialVideoCaptionLayers(): VideoCaptionLayer[] {
   return [
     {
       ...applyCaptionPreset(layer, "karaoke"),
+      customPosition: null,
       id: layer.id,
+      verticalPosition: "center",
     },
   ];
 }
@@ -450,23 +452,6 @@ export function measureVideoCaptionLayout(
   return layout;
 }
 
-function drawCaptionHighlight(
-  context: CanvasRenderingContext2D,
-  bounds: VideoCaptionBounds,
-) {
-  context.save();
-  context.strokeStyle = "rgba(255, 255, 255, 0.95)";
-  context.lineWidth = 2;
-  context.setLineDash([6, 4]);
-  context.strokeRect(
-    bounds.left,
-    bounds.top,
-    bounds.right - bounds.left,
-    bounds.bottom - bounds.top,
-  );
-  context.restore();
-}
-
 export function drawVideoCaption(
   context: CanvasRenderingContext2D,
   canvasWidth: number,
@@ -569,9 +554,6 @@ export function drawVideoCaptions(
   layers: readonly VideoCaptionLayer[],
   timeSeconds: number,
   durationSeconds: number,
-  options?: {
-    highlightLayerId?: string;
-  },
 ): Map<string, VideoCaptionBounds> {
   const boundsByLayer = new Map<string, VideoCaptionBounds>();
 
@@ -592,10 +574,6 @@ export function drawVideoCaptions(
     }
 
     boundsByLayer.set(layer.id, layout.bounds);
-
-    if (options?.highlightLayerId === layer.id) {
-      drawCaptionHighlight(context, layout.bounds);
-    }
   }
 
   return boundsByLayer;
@@ -611,6 +589,39 @@ export function getTimedCaptionLayers(layers: readonly VideoCaptionLayer[]) {
   return layers.filter(
     (layer) => isCaptionLayerActive(layer) && captionHasTimingRange(layer),
   );
+}
+
+export async function ensureVideoCaptionFontsLoaded(
+  layers: readonly VideoCaptionLayer[],
+) {
+  if (typeof document === "undefined" || !document.fonts) {
+    return;
+  }
+
+  const seen = new Set<string>();
+
+  for (const layer of layers) {
+    if (!isCaptionLayerActive(layer)) {
+      continue;
+    }
+
+    const fontWeight = layer.fontWeight === "bold" ? 700 : 400;
+    const key = `${layer.fontFamily}:${fontWeight}:${layer.fontSizePx}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+
+    const primary = layer.fontFamily.match(/"([^"]+)"/)?.[1]
+      ?? layer.fontFamily.split(",")[0]?.trim()
+      ?? layer.fontFamily;
+
+    await document.fonts.load(
+      `${layer.fontStyle === "italic" ? "italic " : ""}${fontWeight} ${Math.max(12, layer.fontSizePx)}px "${primary}"`,
+    );
+  }
 }
 
 function roundRect(

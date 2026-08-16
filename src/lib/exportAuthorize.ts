@@ -99,6 +99,8 @@ export function parseExportFileMeta(
     signatureManifest?: unknown;
     signaturePlacementManifestPath?: unknown;
     storagePath?: unknown;
+    videoLongServerRouted?: unknown;
+    videoServerRouted?: unknown;
     width?: unknown;
   };
 
@@ -211,6 +213,14 @@ export function parseExportFileMeta(
   }
 
   if (fileType === "video") {
+    if (meta.videoServerRouted === true) {
+      parsed.videoServerRouted = true;
+    }
+
+    if (meta.videoLongServerRouted === true) {
+      parsed.videoLongServerRouted = true;
+    }
+
     if (
       !parsed.durationSeconds ||
       !parsed.fileSizeBytes ||

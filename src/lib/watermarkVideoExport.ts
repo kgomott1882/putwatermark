@@ -2,6 +2,14 @@ import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile } from "@ffmpeg/util";
 import { FFMPEG_ASSET_CACHE_BUST } from "./ffmpegCrossOriginIsolation";
 import { adjustOverlayPassesForTrim } from "./videoTrim";
+import {
+  buildOverlayFilterComplex,
+  buildOverlayImageInputArgs,
+  overlayPassesNeedExplicitVideoMap,
+  type VideoOverlayPass,
+} from "./videoOverlayPasses";
+
+export type { VideoOverlayPass } from "./videoOverlayPasses";
 
 const ffmpegCoreVersion = "0.12.6";
 const selfHostedFfmpegBasePath = "/ffmpeg";
@@ -54,12 +62,6 @@ export class FfmpegCoreLoadError extends Error {
   }
 }
 
-export type VideoOverlayPass = {
-  overlayPngBytes: Uint8Array;
-  visibleFromSeconds?: number;
-  visibleUntilSeconds?: number;
-};
-
 type ExportVideoWithOverlayInput = {
   inputFileName: string;
   onProgress: (progress: number) => void;
@@ -70,33 +72,6 @@ type ExportVideoWithOverlayInput = {
   trimStartSeconds?: number;
   videoSource: Blob | string;
 };
-
-function buildOverlayFilterComplex(passes: VideoOverlayPass[]) {
-  if (passes.length === 1 && passes[0].visibleFromSeconds === undefined) {
-    return "[0:v][1:v]overlay=0:0";
-  }
-
-  let currentLabel = "[0:v]";
-  const filterParts: string[] = [];
-
-  for (let index = 0; index < passes.length; index += 1) {
-    const pass = passes[index]!;
-    const overlayInput = index + 1;
-    const outputLabel = index === passes.length - 1 ? "[vout]" : `[v${index + 1}]`;
-    const enableSuffix =
-      pass.visibleFromSeconds !== undefined &&
-      pass.visibleUntilSeconds !== undefined
-        ? `:enable='between(t,${pass.visibleFromSeconds},${pass.visibleUntilSeconds})'`
-        : "";
-
-    filterParts.push(
-      `${currentLabel}[${overlayInput}:v]overlay=0:0${enableSuffix}${outputLabel}`,
-    );
-    currentLabel = outputLabel;
-  }
-
-  return filterParts.join(";");
-}
 
 type LoadFfmpegOptions = {
   logLabel?: string;
@@ -680,7 +655,7 @@ export async function exportVideoWithOverlay({
     ...(trimStart > 0 ? ["-ss", trimStart.toFixed(3)] : []),
     "-i",
     inputFile,
-    ...passes.flatMap((_, index) => ["-i", overlayFiles[index]!]),
+    ...passes.flatMap((_, index) => buildOverlayImageInputArgs([overlayFiles[index]!])),
     "-filter_complex",
     filterComplex,
   ];
@@ -689,7 +664,7 @@ export async function exportVideoWithOverlay({
     ffmpegArgs.push("-t", trimDuration.toFixed(3));
   }
 
-  if (passes.length > 1 || passes[0]?.visibleFromSeconds !== undefined) {
+  if (overlayPassesNeedExplicitVideoMap(passes)) {
     ffmpegArgs.push("-map", "[vout]", "-map", "0:a?");
   }
 

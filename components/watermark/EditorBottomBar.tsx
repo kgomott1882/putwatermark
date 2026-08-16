@@ -96,6 +96,10 @@ function handleExportClick(
   exportLabel: string,
   onExport: () => void,
 ) {
+  if (exportDisabled) {
+    return;
+  }
+
   console.log("[real-video-export] STEP 1/15: Export MP4 button clicked", {
     exportDisabled: Boolean(exportDisabled),
     exportLabel,
@@ -128,10 +132,10 @@ export function EditorBottomBar({
 }: EditorBottomBarProps) {
   return (
     <footer
-      className={`flex shrink-0 items-center justify-between gap-1.5 border-t border-ed-border bg-ed-panel px-1.5 py-1.5 sm:gap-3 sm:px-3 sm:py-2 max-md:grid max-md:grid-cols-[auto_minmax(0,1fr)_auto] max-md:items-center max-md:gap-x-1.5 max-md:px-2 max-md:py-1.5 ${className}`}
+      className={`editor-bottom-bar pointer-events-auto flex shrink-0 items-center justify-between gap-1.5 border-t border-ed-border bg-ed-panel px-1.5 py-1.5 sm:gap-3 sm:px-3 sm:py-2 max-md:grid max-md:grid-cols-[auto_minmax(0,1fr)_auto] max-md:items-center max-md:gap-x-1.5 max-md:px-2 max-md:py-1.5 ${className}`}
       ref={footerRef}
     >
-      <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+      <div className="pointer-events-auto relative z-10 flex shrink-0 items-center gap-1 sm:gap-1.5">
         <EditorFooterMobileAction
           ariaLabel="Exit editor"
           caption="Exit"
@@ -161,15 +165,15 @@ export function EditorBottomBar({
         ) : null}
       </div>
 
-      <div className="flex min-w-0 items-center justify-center gap-1 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] md:flex-1 [&::-webkit-scrollbar]:hidden">
+      <div className="pointer-events-none flex min-w-0 items-center justify-center gap-1 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] md:flex-1 [&::-webkit-scrollbar]:hidden">
         {mediaActions ? (
-          <div className="flex shrink-0 items-center gap-0.5 md:hidden">
+          <div className="pointer-events-auto flex shrink-0 items-center gap-0.5 md:hidden">
             {mediaActions}
           </div>
         ) : null}
         {showHistoryControls ? (
           <>
-            <div className="flex shrink-0 items-center gap-0.5 md:hidden">
+            <div className="pointer-events-auto flex shrink-0 items-center gap-0.5 md:hidden">
               <EditorFooterMobileAction
                 ariaLabel="Undo"
                 caption="Undo"
@@ -189,7 +193,7 @@ export function EditorBottomBar({
             </div>
             <button
               aria-label="Undo"
-              className="hidden items-center gap-1 rounded-lg px-1.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-ed-fg transition hover:bg-ed-fg/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:text-ed-fg-muted sm:inline-flex sm:gap-1.5 sm:px-2 sm:py-2 sm:text-[11px] sm:tracking-[0.1em] md:px-3"
+              className="pointer-events-auto hidden items-center gap-1 rounded-lg px-1.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-ed-fg transition hover:bg-ed-fg/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:text-ed-fg-muted sm:inline-flex sm:gap-1.5 sm:px-2 sm:py-2 sm:text-[11px] sm:tracking-[0.1em] md:px-3"
               disabled={!canUndo}
               onClick={onUndo}
               type="button"
@@ -199,7 +203,7 @@ export function EditorBottomBar({
             </button>
             <button
               aria-label="Redo"
-              className="hidden items-center gap-1 rounded-lg px-1.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-ed-fg transition hover:bg-ed-fg/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:text-ed-fg-muted sm:inline-flex sm:gap-1.5 sm:px-2 sm:py-2 sm:text-[11px] sm:tracking-[0.1em] md:px-3"
+              className="pointer-events-auto hidden items-center gap-1 rounded-lg px-1.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-ed-fg transition hover:bg-ed-fg/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:text-ed-fg-muted sm:inline-flex sm:gap-1.5 sm:px-2 sm:py-2 sm:text-[11px] sm:tracking-[0.1em] md:px-3"
               disabled={!canRedo}
               onClick={onRedo}
               type="button"
@@ -211,7 +215,7 @@ export function EditorBottomBar({
         ) : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="pointer-events-auto relative z-20 flex shrink-0 items-center gap-2">
         <div className="editor-secondary-button hidden items-center gap-1 rounded-lg px-2 py-1 text-ed-fg-muted sm:flex">
           <button
             aria-label="Zoom out"
@@ -238,7 +242,7 @@ export function EditorBottomBar({
 
         <button
           aria-label={exportLabel}
-          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-signal px-3 text-[9px] font-bold uppercase tracking-[0.08em] text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 md:hidden"
+          className="inline-flex h-11 min-w-[4.5rem] shrink-0 touch-manipulation items-center gap-1 rounded-lg bg-signal px-3 text-[9px] font-bold uppercase tracking-[0.08em] text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 md:hidden"
           disabled={exportDisabled}
           onClick={() => handleExportClick(exportDisabled, exportLabel, onExport)}
           title={exportTitle}
@@ -256,7 +260,7 @@ export function EditorBottomBar({
           )}
         </button>
         <button
-          className="hidden items-center gap-1 rounded-lg bg-signal px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-[0.08em] text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 sm:inline-flex sm:gap-1.5 sm:rounded-xl sm:px-3 sm:py-2 sm:text-[10px] sm:tracking-[0.1em] md:gap-2 md:px-5 md:text-xs md:tracking-[0.12em]"
+          className="hidden min-h-9 touch-manipulation items-center gap-1 rounded-lg bg-signal px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-[0.08em] text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 sm:inline-flex sm:gap-1.5 sm:min-h-10 sm:rounded-xl sm:px-3 sm:py-2 sm:text-[10px] sm:tracking-[0.1em] md:gap-2 md:px-5 md:text-xs md:tracking-[0.12em]"
           disabled={exportDisabled}
           onClick={() => handleExportClick(exportDisabled, exportLabel, onExport)}
           title={exportTitle}

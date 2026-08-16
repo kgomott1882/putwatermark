@@ -18,6 +18,16 @@ import {
   WATERMARK_TEMP_BUCKET,
 } from "../../utils/supabase/admin";
 import { LONG_VIDEO_CHUNK_MAX_DURATION_SECONDS } from "./videoExportLimits";
+import {
+  buildOverlayFilterComplex,
+  buildOverlayImageInputArgs,
+  overlayPassesNeedExplicitVideoMap,
+  type VideoOverlayPassTiming,
+} from "./videoOverlayPasses";
+
+export type ServerOverlayFilePass = VideoOverlayPassTiming & {
+  overlayPath: string;
+};
 
 const ffmpegBinary = ffmpegStatic;
 const SHORT_SCRATCH_BUDGET_BYTES = 500 * 1024 * 1024;
@@ -454,6 +464,7 @@ function buildTrimFfmpegArgs({
 export async function processVideoWithOverlayFromFiles({
   inputPath,
   overlayPath,
+  overlayPasses,
   outputPath,
   scratchBudgetBytes = CHUNK_SCRATCH_BUDGET_BYTES,
   signal,
@@ -461,7 +472,8 @@ export async function processVideoWithOverlayFromFiles({
   trimStartSeconds = 0,
 }: {
   inputPath: string;
-  overlayPath: string;
+  overlayPath?: string;
+  overlayPasses?: ServerOverlayFilePass[];
   outputPath: string;
   scratchBudgetBytes?: number;
   signal?: AbortSignal;
@@ -472,14 +484,31 @@ export async function processVideoWithOverlayFromFiles({
     throw new ServerVideoProcessingCancelledError();
   }
 
-  const [inputStats, overlayStats] = await Promise.all([
+  const resolvedPasses: ServerOverlayFilePass[] =
+    overlayPasses ??
+    (overlayPath
+      ? [
+          {
+            overlayPath,
+          },
+        ]
+      : []);
+
+  if (resolvedPasses.length === 0) {
+    throw new ServerVideoProcessingError(
+      "Server video export is missing a watermark overlay.",
+    );
+  }
+
+  const [inputStats, ...overlayStats] = await Promise.all([
     stat(inputPath),
-    stat(overlayPath),
+    ...resolvedPasses.map((pass) => stat(pass.overlayPath)),
   ]);
+  const overlayBytes = overlayStats.reduce((total, entry) => total + entry.size, 0);
   const estimatedOutputBytes = Math.ceil(inputStats.size * 1.1);
 
   if (
-    inputStats.size + overlayStats.size + estimatedOutputBytes >
+    inputStats.size + overlayBytes + estimatedOutputBytes >
     scratchBudgetBytes
   ) {
     throw new ServerVideoProcessingError(
@@ -487,37 +516,43 @@ export async function processVideoWithOverlayFromFiles({
     );
   }
 
-  await runFfmpeg(
-    [
-      "-y",
-      ...(trimStartSeconds > 0 ? ["-ss", trimStartSeconds.toFixed(3)] : []),
-      "-i",
-      inputPath,
-      "-i",
-      overlayPath,
-      "-filter_complex",
-      "[0:v][1:v]overlay=0:0",
-      ...(trimDurationSeconds !== undefined && trimDurationSeconds > 0
-        ? ["-t", trimDurationSeconds.toFixed(3)]
-        : []),
-      "-c:v",
-      "libx264",
-      "-preset",
-      "fast",
-      "-crf",
-      "22",
-      "-pix_fmt",
-      "yuv420p",
-      "-c:a",
-      "aac",
-      "-b:a",
-      "128k",
-      "-movflags",
-      "+faststart",
-      outputPath,
-    ],
-    signal,
+  const ffmpegArgs = [
+    "-y",
+    ...(trimStartSeconds > 0 ? ["-ss", trimStartSeconds.toFixed(3)] : []),
+    "-i",
+    inputPath,
+    ...buildOverlayImageInputArgs(resolvedPasses.map((pass) => pass.overlayPath)),
+    "-filter_complex",
+    buildOverlayFilterComplex(resolvedPasses),
+  ];
+
+  if (trimDurationSeconds !== undefined && trimDurationSeconds > 0) {
+    ffmpegArgs.push("-t", trimDurationSeconds.toFixed(3));
+  }
+
+  if (overlayPassesNeedExplicitVideoMap(resolvedPasses)) {
+    ffmpegArgs.push("-map", "[vout]", "-map", "0:a?");
+  }
+
+  ffmpegArgs.push(
+    "-c:v",
+    "libx264",
+    "-preset",
+    "fast",
+    "-crf",
+    "22",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
+    "-movflags",
+    "+faststart",
+    outputPath,
   );
+
+  await runFfmpeg(ffmpegArgs, signal);
 
   const outputStats = await stat(outputPath);
   if (!outputStats.size) {
@@ -577,6 +612,7 @@ export async function concatVideoFiles({
 export async function processVideoWithOverlayInTmp({
   inputFileName,
   inputVideoBytes,
+  overlayPasses,
   overlayPngBytes,
   signal,
   trimDurationSeconds,
@@ -584,7 +620,12 @@ export async function processVideoWithOverlayInTmp({
 }: {
   inputFileName: string;
   inputVideoBytes: Buffer;
-  overlayPngBytes: Buffer;
+  overlayPasses?: Array<
+    VideoOverlayPassTiming & {
+      overlayPngBytes: Buffer;
+    }
+  >;
+  overlayPngBytes?: Buffer;
   signal?: AbortSignal;
   trimDurationSeconds?: number;
   trimStartSeconds?: number;
@@ -593,12 +634,30 @@ export async function processVideoWithOverlayInTmp({
     throw new ServerVideoProcessingCancelledError();
   }
 
+  const resolvedOverlayPasses =
+    overlayPasses ??
+    (overlayPngBytes
+      ? [
+          {
+            overlayPngBytes,
+          },
+        ]
+      : []);
+
+  if (resolvedOverlayPasses.length === 0) {
+    throw new ServerVideoProcessingError(
+      "Server video export is missing a watermark overlay.",
+    );
+  }
+
+  const overlayBytes = resolvedOverlayPasses.reduce(
+    (total, pass) => total + pass.overlayPngBytes.byteLength,
+    0,
+  );
   const estimatedOutputBytes = Math.ceil(inputVideoBytes.byteLength * 1.1);
 
   if (
-    inputVideoBytes.byteLength +
-      overlayPngBytes.byteLength +
-      estimatedOutputBytes >
+    inputVideoBytes.byteLength + overlayBytes + estimatedOutputBytes >
     SHORT_SCRATCH_BUDGET_BYTES
   ) {
     throw new ServerVideoProcessingError(
@@ -609,15 +668,27 @@ export async function processVideoWithOverlayInTmp({
   const jobDirectory = await createJobDirectory();
   const inputExtension = getInputExtension(inputFileName);
   const inputPath = path.join(jobDirectory, `input.${inputExtension}`);
-  const overlayPath = path.join(jobDirectory, "overlay.png");
   const outputPath = path.join(jobDirectory, "output.mp4");
+  const overlayFilePasses: ServerOverlayFilePass[] = resolvedOverlayPasses.map(
+    (pass, index) => ({
+      overlayPath: path.join(jobDirectory, `overlay-${index}.png`),
+      visibleFromSeconds: pass.visibleFromSeconds,
+      visibleUntilSeconds: pass.visibleUntilSeconds,
+    }),
+  );
 
   try {
     await writeFile(inputPath, inputVideoBytes);
-    await writeFile(overlayPath, overlayPngBytes);
+
+    await Promise.all(
+      resolvedOverlayPasses.map((pass, index) =>
+        writeFile(overlayFilePasses[index]!.overlayPath, pass.overlayPngBytes),
+      ),
+    );
+
     await processVideoWithOverlayFromFiles({
       inputPath,
-      overlayPath,
+      overlayPasses: overlayFilePasses,
       outputPath,
       scratchBudgetBytes: SHORT_SCRATCH_BUDGET_BYTES,
       signal,
@@ -633,25 +704,58 @@ export async function processVideoWithOverlayInTmp({
 export async function processVideoWithOverlayToFile({
   inputFileName,
   inputPath,
+  overlayPasses,
   overlayPngBytes,
   outputPath,
   signal,
 }: {
   inputFileName: string;
   inputPath: string;
-  overlayPngBytes: Buffer;
+  overlayPasses?: Array<
+    VideoOverlayPassTiming & {
+      overlayPngBytes: Buffer;
+    }
+  >;
+  overlayPngBytes?: Buffer;
   outputPath: string;
   signal?: AbortSignal;
 }) {
   void inputFileName;
+  const resolvedOverlayPasses =
+    overlayPasses ??
+    (overlayPngBytes
+      ? [
+          {
+            overlayPngBytes,
+          },
+        ]
+      : []);
+
+  if (resolvedOverlayPasses.length === 0) {
+    throw new ServerVideoProcessingError(
+      "Server video export is missing a watermark overlay.",
+    );
+  }
+
   const jobDirectory = await createJobDirectory();
-  const overlayPath = path.join(jobDirectory, "overlay.png");
+  const overlayFilePasses: ServerOverlayFilePass[] = resolvedOverlayPasses.map(
+    (pass, index) => ({
+      overlayPath: path.join(jobDirectory, `overlay-${index}.png`),
+      visibleFromSeconds: pass.visibleFromSeconds,
+      visibleUntilSeconds: pass.visibleUntilSeconds,
+    }),
+  );
 
   try {
-    await writeFile(overlayPath, overlayPngBytes);
+    await Promise.all(
+      resolvedOverlayPasses.map((pass, index) =>
+        writeFile(overlayFilePasses[index]!.overlayPath, pass.overlayPngBytes),
+      ),
+    );
+
     await processVideoWithOverlayFromFiles({
       inputPath,
-      overlayPath,
+      overlayPasses: overlayFilePasses,
       outputPath,
       signal,
     });

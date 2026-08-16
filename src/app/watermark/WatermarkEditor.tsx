@@ -54,10 +54,10 @@ import {
   ExportCreditCheckError,
   isCleanExportTier,
   resolveExportAuthorization,
-  resolveExportAuthorizationStrict,
   resolveVideoExportAuthorization,
   type ExportAuthorizationContext,
 } from "../../lib/exportClient";
+import { withVideoExportRouteFlags } from "../../lib/exportCost";
 import {
   buildAnonymousExportDraftState,
   type BuildAnonymousExportDraftInput,
@@ -77,6 +77,7 @@ import {
 } from "../../lib/anonymousExportDraftSession";
 import type { AnonymousExportDraftState } from "../../lib/anonymousExportDraftState";
 import type { ExportFileMeta } from "../../lib/exportCost";
+import type { VideoExportRoute } from "../../lib/videoExportLimits";
 import { buildFillManifestDocument } from "../../lib/fillManifest";
 import {
   getPdfBillingMode,
@@ -117,7 +118,10 @@ import {
   type PdfPageFillMap,
 } from "../../lib/pdfPageFillFields";
 import { buildSignatureManifestFromSavedSignatures } from "../../lib/signatureManifestClient";
-import { normalizeSignatureKind } from "../../lib/signatureValidation";
+import {
+  normalizeSignatureKind,
+  type SignatureKind,
+} from "../../lib/signatureValidation";
 import {
   applyForcedTileWatermarkSettings,
   ensureForcedTilePatternFontLoaded,
@@ -187,7 +191,11 @@ import {
   type StoredEditorSessionMeta,
   type StoredSessionFile,
 } from "../../lib/editorSessionStorage";
-import { SIGNATURE_DRAG_MIME, createImageFromDataUrl } from "../../lib/signatureImage";
+import {
+  DEFAULT_SIGNATURE_STROKE_WIDTH,
+  SIGNATURE_DRAG_MIME,
+  createImageFromDataUrl,
+} from "../../lib/signatureImage";
 import {
   drawBaseImageWithEffect,
   type EffectBorderColor,
@@ -356,6 +364,7 @@ import {
   createInitialVideoCaptionLayers,
   drawVideoCaption,
   drawVideoCaptions,
+  ensureVideoCaptionFontsLoaded,
   getTimedCaptionLayers,
   getUntimedCaptionLayers,
   isCaptionLayerActive,
@@ -377,6 +386,7 @@ import {
   mapClientPointToVideoNatural,
 } from "../../lib/videoDisplayFrame";
 import {
+  adjustOverlayPassesForTrim,
   clampVideoPreviewTimeToTrim,
   getVideoTrimDuration,
   areVideoTrimRangesEqual,
@@ -913,6 +923,38 @@ function logRealVideoExport(step: string, data?: Record<string, unknown>) {
   console.log(`${REAL_VIDEO_EXPORT_LOG} ${step}`);
 }
 
+type StoredSavedSignatureEntry = {
+  baseStrokeWidth?: number;
+  id: string;
+  kind?: SignatureKind;
+  label: string;
+  previewSrc: string;
+  source: "draw" | "type";
+  sourceDataUrl?: string | null;
+  strokeWidth?: number;
+  typedText?: string | null;
+};
+
+async function restoreSavedSignatureEntry(
+  entry: StoredSavedSignatureEntry,
+): Promise<SavedSignature> {
+  const strokeWidth =
+    entry.strokeWidth ??
+    DEFAULT_SIGNATURE_STROKE_WIDTH;
+
+  return {
+    ...entry,
+    baseStrokeWidth: entry.baseStrokeWidth ?? strokeWidth,
+    image: await createImageFromDataUrl(entry.previewSrc),
+    kind: normalizeSignatureKind(entry.kind),
+    sourceDataUrl: entry.sourceDataUrl ?? entry.previewSrc,
+    strokeWidth,
+    typedText:
+      entry.typedText ??
+      (entry.source === "type" ? entry.label : null),
+  };
+}
+
 function summarizeLogoLayersForExportLog(logoLayers: LogoWatermarkLayer[] | undefined) {
   return (logoLayers ?? []).map((layer) => ({
     customPosition: layer.customPosition,
@@ -1400,9 +1442,7 @@ export default function WatermarkEditor() {
   }
 
   function applyAuthorizeNotice(auth: ExportAuthorizationContext) {
-    if (auth.costNotice) {
-      setExportNotice(auth.costNotice);
-    } else if (auth.authorizeNotice) {
+    if (auth.authorizeNotice) {
       setExportNotice(auth.authorizeNotice);
     }
 
@@ -1422,6 +1462,31 @@ export default function WatermarkEditor() {
       height: videoSize?.height,
       width: videoSize?.width,
     };
+  }
+
+  function getVideoExportFileMetaForRoute(exportRoute: VideoExportRoute) {
+    return withVideoExportRouteFlags(getVideoExportFileMeta(), exportRoute);
+  }
+
+  function getVideoExportProgressLabel() {
+    if (longVideoProcessingDetail) {
+      return longVideoProcessingDetail;
+    }
+
+    switch (exportServerStage) {
+      case "preparing":
+        return "Preparing export…";
+      case "uploading":
+        return "Uploading video…";
+      case "processing":
+        return isServerVideoExport
+          ? "Processing on our servers…"
+          : "Encoding video…";
+      default:
+        return exportProgress !== null
+          ? `Exporting video… ${exportProgress}%`
+          : "Exporting video…";
+    }
   }
 
   function seekVideoPreview(seconds: number, respectTrim = false) {
@@ -2047,7 +2112,7 @@ export default function WatermarkEditor() {
         : undefined;
     const videoExportRoute =
       mediaKind === "video" && videoSize
-        ? getVideoExportRoute(
+        ? resolveVideoExportRoute(
             exportVideoDuration,
             videoSize.width,
             videoSize.height,
@@ -2343,12 +2408,7 @@ export default function WatermarkEditor() {
     }
 
     const restoredSignatures = await Promise.all(
-      state.savedSignatures.map(async (entry) => ({
-        ...entry,
-        image: await createImageFromDataUrl(entry.previewSrc),
-        kind: normalizeSignatureKind(entry.kind),
-        typedText: entry.typedText ?? null,
-      })),
+      state.savedSignatures.map((entry) => restoreSavedSignatureEntry(entry)),
     );
     setSavedSignatures(restoredSignatures);
 
@@ -2823,7 +2883,7 @@ export default function WatermarkEditor() {
         fileMeta = { ...fileMeta, ...fillMeta };
       }
 
-      return resolveExportAuthorizationStrict({
+      return resolveExportAuthorization({
         exportId,
         fileMeta,
         fileType,
@@ -5339,6 +5399,18 @@ export default function WatermarkEditor() {
 
     setSavedSignatures(nextSignatures);
 
+    const activeSignature = activeSignatureId
+      ? nextSignatures.find((signature) => signature.id === activeSignatureId)
+      : null;
+
+    if (
+      activeSignature &&
+      isPdfSignFillMode() &&
+      pdfDocumentTool === "signature"
+    ) {
+      setLogoImage(activeSignature.image);
+    }
+
     if (!removedIds.length || mediaKind !== "pdf") {
       return;
     }
@@ -6191,12 +6263,6 @@ export default function WatermarkEditor() {
         videoCaptionLayers,
         videoPreviewTime,
         videoDuration,
-        {
-          highlightLayerId:
-            activeEditorPanel === "video" && activeVideoTool === "caption"
-              ? activeVideoCaptionLayerId
-              : undefined,
-        },
       );
     } else {
       captionBoundsRef.current = new Map();
@@ -6685,12 +6751,7 @@ export default function WatermarkEditor() {
 
     try {
       const restoredSignatures = await Promise.all(
-        meta.savedSignatures.map(async (entry) => ({
-          ...entry,
-          image: await createImageFromDataUrl(entry.previewSrc),
-          kind: normalizeSignatureKind(entry.kind),
-          typedText: entry.typedText ?? null,
-        })),
+        meta.savedSignatures.map((entry) => restoreSavedSignatureEntry(entry)),
       );
       setSavedSignatures(restoredSignatures);
       setActiveSignatureId(meta.activeSignatureId);
@@ -6840,6 +6901,7 @@ export default function WatermarkEditor() {
         : null;
       const savedSignaturesMeta = await Promise.all(
         savedSignatures.map(async (signature) => ({
+          baseStrokeWidth: signature.baseStrokeWidth ?? signature.strokeWidth,
           id: signature.id,
           kind: normalizeSignatureKind(signature.kind),
           label: signature.label,
@@ -6847,6 +6909,8 @@ export default function WatermarkEditor() {
             ? signature.previewSrc
             : await imageElementToDataUrl(signature.image),
           source: signature.source,
+          sourceDataUrl: signature.sourceDataUrl ?? signature.previewSrc,
+          strokeWidth: signature.strokeWidth,
           typedText: signature.typedText ?? null,
         })),
       );
@@ -7174,36 +7238,43 @@ export default function WatermarkEditor() {
       return;
     }
 
-    if (
-      watermarkType === "text" &&
-      !textLayers.some((layer) => layer.text.trim()) &&
-      watermarkMode === "single"
-    ) {
-      setExportError("Add watermark text before exporting.");
-      return;
-    }
-
-    if (
-      watermarkType === "text" &&
-      watermarkMode === "tile" &&
-      !activeTextLayer.text.trim()
-    ) {
-      setExportError("Add watermark text before exporting.");
-      return;
-    }
-
-    if (watermarkType === "logo" && !logoLayers.some((layer) => layer.logoImage)) {
-      setExportError("Upload a logo before exporting.");
-      return;
-    }
-
     const exportSignatureMapPreview = getPdfPageSignaturesWithActivePersisted();
     const exportFillMapPreview = getPdfPageFillMapWithActivePersisted();
-    const signedCount = countSignedPdfPages(exportSignatureMapPreview);
     const hasFillContent = hasAnyFillFields(exportFillMapPreview);
     const hasWatermarkContent = hasPdfWatermarkExportContent(
       getPdfWatermarkSettings(),
     );
+    const exportingWatermark = isPdfWatermarkMode() || hasWatermarkContent;
+
+    if (exportingWatermark) {
+      if (
+        watermarkType === "text" &&
+        !textLayers.some((layer) => layer.text.trim()) &&
+        watermarkMode === "single"
+      ) {
+        setExportError("Add watermark text before exporting.");
+        return;
+      }
+
+      if (
+        watermarkType === "text" &&
+        watermarkMode === "tile" &&
+        !activeTextLayer.text.trim()
+      ) {
+        setExportError("Add watermark text before exporting.");
+        return;
+      }
+
+      if (
+        watermarkType === "logo" &&
+        !logoLayers.some((layer) => layer.logoImage)
+      ) {
+        setExportError("Upload a logo before exporting.");
+        return;
+      }
+    }
+
+    const signedCount = countSignedPdfPages(exportSignatureMapPreview);
 
     if (
       !hasWatermarkContent &&
@@ -7227,17 +7298,6 @@ export default function WatermarkEditor() {
 
     try {
       const auth = await resolvePdfExportAuthorization(exportId);
-
-      if (
-        (hasFillContent ||
-          signedCount > 0 ||
-          hasWatermarkContent) &&
-        !isCleanExportTier(auth.tier)
-      ) {
-        throw new ExportCreditCheckError(
-          "This PDF export requires sufficient credits. Add credits or remove paid sign and fill content, then try again.",
-        );
-      }
 
       applyAuthorizeNotice(auth);
       setIsExportPreparing(false);
@@ -7437,6 +7497,7 @@ export default function WatermarkEditor() {
         videoSize.height,
         effectiveFileSize,
       );
+      const routedFileMeta = getVideoExportFileMetaForRoute(exportRoute);
 
       logRealVideoExport("STEP 7/15: export route computed", {
         effectiveFileSize,
@@ -7454,7 +7515,7 @@ export default function WatermarkEditor() {
         exportId,
         exportRoute,
         fileMeta: {
-          ...fileMeta,
+          ...routedFileMeta,
           fileSizeBytes: effectiveFileSize,
         },
       });
@@ -7546,6 +7607,10 @@ export default function WatermarkEditor() {
 
       setExportProgress(6);
 
+      if (captionsMasterEnabled && videoCaptionLayers.length > 0) {
+        await ensureVideoCaptionFontsLoaded(videoCaptionLayers);
+      }
+
       const videoPreviewFrame =
         videoOverlaySize.width > 0 && videoSize
           ? getVideoDisplayFrame(
@@ -7570,6 +7635,27 @@ export default function WatermarkEditor() {
         width: videoSize.width,
       });
       setExportProgress(8);
+
+      const trimStart = Math.max(0, resolvedAppliedVideoTrim.startSeconds);
+      const trimEnd = resolvedAppliedVideoTrim.endSeconds;
+      const serverExportOverlayPasses =
+        trimEnd !== undefined
+          ? adjustOverlayPassesForTrim(
+              clientOverlayPasses,
+              trimStart,
+              trimEnd,
+            )
+          : clientOverlayPasses;
+
+      if (
+        !clientOverlayPasses.length ||
+        !clientOverlayPasses.some((pass) => pass.overlayPngBytes.length > 0)
+      ) {
+        throw new VideoExportFailedError(
+          "Could not prepare the watermark overlay for export.",
+        );
+      }
+
       const overlayPngBytes = clientOverlayPasses[0]?.overlayPngBytes;
 
       logRealVideoExport("STEP 12/15: overlay passes built", {
@@ -7587,6 +7673,7 @@ export default function WatermarkEditor() {
           })),
         ),
         passCount: clientOverlayPasses.length,
+        serverExportPassCount: serverExportOverlayPasses.length,
         settings: summarizeWatermarkSettingsForExportLog(watermarkSettings),
       });
 
@@ -7651,9 +7738,11 @@ export default function WatermarkEditor() {
               onProcessingDetailChange: setLongVideoProcessingDetail,
               onProgress: reportVideoEncodeProgress,
               onStageChange: setExportServerStage,
-              overlayPngBytes,
+              overlayPasses: serverExportOverlayPasses,
               shouldCancel: () => videoExportCancelRef.current,
               videoBlob,
+              videoLongServerRouted: true,
+              videoServerRouted: true,
               width: videoSize.width,
             })
           : exportRoute === "server"
@@ -7666,11 +7755,13 @@ export default function WatermarkEditor() {
               inputFileName: fileName,
               onProgress: reportVideoEncodeProgress,
               onStageChange: setExportServerStage,
-              overlayPngBytes,
+              overlayPasses: serverExportOverlayPasses,
               shouldCancel: () => videoExportCancelRef.current,
               trimEndSeconds: resolvedAppliedVideoTrim.endSeconds,
               trimStartSeconds: resolvedAppliedVideoTrim.startSeconds,
               videoBlob,
+              videoLongServerRouted: false,
+              videoServerRouted: true,
               width: videoSize.width,
             })
           : await exportVideoWithOverlay({
@@ -9925,15 +10016,14 @@ export default function WatermarkEditor() {
   }, []);
 
   useEffect(() => {
-    const shell = mobileShellRef.current;
     const footer = mobileFooterRef.current;
 
-    if (!shell || !footer) {
+    if (!footer) {
       return;
     }
 
     const syncFooterHeight = () => {
-      shell.style.setProperty(
+      document.documentElement.style.setProperty(
         "--editor-mobile-footer-height",
         `${footer.offsetHeight}px`,
       );
@@ -10667,7 +10757,7 @@ export default function WatermarkEditor() {
   }
 
   function addVideoCaptionLayer() {
-    const positions: CaptionVerticalPosition[] = ["bottom", "center", "top"];
+    const positions: CaptionVerticalPosition[] = ["center", "top", "bottom"];
     const nextPosition = positions[videoCaptionLayers.length % 3];
     const nextLayer = createDefaultVideoCaptionLayer({
       customPosition: {
@@ -10882,9 +10972,48 @@ export default function WatermarkEditor() {
     </>
   ) : null;
 
+  const editorFooter = (
+    <EditorBottomBar
+      canRedo={canRedoSettings}
+      canUndo={canUndoSettings}
+      className="editor-mobile-footer"
+      exportDisabled={isExportDisabled}
+      exportLabel={exportButtonLabel}
+      exportTitle={exportDisabledReason}
+      footerRef={mobileFooterRef}
+      isExporting={isExporting}
+      mediaActions={
+        hasMedia ? (
+          <EditorMediaActionButtons
+            disabled={isMediaActionBusy}
+            isPdfLoading={isPdfLoading}
+            mediaKind={mediaKind}
+            onAddMoreImages={openAddMoreImagesPicker}
+            onAddMoreVideos={openAddMoreVideosPicker}
+            onRemove={removeLoadedMedia}
+            onReplace={openReplaceMediaPicker}
+          />
+        ) : null
+      }
+      onExit={handleEditorExitRequest}
+      onBuyCredits={() => {
+        void openEditorCreditsCheckout();
+      }}
+      onExport={handleExport}
+      onRedo={redoWatermarkSettings}
+      onUndo={undoWatermarkSettings}
+      onZoomIn={hasPreviewContent ? handlePreviewZoomIn : undefined}
+      onZoomOut={hasPreviewContent ? handlePreviewZoomOut : undefined}
+      showHistoryControls={showWatermarkHistoryInFooter}
+      zoomInDisabled={previewZoomInDisabled}
+      zoomLabel={formatPreviewZoomLabel(previewZoomPercent)}
+      zoomOutDisabled={previewZoomOutDisabled}
+    />
+  );
+
   return (
     <div
-      className="editor-mobile-shell fixed inset-0 flex w-full flex-col overflow-hidden pt-[env(safe-area-inset-top,0px)] max-md:pb-[calc(var(--editor-mobile-footer-height,3.25rem)+env(safe-area-inset-bottom,0px))] md:relative md:inset-auto md:h-[100svh] md:max-h-none md:pb-0 md:pt-0"
+      className="editor-mobile-shell flex h-[100dvh] w-full flex-col overflow-hidden pt-[env(safe-area-inset-top,0px)] md:relative md:h-[100svh] md:max-h-none md:pb-0 md:pt-0"
       ref={mobileShellRef}
     >
       {authChecked && isAuthenticated ? (
@@ -10899,7 +11028,7 @@ export default function WatermarkEditor() {
           />
         </div>
       ) : null}
-      <main className="editor-theme relative flex min-h-0 flex-1 w-full flex-col overflow-hidden">
+      <main className="editor-theme relative flex min-h-0 flex-1 w-full flex-col overflow-hidden max-md:pb-[calc(var(--editor-mobile-footer-height,3.25rem)+env(safe-area-inset-bottom,0px))]">
       <WatermarkFontLoader />
       <div aria-hidden="true" className="sr-only">
       <input
@@ -11052,7 +11181,7 @@ export default function WatermarkEditor() {
             showMobileBottomDock ? "" : "max-md:hidden"
           }`}
         >
-          <div className="hidden md:contents">
+          <div className="hidden md:block md:shrink-0">
             <ToolIconRail
               activePanel={highlightedEditorPanel}
               mediaKind={mediaKind}
@@ -11080,13 +11209,11 @@ export default function WatermarkEditor() {
               toolRail={
                 activeEditorPanel === "photos" ? (
                   <div className="flex shrink-0 flex-col md:flex-row">
-                    <div className="hidden md:contents">
-                      <PhotosToolRail
-                        activeTool={activePhotoTool}
-                        imageToolsEnabled={imageToolsEnabled}
-                        onSelectTool={handlePhotoToolSelect}
-                      />
-                    </div>
+                    <PhotosToolRail
+                      activeTool={activePhotoTool}
+                      imageToolsEnabled={imageToolsEnabled}
+                      onSelectTool={handlePhotoToolSelect}
+                    />
                     {activePhotoTool === "watermark" ? (
                       <WatermarkToolRail
                         activeTool={activeWatermarkTool}
@@ -11097,12 +11224,10 @@ export default function WatermarkEditor() {
                   </div>
                 ) : activeEditorPanel === "pdfDocs" ? (
                   <div className="flex shrink-0 flex-col md:flex-row">
-                    <div className="hidden md:contents">
-                      <PdfDocsToolRail
-                        activeTool={activePdfTool}
-                        onSelectTool={handlePdfDocToolSelect}
-                      />
-                    </div>
+                    <PdfDocsToolRail
+                      activeTool={activePdfTool}
+                      onSelectTool={handlePdfDocToolSelect}
+                    />
                     {activePdfTool === "watermark" ? (
                       <WatermarkToolRail
                         activeTool={activeWatermarkTool}
@@ -11113,16 +11238,14 @@ export default function WatermarkEditor() {
                   </div>
                 ) : activeEditorPanel === "video" ? (
                   <div className="flex shrink-0 flex-col md:flex-row">
-                    <div className="hidden md:contents">
-                      <VideoToolRail
-                        activeTool={activeVideoTool}
-                        hasVideo={videoToolsEnabled}
-                        hideOverviewOnMobile
-                        onReshortenVideo={beginReshortenSession}
-                        onSelectTool={handleVideoToolSelect}
-                        showReshortenOnTrim={showReshortenVideoAction}
-                      />
-                    </div>
+                    <VideoToolRail
+                      activeTool={activeVideoTool}
+                      hasVideo={videoToolsEnabled}
+                      hideOverviewOnMobile
+                      onReshortenVideo={beginReshortenSession}
+                      onSelectTool={handleVideoToolSelect}
+                      showReshortenOnTrim={showReshortenVideoAction}
+                    />
                     {activeVideoTool === "watermark" ? (
                       <WatermarkToolRail
                         activeTool={activeWatermarkTool}
@@ -12329,6 +12452,13 @@ export default function WatermarkEditor() {
             <ProcessingOverlay label="Compressing PDF…" />
           ) : null}
 
+          {isExporting && mediaKind === "video" ? (
+            <ProcessingOverlay
+              label={getVideoExportProgressLabel()}
+              progress={exportProgress}
+            />
+          ) : null}
+
           <div
             className={`flex min-h-0 min-w-0 flex-1 flex-col ${
               showPreviewSplitAside ? "md:flex-row" : ""
@@ -12667,43 +12797,6 @@ export default function WatermarkEditor() {
         </section>
       </motion.div>
 
-      <EditorBottomBar
-        canRedo={canRedoSettings}
-        canUndo={canUndoSettings}
-        className="editor-mobile-footer"
-        exportDisabled={isExportDisabled}
-        exportLabel={exportButtonLabel}
-        exportTitle={exportDisabledReason}
-        footerRef={mobileFooterRef}
-        isExporting={isExporting}
-        mediaActions={
-          hasMedia ? (
-            <EditorMediaActionButtons
-              disabled={isMediaActionBusy}
-              isPdfLoading={isPdfLoading}
-              mediaKind={mediaKind}
-              onAddMoreImages={openAddMoreImagesPicker}
-              onAddMoreVideos={openAddMoreVideosPicker}
-              onRemove={removeLoadedMedia}
-              onReplace={openReplaceMediaPicker}
-            />
-          ) : null
-        }
-        onExit={handleEditorExitRequest}
-        onBuyCredits={() => {
-          void openEditorCreditsCheckout();
-        }}
-        onExport={handleExport}
-        onRedo={redoWatermarkSettings}
-        onUndo={undoWatermarkSettings}
-        onZoomIn={hasPreviewContent ? handlePreviewZoomIn : undefined}
-        onZoomOut={hasPreviewContent ? handlePreviewZoomOut : undefined}
-        showHistoryControls={showWatermarkHistoryInFooter}
-        zoomInDisabled={previewZoomInDisabled}
-        zoomLabel={formatPreviewZoomLabel(previewZoomPercent)}
-        zoomOutDisabled={previewZoomOutDisabled}
-      />
-
       <WatermarkedExportUpsellModal
         onBuyCredits={() => {
           void openEditorCreditsCheckout();
@@ -12771,6 +12864,78 @@ export default function WatermarkEditor() {
         />
       ) : null}
     </main>
+    {editorFooter}
+    {(exportError ||
+      exportNotice ||
+      (isExporting && mediaKind === "pdf" && pdfExportProgress)) &&
+    !isWatermarkPanelActive ? (
+      <div
+        aria-live="polite"
+        className="pointer-events-auto fixed inset-x-3 top-[calc(env(safe-area-inset-top,0px)+0.75rem)] z-[250] mx-auto max-w-md space-y-2 md:inset-x-auto md:right-6 md:top-20"
+      >
+        {isExporting &&
+        !isExportPreparing &&
+        mediaKind === "pdf" &&
+        pdfExportProgress ? (
+          <div className="rounded-lg border border-ed-border bg-ed-panel/95 px-3 py-2 shadow-lg backdrop-blur-md">
+            <p className="text-xs font-medium text-ed-fg-muted">
+              Processing page {pdfExportProgress.current} of{" "}
+              {pdfExportProgress.total}...
+            </p>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-ed-fg/10">
+              <div
+                className="h-full rounded-full bg-ed-accent transition-[width] duration-200"
+                style={{
+                  width: `${
+                    (pdfExportProgress.current / pdfExportProgress.total) * 100
+                  }%`,
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
+        {exportNotice ? (
+          <div className="rounded-lg border border-ed-border bg-ed-panel/95 px-3 py-2 text-xs text-ed-fg shadow-lg backdrop-blur-md">
+            <div className="flex items-center justify-between gap-2">
+              <p>{exportNotice}</p>
+              <button
+                className="shrink-0 font-medium text-ed-fg-muted transition hover:text-ed-fg"
+                onClick={() => setExportNotice("")}
+                type="button"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {exportError ? (
+          <div className="rounded-lg border border-ed-accent/30 bg-ed-panel/95 px-3 py-2 text-xs text-ed-fg shadow-lg backdrop-blur-md">
+            <p>{exportError}</p>
+            <div className="mt-2 flex items-center gap-3">
+              {mediaKind === "pdf" && pdfPageCount > 0 ? (
+                <button
+                  className="font-medium text-signal transition hover:text-ed-fg"
+                  onClick={() => {
+                    setExportError("");
+                    void handlePdfExport();
+                  }}
+                  type="button"
+                >
+                  Retry export
+                </button>
+              ) : null}
+              <button
+                className="font-medium text-ed-fg-muted transition hover:text-ed-fg"
+                onClick={() => setExportError("")}
+                type="button"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    ) : null}
     </div>
   );
 }
@@ -14484,6 +14649,36 @@ type WatermarkOverlayCanvasInput = Omit<WatermarkOnlyRenderInput, "context"> & {
   videoCaptionLayers?: VideoCaptionLayer[];
 };
 
+async function appendAllVideoCaptionExportPasses(
+  passes: VideoOverlayPass[],
+  layers: VideoCaptionLayer[] | undefined,
+  durationSeconds: number,
+  height: number,
+  width: number,
+) {
+  if (!layers?.some((layer) => isCaptionLayerActive(layer))) {
+    return passes;
+  }
+
+  const untimedLayers = getUntimedCaptionLayers(layers);
+
+  if (untimedLayers.length > 0) {
+    const untimedCanvas = renderUntimedCaptionsOverlayCanvas(layers, height, width);
+
+    passes.push({
+      overlayPngBytes: await canvasToPngBytes(untimedCanvas),
+    });
+  }
+
+  return appendTimedCaptionLayerPasses(
+    passes,
+    layers,
+    durationSeconds,
+    height,
+    width,
+  );
+}
+
 async function appendTimedCaptionLayerPasses(
   passes: VideoOverlayPass[],
   layers: VideoCaptionLayer[] | undefined,
@@ -14537,7 +14732,7 @@ async function buildClientVideoOverlayPasses({
   const untimedCaptionLayers = videoCaptionLayers
     ? getUntimedCaptionLayers(videoCaptionLayers)
     : [];
-  const includeUntimedCaptions = untimedCaptionLayers.length > 0;
+  const includeUntimedCaptions = false;
 
   if (settings.watermarkType === "logo") {
     const logoLayers = settings.logoLayers ?? [];
@@ -14591,7 +14786,7 @@ async function buildClientVideoOverlayPasses({
     if (!timedLayer) {
       await pushLogoPass(logoLayers);
 
-      const withCaption = await appendTimedCaptionLayerPasses(
+      const withCaption = await appendAllVideoCaptionExportPasses(
         passes,
         videoCaptionLayers,
         durationSeconds,
@@ -14633,7 +14828,7 @@ async function buildClientVideoOverlayPasses({
     await pushLogoPass(untimedLayers);
     await pushLogoPass([timedLayer], range);
 
-    const withCaption = await appendTimedCaptionLayerPasses(
+    const withCaption = await appendAllVideoCaptionExportPasses(
       passes,
       videoCaptionLayers,
       durationSeconds,
@@ -14669,7 +14864,7 @@ async function buildClientVideoOverlayPasses({
     });
 
     const passes = [{ overlayPngBytes: await canvasToPngBytes(canvas) }];
-    const withCaption = await appendTimedCaptionLayerPasses(
+    const withCaption = await appendAllVideoCaptionExportPasses(
       passes,
       videoCaptionLayers,
       durationSeconds,
@@ -14682,23 +14877,9 @@ async function buildClientVideoOverlayPasses({
       !withCaption.some((pass) => pass.overlayPngBytes.length > 0)
     ) {
       if (videoCaptionLayers?.some((layer) => isCaptionLayerActive(layer))) {
-        const captionOnlyPasses: VideoOverlayPass[] = [];
-
-        if (untimedCaptionLayers.length > 0) {
-          const untimedCanvas = renderUntimedCaptionsOverlayCanvas(
-            videoCaptionLayers,
-            height,
-            width,
-          );
-
-          captionOnlyPasses.push({
-            overlayPngBytes: await canvasToPngBytes(untimedCanvas),
-          });
-        }
-
         return finalizeClientVideoOverlayPasses(
-          await appendTimedCaptionLayerPasses(
-            captionOnlyPasses,
+          await appendAllVideoCaptionExportPasses(
+            [],
             videoCaptionLayers,
             durationSeconds,
             height,
@@ -14798,7 +14979,7 @@ async function buildClientVideoOverlayPasses({
   if (!timedLayer) {
     await pushPass(textLayers);
 
-    const withCaption = await appendTimedCaptionLayerPasses(
+    const withCaption = await appendAllVideoCaptionExportPasses(
       passes,
       videoCaptionLayers,
       durationSeconds,
@@ -14806,7 +14987,23 @@ async function buildClientVideoOverlayPasses({
       width,
     );
 
-    if (withCaption.length === 0) {
+    if (
+      withCaption.length === 0 ||
+      !withCaption.some((pass) => pass.overlayPngBytes.length > 0)
+    ) {
+      if (videoCaptionLayers?.some((layer) => isCaptionLayerActive(layer))) {
+        return finalizeClientVideoOverlayPasses(
+          await appendAllVideoCaptionExportPasses(
+            [],
+            videoCaptionLayers,
+            durationSeconds,
+            height,
+            width,
+          ),
+          { height, videoBlurRegions, videoElement, width },
+        );
+      }
+
       if (videoBlurRegions?.some((region) => region.strokes.length > 0)) {
         return finalizeClientVideoOverlayPasses([], {
           height,
@@ -14840,7 +15037,7 @@ async function buildClientVideoOverlayPasses({
   await pushPass(untimedLayers);
   await pushPass([timedLayer], range);
 
-  const withCaption = await appendTimedCaptionLayerPasses(
+  const withCaption = await appendAllVideoCaptionExportPasses(
     passes,
     videoCaptionLayers,
     durationSeconds,

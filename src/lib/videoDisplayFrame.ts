@@ -85,6 +85,28 @@ export function getVideoNaturalDimensions(
   };
 }
 
+export function resolveVideoContentFrameInCanvas(
+  canvas: HTMLCanvasElement,
+  video: HTMLVideoElement | null | undefined,
+  videoWidth: number,
+  videoHeight: number,
+): VideoDisplayFrame {
+  if (video && video.readyState >= 2) {
+    const domFrame = getVideoElementFrameInCanvas(canvas, video);
+
+    if (domFrame.width > 1 && domFrame.height > 1) {
+      return domFrame;
+    }
+  }
+
+  return getVideoDisplayFrame(
+    canvas.width,
+    canvas.height,
+    videoWidth,
+    videoHeight,
+  );
+}
+
 export function getVideoElementFrameInCanvas(
   canvas: HTMLCanvasElement,
   video: HTMLVideoElement,

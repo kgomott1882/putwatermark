@@ -21,8 +21,11 @@ import { getVideoExportJobByExportId } from "./serverVideoExportJob";
 import {
   getVideoExportRejectionMessage,
   getVideoExportRoute,
+  isLongServerVideoExportEligible,
   isServerSideVideoExportRoute,
+  isServerVideoExportEligible,
   LONG_VIDEO_CHUNK_MAX_DURATION_SECONDS,
+  type VideoExportRoute,
 } from "./videoExportLimits";
 
 export const PHOTO_EXPORT_CREDIT_COST = 50;
@@ -65,6 +68,9 @@ export type ExportFileMeta = {
   signatureManifest?: SignatureManifestEntry[];
   pdfBillingMode?: PdfBillingMode;
   width?: number;
+  /** Client explicitly requests server-side video encode (e.g. mobile stability routing). */
+  videoServerRouted?: boolean;
+  videoLongServerRouted?: boolean;
 };
 
 export type ExportCostResult = {
@@ -489,11 +495,12 @@ async function resolveVideoExportCost(
     );
   }
 
-  const route = getVideoExportRoute(
+  const route = resolveBillingVideoExportRoute(
     durationSeconds,
     width,
     height,
     fileSizeBytes,
+    fileMeta,
   );
 
   if (route === "reject") {
@@ -571,6 +578,62 @@ async function readPdfPageCountFromStorage(storagePath: string) {
   }
 }
 
+function resolveBillingVideoExportRoute(
+  durationSeconds: number,
+  width: number,
+  height: number,
+  fileSizeBytes: number,
+  fileMeta: ExportFileMeta,
+): VideoExportRoute {
+  const baseRoute = getVideoExportRoute(
+    durationSeconds,
+    width,
+    height,
+    fileSizeBytes,
+  );
+
+  if (!fileMeta.videoServerRouted && !fileMeta.videoLongServerRouted) {
+    return baseRoute;
+  }
+
+  if (fileMeta.videoLongServerRouted) {
+    if (isLongServerVideoExportEligible(durationSeconds, width, height, fileSizeBytes)) {
+      return "long-server";
+    }
+
+    if (isServerVideoExportEligible(durationSeconds, width, height, fileSizeBytes)) {
+      return "server";
+    }
+  }
+
+  if (fileMeta.videoServerRouted) {
+    if (isServerVideoExportEligible(durationSeconds, width, height, fileSizeBytes)) {
+      return "server";
+    }
+
+    if (isLongServerVideoExportEligible(durationSeconds, width, height, fileSizeBytes)) {
+      return "long-server";
+    }
+
+    if (baseRoute === "client") {
+      return "server";
+    }
+  }
+
+  return baseRoute;
+}
+
+export function withVideoExportRouteFlags(
+  fileMeta: ExportFileMeta,
+  exportRoute: VideoExportRoute,
+): ExportFileMeta {
+  return {
+    ...fileMeta,
+    videoLongServerRouted: exportRoute === "long-server",
+    videoServerRouted: isServerSideVideoExportRoute(exportRoute),
+  };
+}
+
 export function isServerRoutedVideoFileMeta(fileMeta: ExportFileMeta): boolean {
   const { durationSeconds, fileSizeBytes, width, height } = fileMeta;
 
@@ -592,7 +655,13 @@ export function isServerRoutedVideoFileMeta(fileMeta: ExportFileMeta): boolean {
   }
 
   return isServerSideVideoExportRoute(
-    getVideoExportRoute(durationSeconds, width, height, fileSizeBytes),
+    resolveBillingVideoExportRoute(
+      durationSeconds,
+      width,
+      height,
+      fileSizeBytes,
+      fileMeta,
+    ),
   );
 }
 
